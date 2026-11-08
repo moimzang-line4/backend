@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: moimzang
+
+  # 로컬 실행 시 비밀값은 .env에서 읽는다(.env는 KEY=VALUE라 properties로 그대로 파싱됨).
+  # optional: 이므로 파일이 없어도 기동되고, 운영에서는 실제 환경변수가 이 값을 덮는다.
+  config:
+    import: optional:file:.env[.properties]
+
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 22MB
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:moimzang}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Seoul
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate # Flyway가 정본. update/create로 바꾸지 않는다
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+        format_sql: true
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  storage:
+    # local | s3 — 배포 시 환경변수만 바꿔서 전환
+    type: ${STORAGE_TYPE:local}
+    local:
+      base-dir: ${UPLOAD_DIR:./uploads}
+      base-url: ${UPLOAD_BASE_URL:/uploads}
+    s3:
+      bucket: ${AWS_S3_BUCKET:}
+      region: ${AWS_REGION:ap-northeast-2}
+      base-url: ${AWS_S3_BASE_URL:}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${SWAGGER_ENABLED:true}
+  api-docs:
+    path: /api-docs
+    enabled: ${SWAGGER_ENABLED:true}
+
+logging:
+  level:
+    com.moimzang: debug
