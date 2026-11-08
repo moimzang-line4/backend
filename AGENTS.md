@@ -28,14 +28,17 @@ MySQL 8. 테이블명은 **단수형**(`club_group`, `schedule_round` 등 — ER
 ## 구조
 
 ```
-domain/<도메인>/   controller, dto(request/response), entity, exception, mapper, repository, service
-global/            config, exception, response
+domain/<도메인>/   controller, entity, enums(해당 도메인만), exception, mapper, repository, service
+global/            config, entity, exception, response, storage(local, s3)
 ```
 
 베이스 패키지: `com.moimzang`
 
-아직 구현된 도메인이 없다. 첫 도메인을 만들 때 레퍼런스가 되므로, 구조는
-`my-spring-conventions`(Claude Code 스킬) 또는 동급 컨벤션 문서를 따른다.
+구현된 도메인 10개: `group`, `schedule`, `memberlist`, `attendance`, `settlement`, `note`,
+`meeting`, `file`, `budget`, `chat`. 전부 엔티티(ERD 필드 전체 포함)·레포지토리와
+Controller/Api/Service/Mapper/ErrorCode 껍데기까지 갖춰져 있고, 실제 비즈니스 로직과 DTO는
+아직 없다 — 구현 시점에 `dto/request`, `dto/response` 패키지를 추가한다. 구조·DTO·예외 처리
+세부 규칙은 `my-spring-conventions`(Claude Code 스킬) 또는 동급 컨벤션 문서를 따른다.
 
 ## 참조 문서
 
@@ -46,6 +49,10 @@ global/            config, exception, response
 
 새 기능을 구현하기 전에 위 네 문서에서 해당 도메인 부분을 먼저 읽는다. `docs/api-spec.md`에
 "미확정"으로 표시된 항목은 구현 시점에 정하고 그 결정을 `docs/decisions.md`에 追記한다.
+
+## Git·커밋·PR
+
+브랜치 전략, 커밋 메시지 형식, PR 규칙은 `README.md`를 따른다.
 
 ## 이 프로젝트 고유 결정
 

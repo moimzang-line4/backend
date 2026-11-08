@@ -6,10 +6,14 @@ AI 코딩 에이전트(Claude Code, Cursor, Windsurf 등)가 **스스로 빌드�
 
 ## 전제 조건
 
-- Java 21, Docker(Testcontainers가 MySQL 컨테이너를 띄운다 — 로컬에 MySQL을 직접 설치할 필요 없음)
-- 최초 1회 `./gradlew` 가 없다면(아직 Gradle wrapper가 생성되지 않음) Gradle을 설치한 뒤
-  `gradle wrapper --gradle-version <최신 안정 버전>` 을 실행해 wrapper를 만든다. 이후부터는
-  반드시 `./gradlew`(또는 `gradlew.bat`)로만 빌드한다 — 로컬에 설치된 Gradle 버전에 의존하지 않는다
+- Java 21, Docker(Testcontainers가 MySQL 컨테이너를 띄운다 — 테스트 전용. 로컬 실행은 직접
+  설치한 MySQL 8을 쓴다)
+- Gradle wrapper(`gradlew`/`gradlew.bat`/`gradle/wrapper/gradle-wrapper.jar`)가 저장소에
+  포함돼 있다. 반드시 `./gradlew`(또는 `gradlew.bat`)로만 빌드한다 — 로컬에 설치된 Gradle
+  버전에 의존하지 않는다
+- 로컬 실행 전 `.env.example`을 `.env`로 복사해 `DB_USERNAME`/`DB_PASSWORD`를 채우고, MySQL에
+  `moimzang` 데이터베이스(`utf8mb4`)를 미리 만들어 둔다. 테이블은 `./gradlew bootRun` 시 Flyway가
+  `src/main/resources/db/migration/V1__init.sql`로 자동 생성한다
 
 ## 빌드 · 테스트
 
@@ -58,7 +62,7 @@ testcontainers.reuse.enable=true
 
 ```bash
 ./gradlew bootRun
-curl -s localhost:8080/actuator/health   # actuator 추가 전까지는 아무 엔드포인트나 200 확인
+curl -s localhost:8080/health   # HealthCheckController가 제공하는 간이 헬스체크
 ```
 
 Flyway가 `ddl-auto: validate`와 충돌 없이 마이그레이션을 끝내고 기동되는지 로그로 확인한다.
@@ -67,6 +71,8 @@ Flyway가 `ddl-auto: validate`와 충돌 없이 마이그레이션을 끝내고 
 
 ## 아직 비어 있는 것
 
-- `domain/` 패키지 — 레퍼런스 도메인이 아직 없다. 첫 도메인을 구현하면 이후 도메인의 패턴이 된다
-- Gradle wrapper(`gradlew`/`gradle-wrapper.jar`) — 이 저장소를 만든 에이전트가 로컬에 Gradle이
-  없어서 생성하지 못했다. 위 "전제 조건"대로 최초 1회 생성이 필요하다
+- 10개 도메인(group/schedule/memberlist/attendance/settlement/note/meeting/file/budget/chat)
+  모두 엔티티·레포지토리·Controller/Api/Service/Mapper/ErrorCode 껍데기까지만 있고, 실제
+  비즈니스 로직·DTO는 아직 없다
+- 테스트 코드 — 아직 한 줄도 없다. 첫 도메인에 로직을 구현할 때 테스트도 함께 작성해 이후
+  도메인의 패턴이 되게 한다
