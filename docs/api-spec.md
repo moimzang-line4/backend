@@ -921,11 +921,7 @@ schedule_round_id 연결, decisions #2). 부분 납부 중에는 생성 안 함,
 
 #### API-076 · POST /api/terms/{termId}/ai/chat-rooms · AI 대화방 생성
 인증: 불필요. **Request**: title. **Response data**: chatRoomId. 대화방은 기수당 여러 개 유지하며
-단일화하지 않는다(결정 완료, 현행 구조 그대로).
-
-> **문서 오류**: 이 결정의 근거로 `erd.md`·`prd.md`가 가리키는 `docs/decisions.md` #11이 실제
-> 문서에는 없다(번호가 10→12로 건너뜀). 결정 자체는 Notion 원본에 "결정 완료"로 명시돼 있으니
-> `docs/decisions.md`에 #11을 채워 넣는 보강이 필요하다.
+단일화하지 않는다(결정 완료, 현행 구조 그대로 — `docs/decisions.md` #11).
 
 #### API-077 · GET /api/terms/{termId}/ai/chat-rooms · AI 대화방 목록 조회
 인증: 불필요. 기수 단위(로그인이 없어 그 기수 운영진 전체가 공유).
@@ -978,8 +974,3 @@ targetScheduleId, cardType, card(결과 카드 — 예: 미입금자 조회)
 16. API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지
 
 이 항목들은 해당 엔드포인트를 실제로 구현하는 시점에 정하고, 결정 즉시 `docs/decisions.md`에 追記한다.
-
-별개로, `docs/decisions.md` #11이 실제로는 비어 있는데 `erd.md`·`api-spec.md`(API-076)·`prd.md`
-세 곳 모두 "AI 채팅방 다중화 유지" 결정의 근거로 그 번호를 가리키고 있다. 결정 자체는 Notion
-원본에 "결정 완료"로 분명히 남아 있으니, TBD가 아니라 **문서 보강(decisions.md #11 채우기)**이
-필요한 항목이다.
