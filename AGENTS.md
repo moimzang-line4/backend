@@ -64,6 +64,11 @@ Controller/Api/Service/Mapper/ErrorCode 껍데기까지 갖춰져 있고, 실제
 - 웹소켓 사용하지 않음 — 전부 REST 요청/응답으로 충분(실시간 멀티클라이언트 동기화 요구사항 없음)
 - 로깅은 AOP로 자동화하지 않는다. Service에 `@Slf4j`를 달고 필요한 지점에 직접 `log.info`/`log.warn`
   등을 쓴다
+- 엔티티에는 Lombok `@NoArgsConstructor(PROTECTED)`/`@AllArgsConstructor(PRIVATE)`/
+  `@Builder(PRIVATE)`를 기본으로 달고, 클래스 상단에 `// {한글명} entity`, 필드마다 한글 설명
+  주석을 단다. 새 엔티티를 추가할 때도 같은 패턴을 따른다
+- `operationspace` 도메인은 없다 — 안건 연결·운영 공간 집계(API-012~016)는 `schedule` 도메인이
+  담당한다(`docs/decisions.md` #13)
 
 ## 코드 주석·로그 규칙 (IMPORTANT)
 
