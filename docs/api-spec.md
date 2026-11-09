@@ -200,6 +200,16 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | ATTENDANCE_001 | 409 | 같은 이름의 사람이 있어요. | API-030 |
 
+### 운영 공간 (SpaceErrorCode) — API-013
+| 코드 | HTTP | 메시지 | 발생 API |
+|---|---|---|---|
+| SPACE_001 | 409 | 이미 연결된 안건입니다. | API-013 |
+
+### 운영 메모 (NoteErrorCode) — API-050
+| 코드 | HTTP | 메시지 | 발생 API |
+|---|---|---|---|
+| NOTE_001 | 400 | 할 일 유형이 아닙니다. | API-050 |
+
 ### 회의 / 안건 (MeetingErrorCode, AgendaErrorCode) — API-051~061, 056~058
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
@@ -306,6 +316,8 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 
 #### API-005 · GET /api/terms/{termId}/schedules · 일정 목록 조회(캘린더)
 인증: 불필요.
+
+**Query**: from(날짜, 필수), to(날짜, 필수)
 
 **Response data**: schedules[].scheduleId/title/categoryName/color/isAllDay/startAt/endAt/location/hasOperationSpace
 
@@ -532,6 +544,7 @@ checkedInAt, progress. **에러**: COMMON_404
 
 #### API-033 · GET /api/rounds/{roundId}/receipt · 영수증 조회
 인증: 불필요. `isLocked`는 그 차수에 입금 완료가 1명이라도 있으면 true(수정·삭제 버튼 비활성).
+`registeredAt`은 전용 컬럼이 없어 `schedule_round.updated_at`으로 대체한다.
 
 **Response data**: roundId, label, storeName, transactedAt, totalAmount, clubSubsidyAmount, imageUrl,
 registeredAt, isLocked. **에러**: COMMON_404
@@ -543,6 +556,10 @@ registeredAt, isLocked. **에러**: COMMON_404
 
 **Request**: storeName, transactedAt, totalAmount(양의 정수), clubSubsidyAmount(0 이상·총액 이하),
 imageKey(사진 없이 등록 시 생략)
+
+**Logics**: 금액(totalAmount/clubSubsidyAmount)이 바뀌면 그 차수에 이미 저장된 정산 명단의 1인
+청구액도 API-038과 같은 공식으로 재계산한다. 입금 완료자가 있으면 SETTLEMENT_004로 수정 자체가
+막히므로 재계산은 아직 아무도 입금하지 않은 상태에서만 일어난다.
 
 **Response data**: roundId, label, totalAmount, clubSubsidyAmount
 **에러**: COMMON_400, SETTLEMENT_001, SETTLEMENT_002, COMMON_404, SETTLEMENT_003, SETTLEMENT_004
@@ -613,7 +630,9 @@ affiliation/phoneLast4/billedAmount/paymentStatus(UNPAID|PAID)
 ---
 
 #### API-041 · DELETE /api/schedules/{scheduleId}/payments/{attendeeId} · 입금 명단에서 삭제
-인증: 불필요. 미입금 카드 스와이프 "삭제하기". 남은 인원으로 청구액 재계산.
+인증: 불필요. 미입금 카드 스와이프 "삭제하기". URL에 roundId가 없으므로 scheduleId 기준으로 그
+일정의 **모든 차수**에서 그 사람을 제외한다(특정 차수 1개만 빼는 게 아니다). 각 차수는 남은
+인원으로 청구액 재계산.
 **에러**: COMMON_404, SETTLEMENT_005
 
 #### API-042 · GET /api/schedules/{scheduleId}/payments · 입금 현황 조회
@@ -657,7 +676,8 @@ storeName/totalAmount/registeredAt/settlementStatus, account.bankName/accountNum
 **에러**: COMMON_404
 
 > **미확정**: `progress`의 단위가 "사람 수"인지 "차수 수"인지는 화면 예시만으로 확정하지 못했다.
-> 구현 시점에 결정한다.
+> 선택된 차수들의 계좌가 서로 다를 때 `account`에 어느 계좌를 대표로 보여줄지도 함께 정해야
+> 한다(API-044의 동일 미확정 항목 참고). 구현 시점에 결정한다.
 
 ### 운영 메모
 
@@ -695,7 +715,11 @@ listSummary(목록 한 줄 설명, 선택), agendas(string[], 안건 내용 목�
 ---
 
 #### API-052 · GET /api/terms/{termId}/meetings · 회의 목록 조회
-인증: 불필요. **Response data**: totalCount, meetings[].meetingId/title/meetingDate/categoryName/
+인증: 불필요.
+
+**Query**: status(진행중|완료, 선택), categoryId(선택), keyword(선택)
+
+**Response data**: totalCount, meetings[].meetingId/title/meetingDate/categoryName/
 listSummary/status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt
 
 ---
@@ -709,14 +733,19 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 **에러**: COMMON_404
 
-> **미확정**: 안건별 진행률(%) 계산식은 화면에 표시되는 값만으로 확정하지 못했다. 구현 시점에 정한다.
+전체 진행률(`progress.doneCount/totalCount`)은 안건 상태가 COMPLETED인 개수를 전체 안건 수로
+나눈 값이다. '다음 안건' 버튼(API-057)이 그 안건의 status를 COMPLETED로 저장하는 트리거다.
+
+> **미확정**: Figma에는 개별 안건이 진행 중일 때 보여주는 퍼센트(예: "안건 1 논의중 45%")가 있는데,
+> 이건 안건 하나의 진행 중 퍼센트라 위 doneCount/totalCount 식으로 설명되지 않고 계산 기준이
+> 명세에 없다. Figma 자체에도 "진행률 바 수정 예정" 메모가 있어 디자인 쪽 확인이 먼저 필요하다.
 
 ---
 
 #### API-054 · PATCH /api/meetings/{meetingId} · 회의 정보 수정
 인증: 불필요. 제목·날짜·카테고리·참석자만 수정(안건은 API-056/057/058로 별도 처리). 보낸 필드만 수정.
 
-**Request**: title, meetingDate, categoryId, attendees
+**Request**: title, meetingDate, categoryId, attendees, listSummary
 **Response data**: meetingId
 **에러**: COMMON_400, COMMON_404, MEETING_001
 
@@ -740,6 +769,11 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 #### API-057 · PATCH /api/agendas/{agendaId} · 안건 내용 저장
 인증: 불필요. **Request**: discussionNote, decision, status(PENDING|IN_PROGRESS|COMPLETED)
+
+**Logics**: 화면의 '다음 안건' 버튼은 이 API를 status='COMPLETED'로 호출하는 것이다. '회의
+중단하기'는 같은 API를 status 없이(또는 바꾸지 않고) 호출해 내용만 저장하며 회의는 '진행중'을
+유지한다.
+
 **Response data**: agendaId, status, progress
 **에러**: COMMON_404, MEETING_001
 
@@ -798,7 +832,8 @@ sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택)
 ---
 
 #### API-065 · GET /api/files/{fileId}/download-url · 파일 미리보기·다운로드 URL 발급
-인증: 불필요. **Response data**: url, expiresAt. **에러**: COMMON_404
+인증: 불필요. **Query**: mode(PREVIEW|DOWNLOAD, 기본 DOWNLOAD). **Response data**: url, expiresAt.
+**에러**: COMMON_404
 
 #### API-066 · DELETE /api/files/{fileId} · 파일 삭제
 인증: 불필요. 소프트 삭제(deleted_at). **에러**: COMMON_404
@@ -814,7 +849,8 @@ sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택)
 인증: 불필요. 현재 검색·분류 조건에 맞는 파일을 ZIP으로 스트리밍.
 
 **Query**: category(ALL|ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE, 기본 ALL), keyword(선택)
-**Response**: `Content-Type: application/zip` 파일 스트림(JSON 래퍼 없음)
+**Response**: `Content-Type: application/zip` 파일 스트림(JSON 래퍼 없음). 파일명 형식:
+`{기수}자료{N}개.zip`.
 **에러**: COMMON_404(다운로드할 파일 없음)
 
 ### 예산
@@ -832,6 +868,8 @@ entries[].entryId/type(INCOME|EXPENSE)/itemName/amount/entryDate/source(RECEIPT|
 
 > **미확정**: 내역의 분류(예: "· 공연" 같은 태그) 저장할 컬럼을 `ledger_entry`에 추가할지는 구현
 > 시점에 정한다. 장부 초기 잔액(기초 총액) 자동 인식은 `docs/decisions.md` #10에 따라 보류.
+> `totalIncome`/`totalExpense`("누적 수입·지출")가 `currentBalance`처럼 그룹 전체 기간 누적인지,
+> 아니면 이 기수(`entries`)로 한정인지도 아직 확정하지 못했다 — 화면 예시만으로 판단 불가.
 
 ---
 
@@ -882,8 +920,12 @@ schedule_round_id 연결, decisions #2). 부분 납부 중에는 생성 안 함,
 ### AI 비서
 
 #### API-076 · POST /api/terms/{termId}/ai/chat-rooms · AI 대화방 생성
-인증: 불필요. **Request**: title. **Response data**: chatRoomId. decisions #(채팅방 단일화 보류) —
-여러 대화방 유지로 확정, 이 생성 API는 그대로 둔다.
+인증: 불필요. **Request**: title. **Response data**: chatRoomId. 대화방은 기수당 여러 개 유지하며
+단일화하지 않는다(결정 완료, 현행 구조 그대로).
+
+> **문서 오류**: 이 결정의 근거로 `erd.md`·`prd.md`가 가리키는 `docs/decisions.md` #11이 실제
+> 문서에는 없다(번호가 10→12로 건너뜀). 결정 자체는 Notion 원본에 "결정 완료"로 명시돼 있으니
+> `docs/decisions.md`에 #11을 채워 넣는 보강이 필요하다.
 
 #### API-077 · GET /api/terms/{termId}/ai/chat-rooms · AI 대화방 목록 조회
 인증: 불필요. 기수 단위(로그인이 없어 그 기수 운영진 전체가 공유).
@@ -907,20 +949,25 @@ targetScheduleId, cardType, card(결과 카드 — 예: 미입금자 조회)
 인증: 불필요. **Response data**: messages[].messageId/role/content/cardType/card/createdAt
 **에러**: COMMON_404
 
+`card`는 전송 시점의 스냅샷(`content_json`)이라 이후 상태(예: 입금 여부)가 바뀌어도 갱신되지
+않는다. FE가 최신값이 필요하면 해당 조회 API(예: 입금 현황 조회)를 다시 호출하는 것을 권장한다.
+
 ---
 
 ## 7. 미확정(TBD) 항목 모음
 
-구현 착수 전 들어가면 안 되는, 아직 정하지 않은 항목 11개(§6에서 각 엔드포인트 자리에도 표시):
+구현 착수 전 들어가면 안 되는, 아직 정하지 않은 항목 14개(§6에서 각 엔드포인트 자리에도 표시):
 
 1. API-004/007 `color` — 일정 색상 8종의 실제 값(영문 상수명) 미정, Figma엔 스와치만 있고 이름이 없음
 2. API-009 `operationMenuCount` 산정 기준 — 해소됨: 4개 고정(decisions #12)
 3. API-022 동일인 중복 등록 처리 기준
 4. API-028 새 차수 생성 시 기존 참가자 자동 포함 여부
-5. API-044 선택 차수들의 계좌가 다를 때 처리 방식
+5. API-044 선택 차수들의 계좌가 다를 때 처리 방식(API-045 정산 홈의 대표 계좌 표시도 같은 문제)
 6. API-045 `progress`가 사람 수 단위인지 차수 수 단위인지
 7. API-050 (해당 없음 — 이미 해소, 목록에서 제외) — *초안에서 제거*
-8. API-053 안건별 진행률(%) 계산식
+8. API-053 안건 진행률 — 전체 진행률(doneCount/totalCount)은 해소됨('다음 안건' 버튼이 API-057을
+   status=COMPLETED로 호출). 다만 Figma의 개별 안건 진행 중 퍼센트(예: "논의중 45%")는 계산 기준이
+   없어 여전히 미확정 — Figma 쪽 "진행률 바 수정 예정" 메모부터 확인 필요
 9. API-055 진행 중인 회의 삭제 허용 여부
 10. API-062 허용 확장자·최대 용량 실제 수치
 11. API-067 파일 삭제 되돌리기 가능 기간
@@ -928,5 +975,11 @@ targetScheduleId, cardType, card(결과 카드 — 예: 미입금자 조회)
 13. API-078 미입금자 조회 외 카드 포맷
 14. API-014 자동 매칭 알고리즘 상세 기준
 15. API-007 일정 수정 시 운영 공간 토글(`hasOperationSpace`) 변경 허용 여부 — 보류(decisions #12)
+16. API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지
 
 이 항목들은 해당 엔드포인트를 실제로 구현하는 시점에 정하고, 결정 즉시 `docs/decisions.md`에 追記한다.
+
+별개로, `docs/decisions.md` #11이 실제로는 비어 있는데 `erd.md`·`api-spec.md`(API-076)·`prd.md`
+세 곳 모두 "AI 채팅방 다중화 유지" 결정의 근거로 그 번호를 가리키고 있다. 결정 자체는 Notion
+원본에 "결정 완료"로 분명히 남아 있으니, TBD가 아니라 **문서 보강(decisions.md #11 채우기)**이
+필요한 항목이다.
