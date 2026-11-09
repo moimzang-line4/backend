@@ -46,6 +46,7 @@ Controller/Api/Service/Mapper/ErrorCode 껍데기까지 갖춰져 있고, 실제
 - 데이터 모델: `docs/erd.md`
 - API 명세: `docs/api-spec.md`
 - 설계 결정 로그: `docs/decisions.md`
+- 팀 작업 분배: `docs/team-ownership.md`
 
 새 기능을 구현하기 전에 위 네 문서에서 해당 도메인 부분을 먼저 읽는다. `docs/api-spec.md`에
 "미확정"으로 표시된 항목은 구현 시점에 정하고 그 결정을 `docs/decisions.md`에 追記한다.
