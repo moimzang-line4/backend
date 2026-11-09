@@ -752,9 +752,8 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 ---
 
 #### API-055 · DELETE /api/meetings/{meetingId} · 회의 삭제
-인증: 불필요. **에러**: COMMON_404
-
-> **미확정**: 진행 중인 회의도 삭제할 수 있는지는 구현 시점에 정한다.
+인증: 불필요. 회의 상태(IN_PROGRESS/COMPLETED)와 무관하게 삭제를 허용한다(decisions #15).
+**에러**: COMMON_404
 
 ---
 
@@ -964,7 +963,7 @@ targetScheduleId, cardType, card(결과 카드 — 예: 미입금자 조회)
 8. API-053 안건 진행률 — 전체 진행률(doneCount/totalCount)은 해소됨('다음 안건' 버튼이 API-057을
    status=COMPLETED로 호출). 다만 Figma의 개별 안건 진행 중 퍼센트(예: "논의중 45%")는 계산 기준이
    없어 여전히 미확정 — Figma 쪽 "진행률 바 수정 예정" 메모부터 확인 필요
-9. API-055 진행 중인 회의 삭제 허용 여부
+9. API-055 진행 중인 회의 삭제 허용 여부 — 해소됨: 상태와 무관하게 삭제 허용(decisions #15)
 10. API-062 허용 확장자·최대 용량 실제 수치
 11. API-067 파일 삭제 되돌리기 가능 기간
 12. API-069 내역 분류 컬럼 추가 여부(ERD 변경 필요), 장부 초기 잔액 AI 인식(보류, decisions #10)
@@ -972,5 +971,7 @@ targetScheduleId, cardType, card(결과 카드 — 예: 미입금자 조회)
 14. API-014 자동 매칭 알고리즘 상세 기준
 15. API-007 일정 수정 시 운영 공간 토글(`hasOperationSpace`) 변경 허용 여부 — 보류(decisions #12)
 16. API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지
+17. AI 연동 벤더/모델 — 영수증 인식(API-036), 회의 요약(API-060), AI 채팅 응답(API-078) 전부
+    미지정. 현재 Gemini 무료 티어가 유력 후보로 검토 중이나 확정은 아니다.
 
 이 항목들은 해당 엔드포인트를 실제로 구현하는 시점에 정하고, 결정 즉시 `docs/decisions.md`에 追記한다.
