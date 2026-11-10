@@ -2,8 +2,11 @@ package com.moimzang.domain.meeting.controller;
 
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
+import com.moimzang.domain.meeting.enums.MeetingStatus;
 import com.moimzang.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -25,4 +28,20 @@ public interface MeetingApi {
     })
     ResponseEntity<BaseResponse<MeetingCreateResponse>> createMeeting(
             Long termId, @Valid MeetingCreateRequest request);
+
+    @Operation(summary = "회의 목록 조회", description = "기수의 회의 목록을 상태·카테고리·검색어로 필터링해 cursor 페이지네이션으로 조회한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "400", description = "MEETING_400_INVALID_CURSOR",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_GROUP_TERM_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingListResponse>> listMeetings(
+            @Parameter(description = "기수 ID", example = "1") Long termId,
+            @Parameter(description = "회의 상태 필터") MeetingStatus status,
+            @Parameter(description = "회의 카테고리 ID 필터", example = "1") Long categoryId,
+            @Parameter(description = "검색어(제목·목록 요약·참석자 중 하나라도 일치하면 조회)", example = "운영진") String keyword,
+            @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지", example = "MjAyNi0xMS0wNw.5") String cursor,
+            @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
 }
