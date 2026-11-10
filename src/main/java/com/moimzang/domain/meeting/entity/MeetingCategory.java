@@ -39,4 +39,11 @@ public class MeetingCategory extends BaseEntity {
     // 카테고리명
     @Column(name = "name", nullable = false, length = 50)
     private String name;
+
+    public static MeetingCategory create(GroupTerm groupTerm, String name) {
+        return MeetingCategory.builder()
+                .groupTerm(groupTerm)
+                .name(name)
+                .build();
+    }
 }

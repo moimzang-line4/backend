@@ -1,11 +1,13 @@
 package com.moimzang.domain.meeting.mapper;
 
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaDetailResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingProgressResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
+import com.moimzang.domain.meeting.entity.MeetingCategory;
 import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -30,4 +32,11 @@ public interface MeetingMapper {
     @Mapping(target = "meetingId", source = "meeting.id")
     @Mapping(target = "categoryId", source = "meeting.meetingCategory.id")
     MeetingDetailResponse toDetailResponse(Meeting meeting, List<MeetingAgenda> agendas, MeetingProgressResponse progress);
+
+    // 회의 카테고리 1건을 변환한다
+    @Mapping(target = "categoryId", source = "id")
+    MeetingCategoryResponse toCategoryResponse(MeetingCategory category);
+
+    // 회의 카테고리 목록을 변환한다
+    List<MeetingCategoryResponse> toCategoryResponses(List<MeetingCategory> categories);
 }
