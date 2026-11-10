@@ -68,4 +68,18 @@ public class MeetingAgenda extends BaseEntity {
                 .orderNo(orderNo)
                 .build();
     }
+
+    // 안건 논의 내용을 부분 수정한다 — 인자가 null이면 해당 필드는 바꾸지 않는다.
+    // '다음 안건'은 status=COMPLETED로, '중단하기'는 status 없이 호출된다
+    public void updateContent(String discussionNote, String decision, AgendaStatus status) {
+        if (discussionNote != null) {
+            this.discussionNote = discussionNote;
+        }
+        if (decision != null) {
+            this.decision = decision;
+        }
+        if (status != null) {
+            this.status = status;
+        }
+    }
 }

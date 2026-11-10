@@ -1,10 +1,12 @@
 package com.moimzang.domain.meeting.controller;
 
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
@@ -115,4 +117,15 @@ public interface MeetingApi {
     })
     ResponseEntity<BaseResponse<MeetingAgendaCreateResponse>> addAgenda(
             @Parameter(description = "회의 ID", example = "1") Long meetingId, @Valid MeetingAgendaCreateRequest request);
+
+    @Operation(summary = "안건 내용 저장", description = "'다음 안건' 버튼은 이 API를 status=COMPLETED로 호출하는 것이고, '회의 중단하기'는 status 없이(내용만) 호출한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "저장 성공"),
+        @ApiResponse(responseCode = "404", description = "AGENDA_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "MEETING_409_ALREADY_ENDED",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingAgendaUpdateResponse>> updateAgendaContent(
+            @Parameter(description = "안건 ID", example = "3") Long agendaId, MeetingAgendaUpdateRequest request);
 }

@@ -3,10 +3,12 @@ package com.moimzang.domain.meeting.service;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
@@ -291,6 +293,36 @@ public class MeetingService {
         return MeetingAgendaCreateResponse.builder()
                 .agendaId(saved.getId())
                 .orderNo(nextOrderNo)
+                .build();
+    }
+
+    // 안건 논의 내용을 저장한다 — '다음 안건'(status=COMPLETED)과 '중단하기'(status 없이 내용만)가
+    // 같은 API를 서로 다른 값으로 호출한다. 종료된 회의는 거부한다
+    @Transactional
+    public MeetingAgendaUpdateResponse updateAgendaContent(Long agendaId, MeetingAgendaUpdateRequest request) {
+        log.info("[안건 내용 저장] 저장을 시작합니다. agendaId = {}, status = {}", agendaId, request.getStatus());
+
+        MeetingAgenda agenda = meetingAgendaRepository.findById(agendaId)
+                .orElseThrow(() -> {
+                    log.warn("[안건 내용 저장] 존재하지 않는 안건입니다. agendaId = {}", agendaId);
+                    return new CustomException(MeetingErrorCode.AGENDA_404_NOT_FOUND);
+                });
+
+        if (agenda.getMeeting().isEnded()) {
+            log.warn("[안건 내용 저장] 이미 종료된 회의의 안건입니다. agendaId = {}", agendaId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        agenda.updateContent(request.getDiscussionNote(), request.getDecision(), request.getStatus());
+
+        List<MeetingAgenda> agendas = meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(agenda.getMeeting().getId());
+        MeetingProgressResponse progress = calculateProgress(agendas);
+
+        log.info("[안건 내용 저장] 저장을 완료했습니다. agendaId = {}, status = {}", agendaId, agenda.getStatus());
+        return MeetingAgendaUpdateResponse.builder()
+                .agendaId(agenda.getId())
+                .status(agenda.getStatus())
+                .progress(progress)
                 .build();
     }
 }

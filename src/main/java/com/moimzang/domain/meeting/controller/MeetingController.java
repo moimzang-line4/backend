@@ -1,10 +1,12 @@
 package com.moimzang.domain.meeting.controller;
 
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
@@ -112,6 +114,17 @@ public class MeetingController implements MeetingApi {
             @Valid @RequestBody MeetingAgendaCreateRequest request
     ) {
         MeetingAgendaCreateResponse response = meetingService.addAgenda(meetingId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 안건 논의 내용을 저장한다('다음 안건'/'중단하기' 공용)
+    @Override
+    @PatchMapping("/api/agendas/{agendaId}")
+    public ResponseEntity<BaseResponse<MeetingAgendaUpdateResponse>> updateAgendaContent(
+            @PathVariable Long agendaId,
+            @RequestBody MeetingAgendaUpdateRequest request
+    ) {
+        MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(agendaId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }
