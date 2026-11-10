@@ -4,13 +4,13 @@
 바꿀 때는 이 파일과 ERDCloud 양쪽을 함께 갱신한다. enum 계열 컬럼의 `도메인`은
 아래 "enum 도메인" 표의 값과 1:1로 매칭된다. DB는 MySQL 8(`docs/decisions.md` 참고).
 
-## 엔티티 목록 (18개)
+## 엔티티 목록 (19개)
 
 | 테이블(물리명) | 한글명 | 설명 |
 |---|---|---|
 | club_group | 그룹 | 동아리/학회 그룹 자체 |
 | group_term | 기수 | 그룹의 기수(학기). 실질적인 멀티테넌시 경계 |
-| schedule_category | 일정 카테고리 | 기수별 일정 분류. 회의와 공유 |
+| schedule_category | 일정 카테고리 | 기수별 일정 분류(일정 전용, `docs/decisions.md` #21로 회의와 분리) |
 | schedule | 일정 | 운영 일정. 운영공간은 별도 테이블 없이 `has_operation_space` 플래그로 표현 |
 | member_list | 명단방 | 부원 명단을 모으는 등록 링크 단위 |
 | member | 부원 | 명단방에 등록된 개인 |
@@ -19,6 +19,7 @@
 | round_attendee | 차수 참석자 | 차수별 출석 여부 |
 | settlement_target | 정산 대상 | 차수별 개인 청구액·입금 상태 |
 | operation_note | 운영 메모 | 일정에 속한 메모/할일/결정사항/아이디어 |
+| meeting_category | 회의 카테고리 | 기수별 회의 분류(일정 카테고리와 별도 운영) |
 | meeting | 회의 | 회의(회의록) 본체 |
 | meeting_agenda | 안건 | 회의에 속한 안건 |
 | schedule_agenda_link | 일정-안건 연결 | 일정과 안건의 N:M 연결(운영 공간에서 회의록 연결) |
@@ -181,12 +182,21 @@
 | created_at | DATETIME | | | ✅ | LocalDateTime | |
 | updated_at | DATETIME | | | ✅ | LocalDateTime | |
 
+### meeting_category (회의 카테고리)
+| 컬럼 | 타입 | PK | FK | NOT NULL | 도메인 | 설명 |
+|---|---|---|---|---|---|---|
+| id | BIGINT | ✅ | | ✅ | long | |
+| group_term_id | BIGINT | | → group_term.id | ✅ | long | |
+| name | VARCHAR(50) | | | ✅ | String | |
+| created_at | DATETIME | | | ✅ | LocalDateTime | |
+| updated_at | DATETIME | | | ✅ | LocalDateTime | |
+
 ### meeting (회의)
 | 컬럼 | 타입 | PK | FK | NOT NULL | 도메인 | 설명 |
 |---|---|---|---|---|---|---|
 | id | BIGINT | ✅ | | ✅ | long | |
 | group_term_id | BIGINT | | → group_term.id | ✅ | long | |
-| schedule_category_id | BIGINT | | → schedule_category.id | ✅ | long | 일정 카테고리와 같은 목록 공유 |
+| meeting_category_id | BIGINT | | → meeting_category.id | ✅ | long | 일정 카테고리와 분리 운영(`docs/decisions.md` #21) |
 | title | VARCHAR(100) | | | ✅ | String | |
 | meeting_date | DATE | | | ✅ | LocalDate | |
 | attendees | VARCHAR(500) | | | ❌ | String | 미확정: 기본 텍스트 컬럼 |
@@ -293,8 +303,9 @@
 | settlement_target.schedule_round_id | → schedule_round.id | ❌ | 차수 1 : N 정산대상 |
 | settlement_target.schedule_attendee_id | → schedule_attendee.id | ❌ | 참가자 1 : N 정산대상 |
 | operation_note.schedule_id | → schedule.id | ❌ | 일정 1 : N 메모 |
+| meeting_category.group_term_id | → group_term.id | ❌ | 기수 1 : N 회의카테고리 |
 | meeting.group_term_id | → group_term.id | ❌ | 기수 1 : N 회의 |
-| meeting.schedule_category_id | → schedule_category.id | ❌ | 카테고리 1 : N 회의(일정 카테고리와 공유) |
+| meeting.meeting_category_id | → meeting_category.id | ❌ | 카테고리 1 : N 회의 |
 | meeting_agenda.meeting_id | → meeting.id | ❌ | 회의 1 : N 안건 |
 | schedule_agenda_link.schedule_id | → schedule.id | ❌ | 일정 1 : N 연결 |
 | schedule_agenda_link.meeting_agenda_id | → meeting_agenda.id | ❌ | 안건 1 : N 연결(일정↔안건 N:M을 연결 테이블로 구현) |

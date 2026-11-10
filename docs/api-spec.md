@@ -223,9 +223,11 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ### 회의 / 안건 (MeetingErrorCode, AgendaErrorCode) — API-051~061, 056~058
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| MEETING_001 | 409 | 이미 종료된 회의입니다. | API-056, API-057, API-058 |
-| MEETING_002 | 502 | AI 요약에 실패했습니다. 다시 시도해 주세요. | API-060 |
-| AGENDA_001 | 409 | 안건이 1개만 남아 삭제할 수 없습니다. | API-058 |
+| MEETING_409_ALREADY_ENDED | 409 | 이미 종료된 회의입니다. | API-056, API-057, API-058 |
+| MEETING_502_SUMMARY_FAILED | 502 | AI 요약에 실패했습니다. 다시 시도해 주세요. | API-060 |
+| MEETING_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 회의 카테고리입니다. | API-051 |
+| MEETING_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-051 |
+| AGENDA_409_AT_LEAST_ONE_REQUIRED | 409 | 안건이 1개만 남아 삭제할 수 없습니다. | API-058 |
 
 ### 예산/장부 (LedgerErrorCode) — API-069~075
 | 코드 | HTTP | 메시지 | 발생 API |
@@ -737,11 +739,12 @@ cursor 페이지네이션(정렬 기준: createdAt).
 ### 회의
 
 #### API-051 · POST /api/terms/{termId}/meetings · 회의 만들기
-인증: 불필요. **Request**: title, meetingDate, categoryId, attendees(자유 텍스트, 선택),
-listSummary(목록 한 줄 설명, 선택), agendas(string[], 안건 내용 목록)
+인증: 불필요. **Request**: title, meetingDate, categoryId(`meeting_category`, 일정 카테고리와
+별도 운영 — decisions #21), attendees(자유 텍스트, 선택), listSummary(목록 한 줄 설명, 선택),
+agendas(string[], 안건 내용 목록)
 
 **Response data**: meetingId, agendaIds
-**에러**: COMMON_400, COMMON_404
+**에러**: COMMON_400, MEETING_404_GROUP_TERM_NOT_FOUND(기수 없음), MEETING_404_CATEGORY_NOT_FOUND(카테고리 없음)
 
 ---
 
@@ -768,12 +771,10 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 **에러**: COMMON_404
 
-전체 진행률(`progress.doneCount/totalCount`)은 안건 상태가 COMPLETED인 개수를 전체 안건 수로
-나눈 값이다. '다음 안건' 버튼(API-057)이 그 안건의 status를 COMPLETED로 저장하는 트리거다.
-
-> **미확정**: Figma에는 개별 안건이 진행 중일 때 보여주는 퍼센트(예: "안건 1 논의중 45%")가 있는데,
-> 이건 안건 하나의 진행 중 퍼센트라 위 doneCount/totalCount 식으로 설명되지 않고 계산 기준이
-> 명세에 없다. Figma 자체에도 "진행률 바 수정 예정" 메모가 있어 디자인 쪽 확인이 먼저 필요하다.
+진행률 바는 `progress.doneCount/totalCount`(안건 상태가 COMPLETED인 개수 ÷ 전체 안건 수)
+하나로만 계산한다. '다음 안건' 버튼(API-057)이 그 안건의 status를 COMPLETED로 저장하는
+트리거이고, 이때마다 doneCount가 1씩 늘어난다. Figma에 있던 "안건1 논의중 45%" 같은 개별 안건
+진행중 퍼센트는 구현하지 않는다(decisions #20).
 
 ---
 
@@ -782,7 +783,7 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 **Request**: title, meetingDate, categoryId, attendees, listSummary
 **Response data**: meetingId
-**에러**: COMMON_400, COMMON_404, MEETING_001
+**에러**: COMMON_400, COMMON_404, MEETING_409_ALREADY_ENDED
 
 ---
 
@@ -797,7 +798,7 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 **Request**: content(1~100자)
 **Response data**: agendaId, orderNo
-**에러**: COMMON_400, COMMON_404, MEETING_001
+**에러**: COMMON_400, COMMON_404, MEETING_409_ALREADY_ENDED
 
 ---
 
@@ -809,17 +810,17 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 유지한다.
 
 **Response data**: agendaId, status, progress
-**에러**: COMMON_404, MEETING_001
+**에러**: COMMON_404, MEETING_409_ALREADY_ENDED
 
 #### API-058 · DELETE /api/agendas/{agendaId} · 안건 삭제
 인증: 불필요. 삭제 후 남은 안건들의 진행률 재계산. 안건 1개만 남은 회의는 삭제 불가.
-**에러**: COMMON_404, MEETING_001, AGENDA_001
+**에러**: COMMON_404, MEETING_409_ALREADY_ENDED, AGENDA_409_AT_LEAST_ONE_REQUIRED
 
 ---
 
 #### API-059 · POST /api/meetings/{meetingId}/end · 회의 종료
 인증: 불필요. **Response data**: meetingId, status, endedAt, doneAgendaCount, totalAgendaCount
-**에러**: COMMON_404, MEETING_001(이미 종료)
+**에러**: COMMON_404, MEETING_409_ALREADY_ENDED(이미 종료)
 
 ---
 
@@ -828,7 +829,7 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 원본(meeting_agenda)은 항상 보존. "다시 요약하기"도 이 API 재호출.
 
 **Response data**: summarizedAgendaCount, summaryContent, summaryGeneratedAt
-**에러**: COMMON_404, MEETING_002(502)
+**에러**: COMMON_404, MEETING_502_SUMMARY_FAILED(502)
 
 #### API-061 · PATCH /api/meetings/{meetingId}/summary · 회의록 저장(요약 수정)
 인증: 불필요. **Request**: summaryContent. **Response data**: meetingId. **에러**: COMMON_404

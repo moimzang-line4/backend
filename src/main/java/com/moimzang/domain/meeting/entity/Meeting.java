@@ -2,7 +2,6 @@ package com.moimzang.domain.meeting.entity;
 
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
-import com.moimzang.domain.schedule.entity.ScheduleCategory;
 import com.moimzang.global.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -42,10 +41,10 @@ public class Meeting extends BaseEntity {
     @JoinColumn(name = "group_term_id", nullable = false)
     private GroupTerm groupTerm;
 
-    // 일정 카테고리와 공유하는 카테고리
+    // 회의 카테고리(일정 카테고리와 별도 운영)
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "schedule_category_id", nullable = false)
-    private ScheduleCategory scheduleCategory;
+    @JoinColumn(name = "meeting_category_id", nullable = false)
+    private MeetingCategory meetingCategory;
 
     // 회의 제목
     @Column(name = "title", nullable = false, length = 100)
@@ -79,4 +78,18 @@ public class Meeting extends BaseEntity {
     // 회의 목록 카드에 표시되는 한 줄 설명
     @Column(name = "list_summary", length = 100)
     private String listSummary;
+
+    // 생성 직후에는 안건을 논의하지 않은 상태이므로 항상 진행중으로 시작한다
+    public static Meeting create(GroupTerm groupTerm, MeetingCategory meetingCategory, String title,
+                                  LocalDate meetingDate, String attendees, String listSummary) {
+        return Meeting.builder()
+                .groupTerm(groupTerm)
+                .meetingCategory(meetingCategory)
+                .title(title)
+                .meetingDate(meetingDate)
+                .attendees(attendees)
+                .listSummary(listSummary)
+                .status(MeetingStatus.IN_PROGRESS)
+                .build();
+    }
 }
