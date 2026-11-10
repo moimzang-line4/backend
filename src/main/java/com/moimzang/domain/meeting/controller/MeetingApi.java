@@ -1,7 +1,10 @@
 package com.moimzang.domain.meeting.controller;
 
+import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
@@ -77,4 +80,24 @@ public interface MeetingApi {
                      content = @Content(schema = @Schema(implementation = BaseResponse.class)))
     })
     ResponseEntity<BaseResponse<Void>> deleteMeeting(@Parameter(description = "회의 ID", example = "1") Long meetingId);
+
+    @Operation(summary = "회의 카테고리 목록 조회", description = "기수의 회의 카테고리 목록을 조회한다. 일정 카테고리와는 별도로 운영된다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_GROUP_TERM_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingCategoryListResponse>> listCategories(
+            @Parameter(description = "기수 ID", example = "1") Long termId);
+
+    @Operation(summary = "회의 카테고리 생성", description = "기수에 새 회의 카테고리를 만든다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "생성 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(검증 실패)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_GROUP_TERM_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingCategoryResponse>> createCategory(
+            @Parameter(description = "기수 ID", example = "1") Long termId, @Valid MeetingCategoryCreateRequest request);
 }

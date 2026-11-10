@@ -8,8 +8,11 @@ import static org.mockito.Mockito.mock;
 
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
+import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
@@ -258,6 +261,23 @@ class MeetingServiceTest {
         assertThat(response.getAgendas()).hasSize(2);
         assertThat(response.getProgress().getDoneCount()).isEqualTo(1);
         assertThat(response.getProgress().getTotalCount()).isEqualTo(2);
+        assertThat(response.getProgress().getPercentage()).isEqualTo(50);
+    }
+
+    @Test
+    void getMeetingDetail_안건이_없으면_진행률_0퍼센트를_반환한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "안건 없는 회의", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of());
+
+        MeetingDetailResponse response = meetingService.getMeetingDetail(10L);
+
+        assertThat(response.getProgress().getDoneCount()).isEqualTo(0);
+        assertThat(response.getProgress().getTotalCount()).isEqualTo(0);
+        assertThat(response.getProgress().getPercentage()).isEqualTo(0);
     }
 
     @Test
@@ -356,5 +376,59 @@ class MeetingServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(MeetingErrorCode.MEETING_404_NOT_FOUND);
+    }
+
+    @Test
+    void listCategories_정상_조회하면_카테고리_목록을_반환한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+
+        MeetingCategory category = MeetingCategory.create(groupTerm, "공연");
+        ReflectionTestUtils.setField(category, "id", 1L);
+        given(meetingCategoryRepository.findByGroupTermIdOrderByIdAsc(1L)).willReturn(List.of(category));
+
+        MeetingCategoryListResponse response = meetingService.listCategories(1L);
+
+        assertThat(response.getCategories()).hasSize(1);
+        assertThat(response.getCategories().get(0).getCategoryId()).isEqualTo(1L);
+        assertThat(response.getCategories().get(0).getName()).isEqualTo("공연");
+    }
+
+    @Test
+    void listCategories_기수가_없으면_MEETING_404_GROUP_TERM_NOT_FOUND를_던진다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.listCategories(1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
+    }
+
+    @Test
+    void createCategory_정상_요청이면_카테고리를_생성한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingCategoryRepository.save(any(MeetingCategory.class))).willAnswer(invocation -> {
+            MeetingCategory saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 5L);
+            return saved;
+        });
+
+        MeetingCategoryResponse response = meetingService.createCategory(
+                1L, MeetingCategoryCreateRequest.builder().name("뒤풀이").build());
+
+        assertThat(response.getCategoryId()).isEqualTo(5L);
+        assertThat(response.getName()).isEqualTo("뒤풀이");
+    }
+
+    @Test
+    void createCategory_기수가_없으면_MEETING_404_GROUP_TERM_NOT_FOUND를_던진다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.createCategory(
+                1L, MeetingCategoryCreateRequest.builder().name("뒤풀이").build()))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
     }
 }

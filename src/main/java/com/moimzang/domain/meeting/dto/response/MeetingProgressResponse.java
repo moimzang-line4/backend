@@ -16,4 +16,7 @@ public class MeetingProgressResponse {
 
     @Schema(description = "전체 안건 수", example = "2")
     private final Integer totalCount;
+
+    @Schema(description = "진행률(%). doneCount/totalCount를 반올림한 값", example = "50")
+    private final Integer percentage;
 }

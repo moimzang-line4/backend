@@ -1,7 +1,10 @@
 package com.moimzang.domain.meeting.controller;
 
+import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
@@ -78,5 +81,24 @@ public class MeetingController implements MeetingApi {
     public ResponseEntity<BaseResponse<Void>> deleteMeeting(@PathVariable Long meetingId) {
         meetingService.deleteMeeting(meetingId);
         return ResponseEntity.ok(BaseResponse.success());
+    }
+
+    // 기수의 회의 카테고리 목록을 조회한다
+    @Override
+    @GetMapping("/api/terms/{termId}/meeting-categories")
+    public ResponseEntity<BaseResponse<MeetingCategoryListResponse>> listCategories(@PathVariable Long termId) {
+        MeetingCategoryListResponse response = meetingService.listCategories(termId);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 기수에 새 회의 카테고리를 생성한다
+    @Override
+    @PostMapping("/api/terms/{termId}/meeting-categories")
+    public ResponseEntity<BaseResponse<MeetingCategoryResponse>> createCategory(
+            @PathVariable Long termId,
+            @Valid @RequestBody MeetingCategoryCreateRequest request
+    ) {
+        MeetingCategoryResponse response = meetingService.createCategory(termId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
     }
 }

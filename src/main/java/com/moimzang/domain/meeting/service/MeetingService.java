@@ -2,8 +2,11 @@ package com.moimzang.domain.meeting.service;
 
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
+import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
@@ -155,13 +158,23 @@ public class MeetingService {
                 });
 
         List<MeetingAgenda> agendas = meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(meetingId);
-        MeetingProgressResponse progress = MeetingProgressResponse.builder()
-                .doneCount((int) agendas.stream().filter(a -> a.getStatus() == AgendaStatus.COMPLETED).count())
-                .totalCount(agendas.size())
-                .build();
+        MeetingProgressResponse progress = calculateProgress(agendas);
 
         log.info("[회의 상세 조회] 조회를 완료했습니다. meetingId = {}, agendaCount = {}", meetingId, agendas.size());
         return meetingMapper.toDetailResponse(meeting, agendas, progress);
+    }
+
+    // 완료/전체 안건 수와 그 비율(%)을 계산한다. 안건이 0개면 0%로 처리한다(0으로 나누기 방지)
+    private MeetingProgressResponse calculateProgress(List<MeetingAgenda> agendas) {
+        int totalCount = agendas.size();
+        int doneCount = (int) agendas.stream().filter(a -> a.getStatus() == AgendaStatus.COMPLETED).count();
+        int percentage = totalCount == 0 ? 0 : Math.round(doneCount * 100f / totalCount);
+
+        return MeetingProgressResponse.builder()
+                .doneCount(doneCount)
+                .totalCount(totalCount)
+                .percentage(percentage)
+                .build();
     }
 
     // 회의 정보를 부분 수정한다 — 종료된 회의는 수정을 거부한다
@@ -213,5 +226,40 @@ public class MeetingService {
         meetingRepository.delete(meeting);
 
         log.info("[회의 삭제] 삭제를 완료했습니다. meetingId = {}", meetingId);
+    }
+
+    // 기수의 회의 카테고리 목록을 조회한다
+    public MeetingCategoryListResponse listCategories(Long termId) {
+        log.info("[회의 카테고리 목록 조회] 조회를 시작합니다. termId = {}", termId);
+
+        groupTermRepository.findById(termId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 카테고리 목록 조회] 존재하지 않는 기수입니다. termId = {}", termId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
+                });
+
+        List<MeetingCategory> categories = meetingCategoryRepository.findByGroupTermIdOrderByIdAsc(termId);
+
+        log.info("[회의 카테고리 목록 조회] 조회를 완료했습니다. termId = {}, count = {}", termId, categories.size());
+        return MeetingCategoryListResponse.builder()
+                .categories(meetingMapper.toCategoryResponses(categories))
+                .build();
+    }
+
+    // 기수에 새 회의 카테고리를 생성한다
+    @Transactional
+    public MeetingCategoryResponse createCategory(Long termId, MeetingCategoryCreateRequest request) {
+        log.info("[회의 카테고리 생성] 생성을 시작합니다. termId = {}, name = {}", termId, request.getName());
+
+        GroupTerm groupTerm = groupTermRepository.findById(termId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 카테고리 생성] 존재하지 않는 기수입니다. termId = {}", termId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
+                });
+
+        MeetingCategory saved = meetingCategoryRepository.save(MeetingCategory.create(groupTerm, request.getName()));
+
+        log.info("[회의 카테고리 생성] 생성을 완료했습니다. categoryId = {}", saved.getId());
+        return meetingMapper.toCategoryResponse(saved);
     }
 }

@@ -93,6 +93,8 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 80�
 | API-059 | POST | /api/meetings/{meetingId}/end | 회의 종료 | meeting | 불필요 |
 | API-060 | POST | /api/meetings/{meetingId}/summary | AI 요약 생성 | meeting | 불필요 |
 | API-061 | PATCH | /api/meetings/{meetingId}/summary | 회의록 저장(요약 수정) | meeting | 불필요 |
+| API-081 | POST | /api/terms/{termId}/meeting-categories | 회의 카테고리 생성 | meeting_category | 불필요 |
+| API-082 | GET | /api/terms/{termId}/meeting-categories | 회의 카테고리 목록 조회 | meeting_category | 불필요 |
 | API-062 | GET | /api/files/policy | 파일 업로드 정책 조회 | — | 불필요 |
 | API-063 | POST | /api/terms/{termId}/files | 파일 업로드 | file | 불필요 |
 | API-064 | GET | /api/terms/{termId}/files | 파일 목록 조회 | file | 불필요 |
@@ -226,7 +228,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | MEETING_409_ALREADY_ENDED | 409 | 이미 종료된 회의입니다. | API-056, API-057, API-058 |
 | MEETING_502_SUMMARY_FAILED | 502 | AI 요약에 실패했습니다. 다시 시도해 주세요. | API-060 |
 | MEETING_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 회의 카테고리입니다. | API-051 |
-| MEETING_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-051 |
+| MEETING_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-051, API-052, API-081, API-082 |
 | AGENDA_409_AT_LEAST_ONE_REQUIRED | 409 | 안건이 1개만 남아 삭제할 수 없습니다. | API-058 |
 
 ### 예산/장부 (LedgerErrorCode) — API-069~075
@@ -390,7 +392,16 @@ cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 인증: 불필요. **Request**: name. **Response**: categoryId, name. **에러**: COMMON_400
 
 #### API-011 · GET /api/terms/{termId}/categories · 카테고리 목록 조회
-인증: 불필요. 일정 등록·회의 만들기에서 공유하는 목록. **Response data**: categories[].categoryId/name
+인증: 불필요. 일정 등록에서 쓰는 목록(회의 카테고리는 API-081/082로 분리 운영, decisions #21).
+**Response data**: categories[].categoryId/name
+
+#### API-081 · POST /api/terms/{termId}/meeting-categories · 회의 카테고리 생성
+인증: 불필요. 일정 카테고리(API-010)와 별도 테이블(meeting_category)로 운영한다(decisions #21).
+**Request**: name. **Response**: categoryId, name. **에러**: COMMON_400, MEETING_404_GROUP_TERM_NOT_FOUND
+
+#### API-082 · GET /api/terms/{termId}/meeting-categories · 회의 카테고리 목록 조회
+인증: 불필요. 회의 만들기·수정의 카테고리 선택 바텀시트에서 쓰는 목록.
+**Response data**: categories[].categoryId/name. **에러**: MEETING_404_GROUP_TERM_NOT_FOUND
 
 ### 운영 공간
 
