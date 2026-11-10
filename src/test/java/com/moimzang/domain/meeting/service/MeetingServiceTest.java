@@ -577,4 +577,67 @@ class MeetingServiceTest {
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
     }
+
+    @Test
+    void deleteAgenda_정상_요청이면_삭제한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.countByMeetingId(10L)).willReturn(2L);
+
+        meetingService.deleteAgenda(3L);
+
+        Mockito.verify(meetingAgendaRepository).delete(agenda);
+    }
+
+    @Test
+    void deleteAgenda_안건이_없으면_AGENDA_404_NOT_FOUND를_던진다() {
+        given(meetingAgendaRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.deleteAgenda(999L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.AGENDA_404_NOT_FOUND);
+    }
+
+    @Test
+    void deleteAgenda_회의가_종료됐으면_MEETING_409_ALREADY_ENDED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+
+        assertThatThrownBy(() -> meetingService.deleteAgenda(3L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+    }
+
+    @Test
+    void deleteAgenda_안건이_1개뿐이면_AGENDA_409_AT_LEAST_ONE_REQUIRED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.countByMeetingId(10L)).willReturn(1L);
+
+        assertThatThrownBy(() -> meetingService.deleteAgenda(3L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.AGENDA_409_AT_LEAST_ONE_REQUIRED);
+    }
 }

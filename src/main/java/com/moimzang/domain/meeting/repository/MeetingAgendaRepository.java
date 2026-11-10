@@ -16,4 +16,7 @@ public interface MeetingAgendaRepository extends JpaRepository<MeetingAgenda, Lo
 
     // 새 안건의 orderNo(마지막+1)를 계산하기 위해 가장 뒤 안건 하나만 조회한다
     Optional<MeetingAgenda> findTopByMeetingIdOrderByOrderNoDesc(Long meetingId);
+
+    // 회의의 전체 안건 수 — "안건 1개만 남으면 삭제 불가" 검증용
+    long countByMeetingId(Long meetingId);
 }

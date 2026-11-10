@@ -325,4 +325,30 @@ public class MeetingService {
                 .progress(progress)
                 .build();
     }
+
+    // 안건을 삭제한다 — 안건이 1개만 남으면 거부한다. 종료된 회의도 거부한다
+    @Transactional
+    public void deleteAgenda(Long agendaId) {
+        log.info("[안건 삭제] 삭제를 시작합니다. agendaId = {}", agendaId);
+
+        MeetingAgenda agenda = meetingAgendaRepository.findById(agendaId)
+                .orElseThrow(() -> {
+                    log.warn("[안건 삭제] 존재하지 않는 안건입니다. agendaId = {}", agendaId);
+                    return new CustomException(MeetingErrorCode.AGENDA_404_NOT_FOUND);
+                });
+
+        if (agenda.getMeeting().isEnded()) {
+            log.warn("[안건 삭제] 이미 종료된 회의의 안건입니다. agendaId = {}", agendaId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        if (meetingAgendaRepository.countByMeetingId(agenda.getMeeting().getId()) <= 1) {
+            log.warn("[안건 삭제] 안건이 1개만 남아 삭제할 수 없습니다. agendaId = {}", agendaId);
+            throw new CustomException(MeetingErrorCode.AGENDA_409_AT_LEAST_ONE_REQUIRED);
+        }
+
+        meetingAgendaRepository.delete(agenda);
+
+        log.info("[안건 삭제] 삭제를 완료했습니다. agendaId = {}", agendaId);
+    }
 }

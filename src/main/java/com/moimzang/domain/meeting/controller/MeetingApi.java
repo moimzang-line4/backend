@@ -128,4 +128,14 @@ public interface MeetingApi {
     })
     ResponseEntity<BaseResponse<MeetingAgendaUpdateResponse>> updateAgendaContent(
             @Parameter(description = "안건 ID", example = "3") Long agendaId, MeetingAgendaUpdateRequest request);
+
+    @Operation(summary = "안건 삭제", description = "안건을 삭제한다. 안건이 1개만 남은 회의는 삭제할 수 없다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "삭제 성공"),
+        @ApiResponse(responseCode = "404", description = "AGENDA_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "MEETING_409_ALREADY_ENDED 또는 AGENDA_409_AT_LEAST_ONE_REQUIRED",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> deleteAgenda(@Parameter(description = "안건 ID", example = "3") Long agendaId);
 }

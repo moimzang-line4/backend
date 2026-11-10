@@ -127,4 +127,12 @@ public class MeetingController implements MeetingApi {
         MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(agendaId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
+
+    // 안건을 삭제한다(안건 1개만 남으면 거부)
+    @Override
+    @DeleteMapping("/api/agendas/{agendaId}")
+    public ResponseEntity<BaseResponse<Void>> deleteAgenda(@PathVariable Long agendaId) {
+        meetingService.deleteAgenda(agendaId);
+        return ResponseEntity.ok(BaseResponse.success());
+    }
 }
