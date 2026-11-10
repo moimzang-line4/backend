@@ -1,6 +1,6 @@
 # API 명세 — 모임장
 
-ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 79개. 구현이 시작되면 springdoc이
+ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 80개. 구현이 시작되면 springdoc이
 생성하는 OpenAPI가 정본이 되고, 이 문서는 API ID·화면 매핑·설계 근거를 남기는 역할로 남는다.
 
 ## 1. 개요
@@ -13,9 +13,14 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 79�
   { "success": false, "code": "SETTLEMENT_003", "message": "이미 영수증이 등록된 차수입니다.", "data": null }
   ```
   HTTP 상태 코드는 해당 ErrorCode가 결정한다(§5).
-- **페이징**: 이번 범위의 목록 API는 전부 "그 범위 전체"를 한 번에 반환한다(기수 단위 일정/명단/파일 등
-  — 동아리 한 기수 내 데이터량이 작아 페이징 없이도 충분하다고 판단). 데이터량이 커지면 그때
-  `page`/`size`/`sort` 파라미터와 `PageResponse`를 추가한다. 지금은 지어내지 않는다.
+- **페이징**: 검색어·필터가 있거나 데이터가 무한정 쌓일 수 있는 목록 API(§6에 "cursor 페이지네이션"
+  표시)는 cursor 기반으로 페이지네이션한다. 쿼리 파라미터 `cursor`(선택, opaque 문자열, 생략하면
+  첫 페이지), `size`(선택, 기본 20, 최대 100 — 초과분은 100으로 clamp)를 쓰고, 응답에서 기존
+  배열 필드는 그대로 두되 `totalCount`는 빼고 `nextCursor`(다음 페이지 없으면 null)를 추가한다.
+  cursor는 `(그 목록이 의미하는 정렬 기준 컬럼, id)` 복합 키를 base64로 인코딩한 값이다 —
+  "최신순"이면 `createdAt`처럼 실제로 그 의미를 담은 컬럼을 쓰고, id는 동률일 때의 tiebreaker로만
+  쓴다. 잘못된 cursor는 `COMMON_400`. 드롭다운 선택지나 상위 리소스 하나에 달린 소량 고정 목록
+  (카테고리, 차수 목록 등)은 지금처럼 전체를 한 번에 반환한다 — `docs/decisions.md` #17.
 - **필드 표기**: JSON은 camelCase, DB는 snake_case. `id`/`createdAt`/`updatedAt`은 응답에만 있고
   요청 본문에는 없다. 금액은 숫자(number)로 직렬화한다(기존 Notion 명세 관행 유지 — 소수점이 없는
   정수 원화라 부동소수점 오차 위험이 낮음).
@@ -103,6 +108,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 79�
 | API-077 | GET | /api/terms/{termId}/ai/chat-rooms | AI 대화방 목록 조회 | ai_chat_room | 불필요 |
 | API-078 | POST | /api/ai/chat-rooms/{chatRoomId}/messages | AI 메시지 전송 | ai_message | 불필요 |
 | API-079 | GET | /api/ai/chat-rooms/{chatRoomId}/messages | AI 메시지 목록 조회 | ai_message | 불필요 |
+| API-080 | GET | /api/files/{fileId}/content | 파일 콘텐츠 서빙(다운로드·미리보기) | file | 불필요 |
 
 ## 3. CRUD 커버리지
 
@@ -163,7 +169,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | 회의 종료 | API-059 |
 | AI 회의 요약 | API-060, API-061 |
 | AI 챗 | API-076, API-077, API-078, API-079, API-040(딥링크) |
-| 자료 목록 / 문서 첨부 | API-064, API-063, API-065, API-066, API-067, API-068, API-062 |
+| 자료 목록 / 문서 첨부 | API-064, API-063, API-065, API-080, API-066, API-067, API-068, API-062 |
 | 예산안 | API-069, API-070, API-071, API-072, API-073, API-074, API-075 |
 | 설정 · 운영진 관리 · 모임장 변경 | 범위 제외(decisions #1) — 매핑 API 없음 |
 
@@ -317,11 +323,13 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 #### API-005 · GET /api/terms/{termId}/schedules · 일정 목록 조회(캘린더)
 인증: 불필요.
 
-**Query**: from(날짜, 필수), to(날짜, 필수)
+**Query**: from(날짜, 필수), to(날짜, 필수), cursor(선택), size(선택, 기본 20)
 
-**Response data**: schedules[].scheduleId/title/categoryName/color/isAllDay/startAt/endAt/location/hasOperationSpace
+**Response data**: schedules[].scheduleId/title/categoryName/color/isAllDay/startAt/endAt/location/hasOperationSpace, nextCursor
 
-**에러**: COMMON_400(기간 파라미터 누락 시)
+cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
+
+**에러**: COMMON_400(기간 파라미터 누락 시, 잘못된 cursor)
 
 ---
 
@@ -380,9 +388,13 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 일정은 운영 공간 목록에 나타나지 않는다(decisions #12). MEETING 타입은 토글 개념이 없어 전부 포함.
 
 **Query**: status(ONGOING|PAST, 필수), type(ALL|SCHEDULE|MEETING, 기본 ALL), keyword(선택),
-sort(UPCOMING|LATEST|OLDEST|NAME, 기본 LATEST)
+sort(UPCOMING|LATEST|OLDEST|NAME, 기본 LATEST), cursor(선택), size(선택, 기본 20)
 
-**Response data**: totalCount, items[].type/id/title/date/status
+**Response data**: items[].type/id/title/date/status, nextCursor
+
+cursor 페이지네이션. `file`(API-064)과 같은 다중 정렬 패턴 — sort별로 cursor 키가 다르다:
+UPCOMING/LATEST/OLDEST는 그 항목의 날짜(date, 즉 schedule.start_at 또는 meeting.meeting_date),
+NAME은 title. 둘 다 id를 tiebreaker로 쓴다.
 
 ---
 
@@ -477,8 +489,9 @@ fields.school/studentId/part/grade/phone(boolean)
 ---
 
 #### API-023 · GET /api/member-lists/{memberListId}/members · 부원 목록 조회
-인증: 불필요. **Query**: keyword(선택). **Response data**: totalCount, members[].memberId/name/
-department/phone/school/studentId/part/grade(수집 안 한 항목은 null) **에러**: COMMON_404
+인증: 불필요. **Query**: keyword(선택), cursor(선택), size(선택, 기본 20). **Response data**:
+members[].memberId/name/department/phone/school/studentId/part/grade(수집 안 한 항목은 null),
+nextCursor. cursor 페이지네이션(정렬 기준: createdAt). **에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 ---
 
@@ -510,12 +523,16 @@ department/phone/school/studentId/part/grade(수집 안 한 항목은 null) **�
 ---
 
 #### API-029 · GET /api/rounds/{roundId}/attendees · 차수 출석 현황 조회
-인증: 불필요. **Query**: status(UNCHECKED|CHECKED|ALL, 기본 UNCHECKED), keyword(이름·초성 검색, 선택)
+인증: 불필요. **Query**: status(UNCHECKED|CHECKED|ALL, 기본 UNCHECKED), keyword(이름·초성 검색, 선택),
+cursor(선택), size(선택, 기본 20)
 
-**Response data**: scheduleTitle, progress.checkedCount/totalCount/rate, attendees[].attendeeId/name/
-affiliation/phoneLast4/isCheckedIn/checkedInAt
+**Response data**: scheduleTitle, progress.checkedCount/totalCount/rate(이 progress.totalCount는
+전체 참가자 수이지 페이지네이션 totalCount가 아니다 — 그대로 유지), attendees[].attendeeId/name/
+affiliation/phoneLast4/isCheckedIn/checkedInAt, nextCursor
 
-**에러**: COMMON_404
+cursor 페이지네이션(정렬 기준: createdAt).
+
+**에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 ---
 
@@ -590,12 +607,15 @@ null. "다시 촬영하기"는 이 API 재호출.
 ---
 
 #### API-037 · GET /api/rounds/{roundId}/settlement-targets · 정산 명단 조회
-인증: 불필요. **Query**: keyword(선택)
+인증: 불필요. **Query**: keyword(선택), cursor(선택), size(선택, 기본 20)
 
-**Response data**: label, targetCount, billedAmount, targets[].settlementTargetId/attendeeId/name/
-affiliation/phoneLast4/billedAmount/paymentStatus(UNPAID|PAID)
+**Response data**: label, targetCount(전체 인원 수, 페이지네이션 totalCount 아님 — 그대로 유지),
+billedAmount, targets[].settlementTargetId/attendeeId/name/affiliation/phoneLast4/billedAmount/
+paymentStatus(UNPAID|PAID), nextCursor
 
-**에러**: COMMON_404
+cursor 페이지네이션(정렬 기준: createdAt).
+
+**에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 ---
 
@@ -636,12 +656,15 @@ affiliation/phoneLast4/billedAmount/paymentStatus(UNPAID|PAID)
 **에러**: COMMON_404, SETTLEMENT_005
 
 #### API-042 · GET /api/schedules/{scheduleId}/payments · 입금 현황 조회
-인증: 불필요. **Query**: status(UNPAID|PAID|ALL, 기본 UNPAID), keyword(선택)
+인증: 불필요. **Query**: status(UNPAID|PAID|ALL, 기본 UNPAID), keyword(선택), cursor(선택),
+size(선택, 기본 20)
 
-**Response data**: totalCount, payments[].attendeeId/name/affiliation/phoneLast4/totalBilledAmount(여러
-차수 합산)/paymentStatus
+**Response data**: payments[].attendeeId/name/affiliation/phoneLast4/totalBilledAmount(여러
+차수 합산)/paymentStatus, nextCursor
 
-**에러**: COMMON_404
+cursor 페이지네이션(정렬 기준: createdAt).
+
+**에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 ---
 
@@ -686,12 +709,15 @@ storeName/totalAmount/registeredAt/settlementStatus, account.bankName/accountNum
 **Response data**: noteId. **에러**: COMMON_400, COMMON_404
 
 #### API-047 · GET /api/schedules/{scheduleId}/notes · 운영 메모 목록 조회
-인증: 불필요. **Query**: type(ALL|GENERAL|TODO|DECISION|IDEA, 기본 ALL), keyword(선택)
+인증: 불필요. **Query**: type(ALL|GENERAL|TODO|DECISION|IDEA, 기본 ALL), keyword(선택), cursor(선택),
+size(선택, 기본 20)
 
-**Response data**: totalCount, notes[].noteId/type/title/assignee/content/isTodoDone(type=TODO만 값)/
-createdAt/updatedAt
+**Response data**: notes[].noteId/type/title/assignee/content/isTodoDone(type=TODO만 값)/
+createdAt/updatedAt, nextCursor
 
-**에러**: COMMON_404
+cursor 페이지네이션(정렬 기준: createdAt).
+
+**에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 #### API-048 · PATCH /api/notes/{noteId} · 운영 메모 수정
 인증: 불필요. Request는 API-046과 동일. **에러**: COMMON_400, COMMON_404
@@ -717,10 +743,14 @@ listSummary(목록 한 줄 설명, 선택), agendas(string[], 안건 내용 목�
 #### API-052 · GET /api/terms/{termId}/meetings · 회의 목록 조회
 인증: 불필요.
 
-**Query**: status(진행중|완료, 선택), categoryId(선택), keyword(선택)
+**Query**: status(진행중|완료, 선택), categoryId(선택), keyword(선택), cursor(선택), size(선택, 기본 20)
 
-**Response data**: totalCount, meetings[].meetingId/title/meetingDate/categoryName/
-listSummary/status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt
+**Response data**: meetings[].meetingId/title/meetingDate/categoryName/
+listSummary/status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt, nextCursor
+
+cursor 페이지네이션(정렬 기준: meetingDate 내림차순 — 최근 회의가 먼저).
+
+**에러**: COMMON_400(잘못된 cursor)
 
 ---
 
@@ -824,14 +854,37 @@ scheduleId(선택)
 인증: 불필요. deleted_at IS NULL인 파일만.
 
 **Query**: category(ALL|ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE, 기본 ALL), keyword(선택),
-sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택)
+sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택), cursor(선택), size(선택, 기본 20)
 
-**Response data**: totalCount, files[].fileId/name/extension/size/category/scheduleId/createdAt
+**Response data**: files[].fileId/name/extension/size/category/scheduleId/createdAt, nextCursor
+
+cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 createdAt, NAME은 name.
+둘 다 id를 tiebreaker로 쓴다.
+
+**에러**: COMMON_400(잘못된 cursor)
 
 ---
 
 #### API-065 · GET /api/files/{fileId}/download-url · 파일 미리보기·다운로드 URL 발급
 인증: 불필요. **Query**: mode(PREVIEW|DOWNLOAD, 기본 DOWNLOAD). **Response data**: url, expiresAt.
+**에러**: COMMON_404
+
+`url`은 외부 스토리지 주소가 아니라 이 서버 자신의 API-080을 가리킨다(`mode`를 그대로 실어서).
+실제 파일 바이트가 나가는 동작은 API-080 쪽에서 일어난다.
+
+---
+
+#### API-080 · GET /api/files/{fileId}/content · 파일 콘텐츠 서빙
+인증: 불필요. API-065가 발급하는 `url`이 실제로 가리키는 대상 — 프론트가 이 API를 JSON
+클라이언트로 직접 호출하는 게 아니라, `<a href>`나 `<iframe src>`처럼 브라우저가 그 주소로
+직접 요청을 보내는 방식으로 쓰인다(ZIP인 API-068과 같은 패턴).
+
+**Query**: mode(PREVIEW|DOWNLOAD, 기본 DOWNLOAD)
+
+**Response**: 파일 바이트 스트림(JSON 래퍼 없음). `Content-Type`은 파일 확장자로 추론,
+`Content-Disposition`은 `mode=DOWNLOAD`면 `attachment`(브라우저가 저장 대화상자를 띄움),
+`PREVIEW`면 `inline`(브라우저가 바로 열어서 보여줌)으로 서버가 강제한다.
+
 **에러**: COMMON_404
 
 #### API-066 · DELETE /api/files/{fileId} · 파일 삭제
@@ -858,12 +911,14 @@ sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택)
 인증: 불필요. currentBalance는 그룹의 모든 ledger_entry 합산(기수가 바뀌어도 이월), entries는 이
 기수 내역만. source는 FK로 판단(schedule_round_id 있으면 RECEIPT, 둘 다 없으면 MANUAL).
 
-**Query**: type(ALL|INCOME|EXPENSE, 기본 ALL)
+**Query**: type(ALL|INCOME|EXPENSE, 기본 ALL), cursor(선택), size(선택, 기본 20)
 
 **Response data**: ledgerFile.fileId/name, currentBalance, totalIncome, totalExpense,
-entries[].entryId/type(INCOME|EXPENSE)/itemName/amount/entryDate/source(RECEIPT|MANUAL)
+entries[].entryId/type(INCOME|EXPENSE)/itemName/amount/entryDate/source(RECEIPT|MANUAL), nextCursor
 
-**에러**: COMMON_404
+cursor 페이지네이션(정렬 기준: entryDate 내림차순).
+
+**에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 > **미확정**: 내역의 분류(예: "· 공연" 같은 태그) 저장할 컬럼을 `ledger_entry`에 추가할지는 구현
 > 시점에 정한다. 장부 초기 잔액(기초 총액) 자동 인식은 `docs/decisions.md` #10에 따라 보류.
@@ -925,7 +980,13 @@ schedule_round_id 연결, decisions #2). 부분 납부 중에는 생성 안 함,
 #### API-077 · GET /api/terms/{termId}/ai/chat-rooms · AI 대화방 목록 조회
 인증: 불필요. 기수 단위(로그인이 없어 그 기수 운영진 전체가 공유).
 
-**Response data**: chatRooms[].chatRoomId/title/updatedAt
+**Query**: cursor(선택), size(선택, 기본 20)
+
+**Response data**: chatRooms[].chatRoomId/title/updatedAt, nextCursor
+
+cursor 페이지네이션(정렬 기준: updatedAt 내림차순 — 최근 대화한 방이 먼저).
+
+**에러**: COMMON_400(잘못된 cursor)
 
 ---
 
@@ -941,8 +1002,13 @@ targetScheduleId, cardType, card(결과 카드 — 예: 미입금자 조회)
 ---
 
 #### API-079 · GET /api/ai/chat-rooms/{chatRoomId}/messages · AI 메시지 목록 조회
-인증: 불필요. **Response data**: messages[].messageId/role/content/cardType/card/createdAt
-**에러**: COMMON_404
+인증: 불필요. **Query**: cursor(선택), size(선택, 기본 20)
+
+**Response data**: messages[].messageId/role/content/cardType/card/createdAt, nextCursor
+
+cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순서대로).
+
+**에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 `card`는 전송 시점의 스냅샷(`content_json`)이라 이후 상태(예: 입금 여부)가 바뀌어도 갱신되지
 않는다. FE가 최신값이 필요하면 해당 조회 API(예: 입금 현황 조회)를 다시 호출하는 것을 권장한다.
@@ -964,8 +1030,8 @@ targetScheduleId, cardType, card(결과 카드 — 예: 미입금자 조회)
    status=COMPLETED로 호출). 다만 Figma의 개별 안건 진행 중 퍼센트(예: "논의중 45%")는 계산 기준이
    없어 여전히 미확정 — Figma 쪽 "진행률 바 수정 예정" 메모부터 확인 필요
 9. API-055 진행 중인 회의 삭제 허용 여부 — 해소됨: 상태와 무관하게 삭제 허용(decisions #15)
-10. API-062 허용 확장자·최대 용량 실제 수치
-11. API-067 파일 삭제 되돌리기 가능 기간
+10. API-062 허용 확장자·최대 용량 실제 수치 — 해소됨: 20MB, 문서/이미지/zip 화이트리스트(decisions #16)
+11. API-067 파일 삭제 되돌리기 가능 기간 — 해소됨: 기간 제한 없음(decisions #16)
 12. API-069 내역 분류 컬럼 추가 여부(ERD 변경 필요), 장부 초기 잔액 AI 인식(보류, decisions #10)
 13. API-078 미입금자 조회 외 카드 포맷
 14. API-014 자동 매칭 알고리즘 상세 기준
