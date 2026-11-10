@@ -8,13 +8,18 @@ import static org.mockito.Mockito.mock;
 
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
@@ -430,5 +435,277 @@ class MeetingServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
+    }
+
+    @Test
+    void addAgenda_정상_요청이면_마지막_orderNo_다음으로_추가한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        MeetingAgenda last = MeetingAgenda.create(meeting, "안건2", 1);
+        given(meetingAgendaRepository.findTopByMeetingIdOrderByOrderNoDesc(10L)).willReturn(Optional.of(last));
+        given(meetingAgendaRepository.save(any(MeetingAgenda.class))).willAnswer(invocation -> {
+            MeetingAgenda saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 99L);
+            return saved;
+        });
+
+        MeetingAgendaCreateResponse response = meetingService.addAgenda(
+                10L, MeetingAgendaCreateRequest.builder().content("안건3").build());
+
+        assertThat(response.getAgendaId()).isEqualTo(99L);
+        assertThat(response.getOrderNo()).isEqualTo(2);
+    }
+
+    @Test
+    void addAgenda_기존_안건이_없으면_orderNo_0으로_추가한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingAgendaRepository.findTopByMeetingIdOrderByOrderNoDesc(10L)).willReturn(Optional.empty());
+        given(meetingAgendaRepository.save(any(MeetingAgenda.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        MeetingAgendaCreateResponse response = meetingService.addAgenda(
+                10L, MeetingAgendaCreateRequest.builder().content("첫 안건").build());
+
+        assertThat(response.getOrderNo()).isEqualTo(0);
+    }
+
+    @Test
+    void addAgenda_회의가_없으면_MEETING_404_NOT_FOUND를_던진다() {
+        given(meetingRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.addAgenda(
+                999L, MeetingAgendaCreateRequest.builder().content("안건").build()))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_NOT_FOUND);
+    }
+
+    @Test
+    void addAgenda_이미_종료된_회의면_MEETING_409_ALREADY_ENDED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        assertThatThrownBy(() -> meetingService.addAgenda(
+                10L, MeetingAgendaCreateRequest.builder().content("안건").build()))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+    }
+
+    @Test
+    void updateAgendaContent_다음_안건이면_status를_COMPLETED로_저장하고_진행률을_갱신한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of(agenda));
+
+        MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
+                .decision("경품은 홍보팀이 준비")
+                .status(AgendaStatus.COMPLETED)
+                .build();
+
+        MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(3L, request);
+
+        assertThat(response.getStatus()).isEqualTo(AgendaStatus.COMPLETED);
+        assertThat(agenda.getDecision()).isEqualTo("경품은 홍보팀이 준비");
+        assertThat(response.getProgress().getDoneCount()).isEqualTo(1);
+        assertThat(response.getProgress().getTotalCount()).isEqualTo(1);
+        assertThat(response.getProgress().getPercentage()).isEqualTo(100);
+    }
+
+    @Test
+    void updateAgendaContent_중단하기면_status_없이_내용만_저장한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of(agenda));
+
+        MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
+                .discussionNote("논의 중간 메모")
+                .build();
+
+        MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(3L, request);
+
+        assertThat(response.getStatus()).isEqualTo(AgendaStatus.PENDING);
+        assertThat(agenda.getDiscussionNote()).isEqualTo("논의 중간 메모");
+    }
+
+    @Test
+    void updateAgendaContent_content만_보내면_내용만_바뀌고_나머지는_유지된다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "원래 내용", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of(agenda));
+
+        MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
+                .content("고친 내용")
+                .build();
+
+        meetingService.updateAgendaContent(3L, request);
+
+        assertThat(agenda.getContent()).isEqualTo("고친 내용");
+        assertThat(agenda.getStatus()).isEqualTo(AgendaStatus.PENDING);
+    }
+
+    @Test
+    void updateAgendaContent_안건이_없으면_AGENDA_404_NOT_FOUND를_던진다() {
+        given(meetingAgendaRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.updateAgendaContent(999L, MeetingAgendaUpdateRequest.builder().build()))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.AGENDA_404_NOT_FOUND);
+    }
+
+    @Test
+    void updateAgendaContent_회의가_종료됐으면_MEETING_409_ALREADY_ENDED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+
+        assertThatThrownBy(() -> meetingService.updateAgendaContent(3L, MeetingAgendaUpdateRequest.builder().build()))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+    }
+
+    @Test
+    void deleteAgenda_정상_요청이면_삭제한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.countByMeetingId(10L)).willReturn(2L);
+
+        meetingService.deleteAgenda(3L);
+
+        Mockito.verify(meetingAgendaRepository).delete(agenda);
+    }
+
+    @Test
+    void deleteAgenda_안건이_없으면_AGENDA_404_NOT_FOUND를_던진다() {
+        given(meetingAgendaRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.deleteAgenda(999L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.AGENDA_404_NOT_FOUND);
+    }
+
+    @Test
+    void deleteAgenda_회의가_종료됐으면_MEETING_409_ALREADY_ENDED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+
+        assertThatThrownBy(() -> meetingService.deleteAgenda(3L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+    }
+
+    @Test
+    void deleteAgenda_안건이_1개뿐이면_AGENDA_409_AT_LEAST_ONE_REQUIRED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.countByMeetingId(10L)).willReturn(1L);
+
+        assertThatThrownBy(() -> meetingService.deleteAgenda(3L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.AGENDA_409_AT_LEAST_ONE_REQUIRED);
+    }
+
+    @Test
+    void endMeeting_정상_요청이면_일부만_완료돼도_종료한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingAgendaRepository.countByMeetingIdAndStatus(10L, AgendaStatus.COMPLETED)).willReturn(1L);
+        given(meetingAgendaRepository.countByMeetingId(10L)).willReturn(3L);
+
+        MeetingEndResponse response = meetingService.endMeeting(10L);
+
+        assertThat(response.getMeetingId()).isEqualTo(10L);
+        assertThat(response.getStatus()).isEqualTo(MeetingStatus.COMPLETED);
+        assertThat(response.getEndedAt()).isNotNull();
+        assertThat(response.getDoneAgendaCount()).isEqualTo(1L);
+        assertThat(response.getTotalAgendaCount()).isEqualTo(3L);
+        assertThat(meeting.isEnded()).isTrue();
+    }
+
+    @Test
+    void endMeeting_회의가_없으면_MEETING_404_NOT_FOUND를_던진다() {
+        given(meetingRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.endMeeting(999L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_NOT_FOUND);
+    }
+
+    @Test
+    void endMeeting_이미_종료된_회의면_MEETING_409_ALREADY_ENDED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        assertThatThrownBy(() -> meetingService.endMeeting(10L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
     }
 }

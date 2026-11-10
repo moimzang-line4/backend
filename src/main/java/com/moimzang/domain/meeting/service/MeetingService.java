@@ -2,13 +2,18 @@ package com.moimzang.domain.meeting.service;
 
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingProgressResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryResponse;
@@ -261,5 +266,122 @@ public class MeetingService {
 
         log.info("[회의 카테고리 생성] 생성을 완료했습니다. categoryId = {}", saved.getId());
         return meetingMapper.toCategoryResponse(saved);
+    }
+
+    // 회의에 안건을 추가한다 — 기존 안건 목록 끝(마지막 orderNo+1)에 붙인다. 종료된 회의는 거부한다
+    @Transactional
+    public MeetingAgendaCreateResponse addAgenda(Long meetingId, MeetingAgendaCreateRequest request) {
+        log.info("[안건 추가] 추가를 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[안건 추가] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        if (meeting.isEnded()) {
+            log.warn("[안건 추가] 이미 종료된 회의입니다. meetingId = {}", meetingId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        int nextOrderNo = meetingAgendaRepository.findTopByMeetingIdOrderByOrderNoDesc(meetingId)
+                .map(last -> last.getOrderNo() + 1)
+                .orElse(0);
+
+        MeetingAgenda saved = meetingAgendaRepository.save(MeetingAgenda.create(meeting, request.getContent(), nextOrderNo));
+
+        log.info("[안건 추가] 추가를 완료했습니다. agendaId = {}, orderNo = {}", saved.getId(), nextOrderNo);
+        return MeetingAgendaCreateResponse.builder()
+                .agendaId(saved.getId())
+                .orderNo(nextOrderNo)
+                .build();
+    }
+
+    // 안건 논의 내용을 저장한다 — '다음 안건'(status=COMPLETED)과 '중단하기'(status 없이 내용만)가
+    // 같은 API를 서로 다른 값으로 호출한다. 종료된 회의는 거부한다
+    @Transactional
+    public MeetingAgendaUpdateResponse updateAgendaContent(Long agendaId, MeetingAgendaUpdateRequest request) {
+        log.info("[안건 내용 저장] 저장을 시작합니다. agendaId = {}, status = {}", agendaId, request.getStatus());
+
+        MeetingAgenda agenda = meetingAgendaRepository.findById(agendaId)
+                .orElseThrow(() -> {
+                    log.warn("[안건 내용 저장] 존재하지 않는 안건입니다. agendaId = {}", agendaId);
+                    return new CustomException(MeetingErrorCode.AGENDA_404_NOT_FOUND);
+                });
+
+        if (agenda.getMeeting().isEnded()) {
+            log.warn("[안건 내용 저장] 이미 종료된 회의의 안건입니다. agendaId = {}", agendaId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        agenda.updateContent(request.getContent(), request.getDiscussionNote(), request.getDecision(), request.getStatus());
+
+        List<MeetingAgenda> agendas = meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(agenda.getMeeting().getId());
+        MeetingProgressResponse progress = calculateProgress(agendas);
+
+        log.info("[안건 내용 저장] 저장을 완료했습니다. agendaId = {}, status = {}", agendaId, agenda.getStatus());
+        return MeetingAgendaUpdateResponse.builder()
+                .agendaId(agenda.getId())
+                .status(agenda.getStatus())
+                .progress(progress)
+                .build();
+    }
+
+    // 안건을 삭제한다 — 안건이 1개만 남으면 거부한다. 종료된 회의도 거부한다
+    @Transactional
+    public void deleteAgenda(Long agendaId) {
+        log.info("[안건 삭제] 삭제를 시작합니다. agendaId = {}", agendaId);
+
+        MeetingAgenda agenda = meetingAgendaRepository.findById(agendaId)
+                .orElseThrow(() -> {
+                    log.warn("[안건 삭제] 존재하지 않는 안건입니다. agendaId = {}", agendaId);
+                    return new CustomException(MeetingErrorCode.AGENDA_404_NOT_FOUND);
+                });
+
+        if (agenda.getMeeting().isEnded()) {
+            log.warn("[안건 삭제] 이미 종료된 회의의 안건입니다. agendaId = {}", agendaId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        if (meetingAgendaRepository.countByMeetingId(agenda.getMeeting().getId()) <= 1) {
+            log.warn("[안건 삭제] 안건이 1개만 남아 삭제할 수 없습니다. agendaId = {}", agendaId);
+            throw new CustomException(MeetingErrorCode.AGENDA_409_AT_LEAST_ONE_REQUIRED);
+        }
+
+        meetingAgendaRepository.delete(agenda);
+
+        log.info("[안건 삭제] 삭제를 완료했습니다. agendaId = {}", agendaId);
+    }
+
+    // 회의를 종료한다 — 안건이 전부 완료되지 않았어도 허용한다
+    @Transactional
+    public MeetingEndResponse endMeeting(Long meetingId) {
+        log.info("[회의 종료] 종료를 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 종료] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        if (meeting.isEnded()) {
+            log.warn("[회의 종료] 이미 종료된 회의입니다. meetingId = {}", meetingId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        meeting.end();
+
+        long doneAgendaCount = meetingAgendaRepository.countByMeetingIdAndStatus(meetingId, AgendaStatus.COMPLETED);
+        long totalAgendaCount = meetingAgendaRepository.countByMeetingId(meetingId);
+
+        log.info("[회의 종료] 종료를 완료했습니다. meetingId = {}, doneAgendaCount = {}, totalAgendaCount = {}",
+                meetingId, doneAgendaCount, totalAgendaCount);
+        return MeetingEndResponse.builder()
+                .meetingId(meeting.getId())
+                .status(meeting.getStatus())
+                .endedAt(meeting.getEndedAt())
+                .doneAgendaCount(doneAgendaCount)
+                .totalAgendaCount(totalAgendaCount)
+                .build();
     }
 }

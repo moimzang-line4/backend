@@ -117,4 +117,10 @@ public class Meeting extends BaseEntity {
     public boolean isEnded() {
         return status == MeetingStatus.COMPLETED;
     }
+
+    // 회의를 종료한다 — 안건이 전부 완료되지 않았어도 허용한다
+    public void end() {
+        this.status = MeetingStatus.COMPLETED;
+        this.endedAt = LocalDateTime.now();
+    }
 }

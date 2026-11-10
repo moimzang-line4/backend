@@ -1,12 +1,17 @@
 package com.moimzang.domain.meeting.controller;
 
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
@@ -99,6 +104,44 @@ public class MeetingController implements MeetingApi {
             @Valid @RequestBody MeetingCategoryCreateRequest request
     ) {
         MeetingCategoryResponse response = meetingService.createCategory(termId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 회의에 안건을 추가한다
+    @Override
+    @PostMapping("/api/meetings/{meetingId}/agendas")
+    public ResponseEntity<BaseResponse<MeetingAgendaCreateResponse>> addAgenda(
+            @PathVariable Long meetingId,
+            @Valid @RequestBody MeetingAgendaCreateRequest request
+    ) {
+        MeetingAgendaCreateResponse response = meetingService.addAgenda(meetingId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 안건 논의 내용을 저장한다('다음 안건'/'중단하기' 공용)
+    @Override
+    @PatchMapping("/api/agendas/{agendaId}")
+    public ResponseEntity<BaseResponse<MeetingAgendaUpdateResponse>> updateAgendaContent(
+            @PathVariable Long agendaId,
+            @Valid @RequestBody MeetingAgendaUpdateRequest request
+    ) {
+        MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(agendaId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 안건을 삭제한다(안건 1개만 남으면 거부)
+    @Override
+    @DeleteMapping("/api/agendas/{agendaId}")
+    public ResponseEntity<BaseResponse<Void>> deleteAgenda(@PathVariable Long agendaId) {
+        meetingService.deleteAgenda(agendaId);
+        return ResponseEntity.ok(BaseResponse.success());
+    }
+
+    // 회의를 종료한다
+    @Override
+    @PostMapping("/api/meetings/{meetingId}/end")
+    public ResponseEntity<BaseResponse<MeetingEndResponse>> endMeeting(@PathVariable Long meetingId) {
+        MeetingEndResponse response = meetingService.endMeeting(meetingId);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }
