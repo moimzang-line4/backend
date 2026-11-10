@@ -69,7 +69,9 @@ public class FileController implements FileApi {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer size
     ) {
-        FileListResponse response = fileService.listFiles(termId, category, keyword, sort, scheduleId, cursor, size);
+        FileListResponse response = fileService.listFiles(
+                termId, category, keyword, sort, scheduleId, cursor, size);
+
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 
