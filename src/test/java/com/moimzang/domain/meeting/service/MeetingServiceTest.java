@@ -15,8 +15,8 @@ import com.moimzang.domain.meeting.entity.MeetingAgenda;
 import com.moimzang.domain.meeting.repository.MeetingAgendaRepository;
 import com.moimzang.domain.meeting.repository.MeetingRepository;
 import com.moimzang.domain.meeting.entity.MeetingCategory;
+import com.moimzang.domain.meeting.exception.MeetingErrorCode;
 import com.moimzang.domain.meeting.repository.MeetingCategoryRepository;
-import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDate;
 import java.util.List;
@@ -86,7 +86,7 @@ class MeetingServiceTest {
     }
 
     @Test
-    void createMeeting_기수가_없으면_COMMON_404를_던진다() {
+    void createMeeting_기수가_없으면_MEETING_404_GROUP_TERM_NOT_FOUND를_던진다() {
         MeetingCreateRequest request = MeetingCreateRequest.builder()
                 .title("회의")
                 .meetingDate(LocalDate.now())
@@ -98,11 +98,11 @@ class MeetingServiceTest {
         assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(CommonErrorCode.NOT_FOUND);
+                .isEqualTo(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
     }
 
     @Test
-    void createMeeting_카테고리가_없으면_COMMON_404를_던진다() {
+    void createMeeting_카테고리가_없으면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCreateRequest request = MeetingCreateRequest.builder()
                 .title("회의")
@@ -116,6 +116,6 @@ class MeetingServiceTest {
         assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(CommonErrorCode.NOT_FOUND);
+                .isEqualTo(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
     }
 }

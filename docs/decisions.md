@@ -186,3 +186,15 @@ API-064(file)에서 처음 적용했다. 비슷하게 "총 N개" UI가 필요한
 회의 카테고리 추가·목록 조회 API는 기존에 일정과 공유하던 API-010/011을 그대로 쓰던 걸
 그만두고, meeting 도메인이 자체 엔드포인트로 새로 갖는다(번호는 구현 시점에 `api-spec.md`에
 추가).
+
+## 22. ErrorCode는 순번이 아니라 `{도메인}_{HTTP상태}_{의미}`로 짓는다
+`MEETING_003`처럼 도메인+순번으로 짓던 걸 그만두고, `MEETING_404_CATEGORY_NOT_FOUND`처럼
+도메인·HTTP 상태코드·무엇이 문제인지를 이름에 그대로 담는다(`my-spring-conventions` 스킬의
+`USER_409_EMAIL` 예시와 같은 형식 — 순번 스타일은 file 도메인에서 생긴 지역적 관례였을 뿐
+스킬이 원래 의도한 방식은 아니었다).
+
+meeting·file 도메인은 코드까지 전부 이 형식으로 바꿨다. 다른 도메인(아직 구현 전)은
+`docs/api-spec.md`에 있는 번호 표기만 전부 이 형식으로 미리 바꿔뒀다 — 실제 구현 시점에
+코드도 이 이름을 그대로 따르면 된다. `CommonErrorCode`(`COMMON_400`/`COMMON_404` 등)는
+대상이 아니다 — 이미 Java enum 상수 이름 자체가 `BAD_REQUEST`/`NOT_FOUND`처럼 서술적이고,
+`COMMON_xxx`는 번호가 아니라 상태코드 그 자체라 바꿀 이유가 없다.

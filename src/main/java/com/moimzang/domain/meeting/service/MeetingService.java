@@ -7,10 +7,10 @@ import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
 import com.moimzang.domain.meeting.entity.MeetingCategory;
+import com.moimzang.domain.meeting.exception.MeetingErrorCode;
 import com.moimzang.domain.meeting.repository.MeetingAgendaRepository;
 import com.moimzang.domain.meeting.repository.MeetingCategoryRepository;
 import com.moimzang.domain.meeting.repository.MeetingRepository;
-import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +38,7 @@ public class MeetingService {
         GroupTerm groupTerm = groupTermRepository.findById(termId)
                 .orElseThrow(() -> {
                     log.warn("[회의 생성] 존재하지 않는 기수입니다. termId = {}", termId);
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
                 });
 
         // 회의 카테고리는 일정 카테고리와 별도 테이블(meeting_category)로 운영한다
@@ -46,7 +46,7 @@ public class MeetingService {
         MeetingCategory category = meetingCategoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> {
                     log.warn("[회의 생성] 존재하지 않는 카테고리입니다. categoryId = {}", request.getCategoryId());
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
                 });
 
         Meeting meeting = meetingRepository.save(Meeting.create(
