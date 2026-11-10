@@ -1,0 +1,159 @@
+package com.moimzang.domain.meeting.repository;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.moimzang.domain.group.entity.ClubGroup;
+import com.moimzang.domain.group.entity.GroupTerm;
+import com.moimzang.domain.meeting.entity.Meeting;
+import com.moimzang.domain.meeting.entity.MeetingCategory;
+import com.moimzang.domain.meeting.enums.MeetingStatus;
+import com.moimzang.global.config.JpaAuditingConfig;
+import com.moimzang.global.config.QuerydslConfig;
+import java.time.LocalDate;
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+// 이 프로젝트 최초의 Repository 슬라이스 테스트다 — QueryDSL 동적 조건·cursor tiebreaker는
+// Mockito 단위 테스트로는 검증할 수 없는 영역이라 실제 MySQL로 검증한다
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Testcontainers
+@Import({QuerydslConfig.class, JpaAuditingConfig.class})
+class MeetingRepositoryImplTest {
+
+    @Container
+    @ServiceConnection
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0").withReuse(true);
+
+    @Autowired
+    private TestEntityManager em;
+
+    @Autowired
+    private MeetingRepository meetingRepository;
+
+    private GroupTerm groupTerm;
+    private MeetingCategory category;
+
+    @BeforeEach
+    void setUp() {
+        ClubGroup clubGroup = persistClubGroup("테스트 동아리");
+        groupTerm = persistGroupTerm(clubGroup, "26기");
+        category = persistCategory(groupTerm, "운영진 회의");
+    }
+
+    @Test
+    void search_필터없이_meetingDate_내림차순으로_정렬한다() {
+        Meeting old = persistMeeting("1차 회의", LocalDate.of(2026, 10, 1), null, null);
+        Meeting recent = persistMeeting("3차 회의", LocalDate.of(2026, 11, 7), null, null);
+        Meeting middle = persistMeeting("2차 회의", LocalDate.of(2026, 10, 20), null, null);
+
+        List<Meeting> result = meetingRepository.search(groupTerm.getId(), null, null, null, null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId)
+                .containsExactly(recent.getId(), middle.getId(), old.getId());
+    }
+
+    @Test
+    void search_status로_필터링하면_해당_상태의_회의만_반환한다() {
+        Meeting inProgress = persistMeeting("진행중 회의", LocalDate.of(2026, 11, 7), null, null);
+        Meeting completed = persistMeeting("완료 회의", LocalDate.of(2026, 11, 6), null, null);
+        ReflectionTestUtils.setField(completed, "status", MeetingStatus.COMPLETED);
+        em.persistAndFlush(completed);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), MeetingStatus.COMPLETED, null, null, null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(completed.getId());
+        assertThat(result).extracting(Meeting::getId).doesNotContain(inProgress.getId());
+    }
+
+    @Test
+    void search_categoryId로_필터링하면_해당_카테고리의_회의만_반환한다() {
+        MeetingCategory otherCategory = persistCategory(groupTerm, "홍보팀 회의");
+        Meeting target = persistMeeting("운영진 회의", LocalDate.of(2026, 11, 7), null, null);
+        Meeting other = Meeting.create(groupTerm, otherCategory, "홍보팀 회의", LocalDate.of(2026, 11, 6), null, null);
+        em.persistAndFlush(other);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, category.getId(), null, null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(target.getId());
+    }
+
+    @Test
+    void search_keyword가_title_listSummary_attendees_중_하나라도_일치하면_반환한다() {
+        Meeting byTitle = persistMeeting("정기 운영진 회의", LocalDate.of(2026, 11, 7), null, null);
+        Meeting byListSummary = persistMeeting("1차 회의", LocalDate.of(2026, 11, 6), "운영진 일정 조율", null);
+        Meeting byAttendees = persistMeeting("2차 회의", LocalDate.of(2026, 11, 5), null, "운영진 전원");
+        Meeting notMatched = persistMeeting("무관한 회의", LocalDate.of(2026, 11, 4), "행사 준비", "홍보팀");
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, null, "운영진", null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId)
+                .containsExactlyInAnyOrder(byTitle.getId(), byListSummary.getId(), byAttendees.getId())
+                .doesNotContain(notMatched.getId());
+    }
+
+    @Test
+    void search_동일한_meetingDate에서는_cursor가_id로_다음_페이지를_구분한다() {
+        LocalDate sameDate = LocalDate.of(2026, 11, 7);
+        Meeting first = persistMeeting("1번째", sameDate, null, null);
+        Meeting second = persistMeeting("2번째", sameDate, null, null);
+        Meeting third = persistMeeting("3번째", sameDate, null, null);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, null, null, sameDate, second.getId(), 10);
+
+        // (date, id) 내림차순이므로 cursor(second) 다음은 id가 더 작은 first만 남는다
+        assertThat(result).extracting(Meeting::getId).containsExactly(first.getId());
+    }
+
+    @Test
+    void search_cursor는_이전_날짜의_회의까지_포함한다() {
+        Meeting newer = persistMeeting("최근 회의", LocalDate.of(2026, 11, 7), null, null);
+        Meeting older = persistMeeting("이전 회의", LocalDate.of(2026, 11, 6), null, null);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, null, null, newer.getMeetingDate(), newer.getId(), 10);
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(older.getId());
+    }
+
+    private ClubGroup persistClubGroup(String name) {
+        ClubGroup group = BeanUtils.instantiateClass(ClubGroup.class);
+        ReflectionTestUtils.setField(group, "name", name);
+        return em.persistAndFlush(group);
+    }
+
+    private GroupTerm persistGroupTerm(ClubGroup group, String name) {
+        GroupTerm term = BeanUtils.instantiateClass(GroupTerm.class);
+        ReflectionTestUtils.setField(term, "group", group);
+        ReflectionTestUtils.setField(term, "name", name);
+        return em.persistAndFlush(term);
+    }
+
+    private MeetingCategory persistCategory(GroupTerm term, String name) {
+        MeetingCategory newCategory = BeanUtils.instantiateClass(MeetingCategory.class);
+        ReflectionTestUtils.setField(newCategory, "groupTerm", term);
+        ReflectionTestUtils.setField(newCategory, "name", name);
+        return em.persistAndFlush(newCategory);
+    }
+
+    private Meeting persistMeeting(String title, LocalDate date, String listSummary, String attendees) {
+        Meeting meeting = Meeting.create(groupTerm, category, title, date, attendees, listSummary);
+        return em.persistAndFlush(meeting);
+    }
+}
