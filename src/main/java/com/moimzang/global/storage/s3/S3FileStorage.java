@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 @Component
@@ -39,6 +40,11 @@ public class S3FileStorage implements FileStorage {
     @Override
     public String toUrl(String key) {
         return baseUrl + "/" + key;
+    }
+
+    @Override
+    public InputStream open(String key) {
+        return client.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build());
     }
 
     @Override
