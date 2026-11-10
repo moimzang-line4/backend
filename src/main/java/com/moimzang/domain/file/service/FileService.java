@@ -105,6 +105,10 @@ public class FileService {
                         log.warn("[파일 업로드] 일정을 찾을 수 없습니다. scheduleId = {}", scheduleId);
                         return new CustomException(CommonErrorCode.NOT_FOUND);
                     });
+            if (!schedule.getGroupTerm().getId().equals(termId)) {
+                log.warn("[파일 업로드] 일정이 해당 기수에 속하지 않습니다. termId = {}, scheduleId = {}", termId, scheduleId);
+                throw new CustomException(FileErrorCode.FILE_003);
+            }
         }
 
         // 스토리지에 실제 파일 저장 — 여기까지 검증을 끝내고 나서 써야 실패해도 고아 파일이 안 남는다

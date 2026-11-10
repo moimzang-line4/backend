@@ -23,6 +23,7 @@ import com.moimzang.domain.file.mapper.FileMapper;
 import com.moimzang.domain.file.repository.FileRepository;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
+import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
@@ -104,6 +105,24 @@ class FileServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(FileErrorCode.FILE_001);
+    }
+
+    @Test
+    void upload_scheduleId가_다른_기수_소속이면_FILE_003을_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        GroupTerm otherTerm = mock(GroupTerm.class);
+        Schedule schedule = mock(Schedule.class);
+        MultipartFile multipartFile = new MockMultipartFile("file", "a.pdf", "application/pdf", "content".getBytes());
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(scheduleRepository.findById(999L)).willReturn(Optional.of(schedule));
+        given(schedule.getGroupTerm()).willReturn(otherTerm);
+        given(otherTerm.getId()).willReturn(2L);
+
+        assertThatThrownBy(() -> fileService.upload(1L, multipartFile, "자료", FileCategory.ACTIVITY_DOC, 999L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_003);
     }
 
     @Test
