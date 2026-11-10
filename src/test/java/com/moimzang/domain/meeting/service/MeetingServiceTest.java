@@ -552,6 +552,28 @@ class MeetingServiceTest {
     }
 
     @Test
+    void updateAgendaContent_content만_보내면_내용만_바뀌고_나머지는_유지된다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "원래 내용", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of(agenda));
+
+        MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
+                .content("고친 내용")
+                .build();
+
+        meetingService.updateAgendaContent(3L, request);
+
+        assertThat(agenda.getContent()).isEqualTo("고친 내용");
+        assertThat(agenda.getStatus()).isEqualTo(AgendaStatus.PENDING);
+    }
+
+    @Test
     void updateAgendaContent_안건이_없으면_AGENDA_404_NOT_FOUND를_던진다() {
         given(meetingAgendaRepository.findById(999L)).willReturn(Optional.empty());
 

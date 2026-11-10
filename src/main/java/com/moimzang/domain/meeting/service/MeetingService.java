@@ -314,7 +314,7 @@ public class MeetingService {
             throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
         }
 
-        agenda.updateContent(request.getDiscussionNote(), request.getDecision(), request.getStatus());
+        agenda.updateContent(request.getContent(), request.getDiscussionNote(), request.getDecision(), request.getStatus());
 
         List<MeetingAgenda> agendas = meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(agenda.getMeeting().getId());
         MeetingProgressResponse progress = calculateProgress(agendas);

@@ -822,7 +822,8 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 ---
 
 #### API-057 · PATCH /api/agendas/{agendaId} · 안건 내용 저장
-인증: 불필요. **Request**: discussionNote, decision, status(PENDING|IN_PROGRESS|COMPLETED)
+인증: 불필요. **Request**: content, discussionNote, decision, status(PENDING|IN_PROGRESS|COMPLETED) —
+전부 선택값(보낸 필드만 수정). content는 "회의 수정" 화면에서 기존 안건 원문을 고칠 때 쓴다
 
 **Logics**: 화면의 '다음 안건' 버튼은 이 API를 status='COMPLETED'로 호출하는 것이다. '회의
 중단하기'는 같은 API를 status 없이(또는 바꾸지 않고) 호출해 내용만 저장하며 회의는 '진행중'을

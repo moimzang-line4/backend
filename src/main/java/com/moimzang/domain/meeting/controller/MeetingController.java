@@ -123,7 +123,7 @@ public class MeetingController implements MeetingApi {
     @PatchMapping("/api/agendas/{agendaId}")
     public ResponseEntity<BaseResponse<MeetingAgendaUpdateResponse>> updateAgendaContent(
             @PathVariable Long agendaId,
-            @RequestBody MeetingAgendaUpdateRequest request
+            @Valid @RequestBody MeetingAgendaUpdateRequest request
     ) {
         MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(agendaId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
