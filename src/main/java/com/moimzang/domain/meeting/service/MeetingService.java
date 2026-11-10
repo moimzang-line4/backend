@@ -3,11 +3,13 @@ package com.moimzang.domain.meeting.service;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingProgressResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
 import com.moimzang.domain.meeting.entity.MeetingCategory;
@@ -160,5 +162,39 @@ public class MeetingService {
 
         log.info("[회의 상세 조회] 조회를 완료했습니다. meetingId = {}, agendaCount = {}", meetingId, agendas.size());
         return meetingMapper.toDetailResponse(meeting, agendas, progress);
+    }
+
+    // 회의 정보를 부분 수정한다 — 종료된 회의는 수정을 거부한다
+    @Transactional
+    public MeetingUpdateResponse updateMeeting(Long meetingId, MeetingUpdateRequest request) {
+        log.info("[회의 정보 수정] 수정을 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 정보 수정] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        if (meeting.isEnded()) {
+            log.warn("[회의 정보 수정] 이미 종료된 회의입니다. meetingId = {}", meetingId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        MeetingCategory category = null;
+        if (request.getCategoryId() != null) {
+            category = meetingCategoryRepository.findById(request.getCategoryId())
+                    .orElseThrow(() -> {
+                        log.warn("[회의 정보 수정] 존재하지 않는 카테고리입니다. categoryId = {}", request.getCategoryId());
+                        return new CustomException(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
+                    });
+        }
+
+        meeting.updateInfo(category, request.getTitle(), request.getMeetingDate(),
+                request.getAttendees(), request.getListSummary());
+
+        log.info("[회의 정보 수정] 수정을 완료했습니다. meetingId = {}", meetingId);
+        return MeetingUpdateResponse.builder()
+                .meetingId(meeting.getId())
+                .build();
     }
 }
