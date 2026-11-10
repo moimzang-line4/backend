@@ -191,6 +191,7 @@ class FileServiceTest {
         ReflectionTestUtils.setField(file2, "id", 2L);
         ReflectionTestUtils.setField(file2, "createdAt", LocalDateTime.now());
 
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(fileRepository.search(eq(1L), isNull(), isNull(), isNull(), eq(FileSortOption.LATEST),
                 isNull(), isNull(), isNull(), eq(2)))
                 .willReturn(List.of(file1, file2));
@@ -199,6 +200,17 @@ class FileServiceTest {
 
         assertThat(response.getFiles()).hasSize(1);
         assertThat(response.getNextCursor()).isNotNull();
+    }
+
+    @Test
+    void listFiles_기수가_없으면_COMMON_404를_던진다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                fileService.listFiles(1L, FileCategoryFilter.ALL, null, FileSortOption.LATEST, null, null, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
     }
 
     @Test
@@ -213,6 +225,8 @@ class FileServiceTest {
 
     @Test
     void listFiles_cursor가_잘못됐으면_COMMON_400을_던진다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
+
         assertThatThrownBy(() ->
                 fileService.listFiles(1L, FileCategoryFilter.ALL, null, FileSortOption.LATEST, null, "not-a-cursor", null))
                 .isInstanceOf(CustomException.class)

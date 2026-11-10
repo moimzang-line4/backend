@@ -863,7 +863,7 @@ sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택), cursor(선택), siz
 cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 createdAt, NAME은 name.
 둘 다 id를 tiebreaker로 쓴다.
 
-**에러**: COMMON_400(잘못된 cursor)
+**에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 ---
 

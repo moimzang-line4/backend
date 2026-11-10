@@ -140,6 +140,13 @@ public class FileService {
         log.info("[문서함 목록 조회] 조회를 시작합니다. termId = {}, category = {}, keyword = {}, scheduleId = {}, cursor = {}",
                 termId, category, keyword, scheduleId, cursor);
 
+        // 조회 대상 기수 존재 검증 — upload()/getZipTargets()와 동일하게 없는 term은 404로 끊는다
+        groupTermRepository.findById(termId)
+                .orElseThrow(() -> {
+                    log.warn("[문서함 목록 조회] 기수를 찾을 수 없습니다. termId = {}", termId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
         int limit = CursorPageConstants.resolveSize(size);
 
         // cursor 디코딩 — sort가 NAME이면 name 기준, 아니면 createdAt(epoch millis) 기준으로 인코딩돼 있다
