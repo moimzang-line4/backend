@@ -13,4 +13,5 @@ public class FileListResponse {
 
     private final List<FileSummaryResponse> files;
     private final String nextCursor;
+    private final Long totalCount;
 }

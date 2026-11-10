@@ -21,6 +21,9 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 80�
   "최신순"이면 `createdAt`처럼 실제로 그 의미를 담은 컬럼을 쓰고, id는 동률일 때의 tiebreaker로만
   쓴다. 잘못된 cursor는 `COMMON_400`. 드롭다운 선택지나 상위 리소스 하나에 달린 소량 고정 목록
   (카테고리, 차수 목록 등)은 지금처럼 전체를 한 번에 반환한다 — `docs/decisions.md` #17.
+  **예외**: "총 N개" 같은 UI 표시용 total은 페이지네이션 totalCount와 다르다 — cursor 없는 첫
+  페이지 요청에서만 그 값을 계산해 내려주고 이후 페이지에는 안 내려주는 패턴은 허용한다(예:
+  API-064 `totalCount`) — `docs/decisions.md` #19.
 - **필드 표기**: JSON은 camelCase, DB는 snake_case. `id`/`createdAt`/`updatedAt`은 응답에만 있고
   요청 본문에는 없다. 금액은 숫자(number)로 직렬화한다(기존 Notion 명세 관행 유지 — 소수점이 없는
   정수 원화라 부동소수점 오차 위험이 낮음).
@@ -858,7 +861,9 @@ scheduleId(선택)
 **Query**: category(ALL|ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE, 기본 ALL), keyword(선택),
 sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택), cursor(선택), size(선택, 기본 20)
 
-**Response data**: files[].fileId/name/extension/size/category/scheduleId/createdAt, nextCursor
+**Response data**: files[].fileId/name/extension/size/category/scheduleId/createdAt, nextCursor,
+totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-029 progress.totalCount·
+API-037 targetCount와 같은 패턴. 페이지네이션용 totalCount가 아니라 "총 N개" 표시용)
 
 cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 createdAt, NAME은 name.
 둘 다 id를 tiebreaker로 쓴다.

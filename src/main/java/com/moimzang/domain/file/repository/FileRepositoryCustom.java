@@ -15,4 +15,7 @@ public interface FileRepositoryCustom {
 
     // ZIP 전용 — 페이지네이션 없이 조건에 맞는 전체를 이름순으로 반환
     List<File> searchAll(Long groupTermId, FileCategory category, String keyword);
+
+    // 목록 totalCount용 — cursor 조건 없이 "현재 필터에 맞는 전체 건수"만 센다
+    long count(Long groupTermId, FileCategory category, String keyword, Long scheduleId);
 }

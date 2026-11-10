@@ -21,9 +21,10 @@ import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.global.cursor.CursorCodec;
+import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
-import com.moimzang.global.response.CursorPageConstants;
 import com.moimzang.global.storage.FileStorage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -155,12 +156,12 @@ public class FileService {
         Long cursorId = null;
         if (cursor != null) {
             try {
-                FileCursor decoded = FileCursor.decode(cursor);
-                cursorId = decoded.id();
+                CursorCodec decoded = CursorCodec.decode(cursor);
+                cursorId = decoded.getId();
                 if (sort == FileSortOption.NAME) {
-                    cursorName = decoded.sortValue();
+                    cursorName = decoded.getSortValue();
                 } else {
-                    cursorCreatedAt = Instant.ofEpochMilli(Long.parseLong(decoded.sortValue()))
+                    cursorCreatedAt = Instant.ofEpochMilli(Long.parseLong(decoded.getSortValue()))
                             .atZone(ZoneId.systemDefault()).toLocalDateTime();
                 }
             } catch (RuntimeException e) {
@@ -170,18 +171,26 @@ public class FileService {
         }
 
         // size + 1건을 조회해서 그중 마지막 1건이 있으면 "다음 페이지가 있다"는 뜻이다
-        List<File> fetched = fileRepository.search(termId, category.toFileCategoryOrNull(), keyword, scheduleId, sort,
+        List<File> fetched = fileRepository.search(
+                termId, category.toFileCategoryOrNull(), keyword, scheduleId, sort,
                 cursorCreatedAt, cursorName, cursorId, limit + 1);
+
         boolean hasNext = fetched.size() > limit;
         List<File> page = hasNext ? fetched.subList(0, limit) : fetched;
 
         List<FileSummaryResponse> summaries = fileMapper.toSummaryResponses(page);
         String nextCursor = hasNext ? buildCursor(sort, page.get(page.size() - 1)) : null;
 
+        // 첫 페이지(cursor 없음)에서만 count 쿼리를 날린다 — 스크롤마다 다시 세지 않는다
+        Long totalCount = cursor == null
+                ? fileRepository.count(termId, category.toFileCategoryOrNull(), keyword, scheduleId)
+                : null;
+
         log.info("[문서함 목록 조회] 조회를 완료했습니다. termId = {}, count = {}, hasNext = {}", termId, summaries.size(), hasNext);
         return FileListResponse.builder()
                 .files(summaries)
                 .nextCursor(nextCursor)
+                .totalCount(totalCount)
                 .build();
     }
 
@@ -189,7 +198,7 @@ public class FileService {
         String sortValue = sort == FileSortOption.NAME
                 ? last.getName()
                 : String.valueOf(last.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
-        return FileCursor.encode(sortValue, last.getId());
+        return CursorCodec.encode(sortValue, last.getId());
     }
 
     public FileDownloadUrlResponse getDownloadUrl(Long fileId, FileDownloadMode mode) {

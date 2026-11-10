@@ -3,6 +3,7 @@ package com.moimzang.domain.file.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
@@ -25,6 +26,7 @@ import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import com.moimzang.global.storage.FileStorage;
@@ -200,6 +202,36 @@ class FileServiceTest {
 
         assertThat(response.getFiles()).hasSize(1);
         assertThat(response.getNextCursor()).isNotNull();
+    }
+
+    @Test
+    void listFiles_cursor가_없으면_totalCount를_반환한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(fileRepository.search(eq(1L), isNull(), isNull(), isNull(), eq(FileSortOption.LATEST),
+                isNull(), isNull(), isNull(), eq(21)))
+                .willReturn(List.of());
+        given(fileRepository.count(eq(1L), isNull(), isNull(), isNull())).willReturn(5L);
+
+        FileListResponse response = fileService.listFiles(1L, FileCategoryFilter.ALL, null, FileSortOption.LATEST, null, null, null);
+
+        assertThat(response.getTotalCount()).isEqualTo(5L);
+    }
+
+    @Test
+    void listFiles_cursor가_있으면_totalCount를_조회하지_않는다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        String cursor = CursorCodec.encode(String.valueOf(System.currentTimeMillis()), 1L);
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(fileRepository.search(any(), any(), any(), any(), any(), any(), any(), any(), anyInt()))
+                .willReturn(List.of());
+
+        FileListResponse response = fileService.listFiles(1L, FileCategoryFilter.ALL, null, FileSortOption.LATEST, null, cursor, null);
+
+        assertThat(response.getTotalCount()).isNull();
+        verify(fileRepository, never()).count(any(), any(), any(), any());
     }
 
     @Test
