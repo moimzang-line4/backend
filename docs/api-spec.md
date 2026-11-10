@@ -768,12 +768,10 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 **에러**: COMMON_404
 
-전체 진행률(`progress.doneCount/totalCount`)은 안건 상태가 COMPLETED인 개수를 전체 안건 수로
-나눈 값이다. '다음 안건' 버튼(API-057)이 그 안건의 status를 COMPLETED로 저장하는 트리거다.
-
-> **미확정**: Figma에는 개별 안건이 진행 중일 때 보여주는 퍼센트(예: "안건 1 논의중 45%")가 있는데,
-> 이건 안건 하나의 진행 중 퍼센트라 위 doneCount/totalCount 식으로 설명되지 않고 계산 기준이
-> 명세에 없다. Figma 자체에도 "진행률 바 수정 예정" 메모가 있어 디자인 쪽 확인이 먼저 필요하다.
+진행률 바는 `progress.doneCount/totalCount`(안건 상태가 COMPLETED인 개수 ÷ 전체 안건 수)
+하나로만 계산한다. '다음 안건' 버튼(API-057)이 그 안건의 status를 COMPLETED로 저장하는
+트리거이고, 이때마다 doneCount가 1씩 늘어난다. Figma에 있던 "안건1 논의중 45%" 같은 개별 안건
+진행중 퍼센트는 구현하지 않는다(decisions #20).
 
 ---
 
