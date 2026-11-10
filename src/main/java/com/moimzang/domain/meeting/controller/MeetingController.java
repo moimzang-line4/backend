@@ -2,6 +2,7 @@ package com.moimzang.domain.meeting.controller;
 
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
 import com.moimzang.domain.meeting.service.MeetingService;
@@ -45,6 +46,14 @@ public class MeetingController implements MeetingApi {
             @RequestParam(required = false) Integer size
     ) {
         MeetingListResponse response = meetingService.listMeetings(termId, status, categoryId, keyword, cursor, size);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 회의 상세(안건 목록 + 진행률)를 조회한다
+    @Override
+    @GetMapping("/api/meetings/{meetingId}")
+    public ResponseEntity<BaseResponse<MeetingDetailResponse>> getMeetingDetail(@PathVariable Long meetingId) {
+        MeetingDetailResponse response = meetingService.getMeetingDetail(meetingId);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }

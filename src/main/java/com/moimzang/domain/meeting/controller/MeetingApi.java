@@ -2,6 +2,7 @@ package com.moimzang.domain.meeting.controller;
 
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
 import com.moimzang.global.response.BaseResponse;
@@ -44,4 +45,13 @@ public interface MeetingApi {
             @Parameter(description = "검색어(제목·목록 요약·참석자 중 하나라도 일치하면 조회)", example = "운영진") String keyword,
             @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지", example = "MjAyNi0xMS0wNw.5") String cursor,
             @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
+
+    @Operation(summary = "회의 상세 조회", description = "회의 진행 화면·정리 화면이 공통으로 쓰는 상세 조회. 안건 전체 목록과 진행률을 함께 내려준다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingDetailResponse>> getMeetingDetail(
+            @Parameter(description = "회의 ID", example = "1") Long meetingId);
 }
