@@ -16,6 +16,9 @@ public interface FileStorage {
     /** 키를 화면에서 쓸 수 있는 URL로 바꾼다. */
     String toUrl(String key);
 
+    /** 저장된 파일 내용을 다시 읽는다(ZIP 묶음처럼 서버에서 바이트가 필요할 때). 호출한 쪽에서 닫아야 한다. */
+    InputStream open(String key);
+
     /** 키가 없으면 URL도 없다. 여러 서비스가 각자 짜던 null 분기를 여기로 모은다. */
     default String toUrlOrNull(String key) {
         return key == null ? null : toUrl(key);

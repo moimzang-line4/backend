@@ -41,6 +41,15 @@ public class LocalFileStorage implements FileStorage {
     }
 
     @Override
+    public InputStream open(String key) {
+        try {
+            return Files.newInputStream(resolve(key));
+        } catch (IOException e) {
+            throw new UncheckedIOException("파일 열기 실패: " + key, e);
+        }
+    }
+
+    @Override
     public void delete(String key) {
         try {
             Files.deleteIfExists(resolve(key));

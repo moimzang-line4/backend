@@ -70,4 +70,26 @@ public class File extends BaseEntity {
     // 소프트 삭제 일시(되돌리기 지원)
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    public static File upload(GroupTerm groupTerm, Schedule schedule, String name, String extension,
+                               long size, FileCategory category, String storageKey) {
+        return File.builder()
+                .groupTerm(groupTerm)
+                .schedule(schedule)
+                .name(name)
+                .extension(extension)
+                .size(size)
+                .category(category)
+                .storageKey(storageKey)
+                .build();
+    }
+
+    public void softDelete() {
+        this.deletedAt = LocalDateTime.now();
+    }
+
+    // 기간 제한 없이 언제든 되돌릴 수 있다
+    public void restore() {
+        this.deletedAt = null;
+    }
 }
