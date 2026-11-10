@@ -2,9 +2,11 @@ package com.moimzang.domain.meeting.service;
 
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
@@ -261,5 +263,34 @@ public class MeetingService {
 
         log.info("[회의 카테고리 생성] 생성을 완료했습니다. categoryId = {}", saved.getId());
         return meetingMapper.toCategoryResponse(saved);
+    }
+
+    // 회의에 안건을 추가한다 — 기존 안건 목록 끝(마지막 orderNo+1)에 붙인다. 종료된 회의는 거부한다
+    @Transactional
+    public MeetingAgendaCreateResponse addAgenda(Long meetingId, MeetingAgendaCreateRequest request) {
+        log.info("[안건 추가] 추가를 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[안건 추가] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        if (meeting.isEnded()) {
+            log.warn("[안건 추가] 이미 종료된 회의입니다. meetingId = {}", meetingId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        int nextOrderNo = meetingAgendaRepository.findTopByMeetingIdOrderByOrderNoDesc(meetingId)
+                .map(last -> last.getOrderNo() + 1)
+                .orElse(0);
+
+        MeetingAgenda saved = meetingAgendaRepository.save(MeetingAgenda.create(meeting, request.getContent(), nextOrderNo));
+
+        log.info("[안건 추가] 추가를 완료했습니다. agendaId = {}, orderNo = {}", saved.getId(), nextOrderNo);
+        return MeetingAgendaCreateResponse.builder()
+                .agendaId(saved.getId())
+                .orderNo(nextOrderNo)
+                .build();
     }
 }

@@ -1,8 +1,10 @@
 package com.moimzang.domain.meeting.controller;
 
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
@@ -99,6 +101,17 @@ public class MeetingController implements MeetingApi {
             @Valid @RequestBody MeetingCategoryCreateRequest request
     ) {
         MeetingCategoryResponse response = meetingService.createCategory(termId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 회의에 안건을 추가한다
+    @Override
+    @PostMapping("/api/meetings/{meetingId}/agendas")
+    public ResponseEntity<BaseResponse<MeetingAgendaCreateResponse>> addAgenda(
+            @PathVariable Long meetingId,
+            @Valid @RequestBody MeetingAgendaCreateRequest request
+    ) {
+        MeetingAgendaCreateResponse response = meetingService.addAgenda(meetingId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }

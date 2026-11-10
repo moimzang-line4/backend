@@ -1,8 +1,10 @@
 package com.moimzang.domain.meeting.controller;
 
+import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
+import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
@@ -100,4 +102,17 @@ public interface MeetingApi {
     })
     ResponseEntity<BaseResponse<MeetingCategoryResponse>> createCategory(
             @Parameter(description = "기수 ID", example = "1") Long termId, @Valid MeetingCategoryCreateRequest request);
+
+    @Operation(summary = "안건 추가", description = "기존 안건 목록 끝에 새 안건을 추가한다(orderNo=마지막+1, status=PENDING).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "추가 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(검증 실패)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "MEETING_409_ALREADY_ENDED",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingAgendaCreateResponse>> addAgenda(
+            @Parameter(description = "회의 ID", example = "1") Long meetingId, @Valid MeetingAgendaCreateRequest request);
 }
