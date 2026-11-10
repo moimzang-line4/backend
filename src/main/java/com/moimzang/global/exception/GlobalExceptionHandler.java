@@ -1,6 +1,5 @@
 package com.moimzang.global.exception;
 
-import com.moimzang.domain.file.exception.FileErrorCode;
 import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -60,14 +59,14 @@ public class GlobalExceptionHandler {
     /**
      * 업로드 용량 초과. 상한은 spring.servlet.multipart에 있다.
      *
-     * 문서함의 업로드 제약이 생겨 공통 코드 대신 FileErrorCode로 처리한다. Tomcat이 요청 파싱
-     * 단계에서 끊으므로 컨트롤러에 도달하지 않아 여기서만 잡을 수 있다.
+     * Tomcat이 요청 파싱 단계에서 끊으므로 컨트롤러에 도달하지 않아 여기서만 잡을 수 있다.
+     * 멀티파트를 받는 도메인이 더 생길 수 있어 도메인 전용 코드가 아닌 공통 코드로 응답한다.
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<BaseResponse<Void>> handleUploadSize(MaxUploadSizeExceededException e) {
         log.warn("[업로드 용량 초과] 업로드 용량 상한을 넘었습니다. maxUploadSize = {}", e.getMaxUploadSize());
-        return ResponseEntity.status(FileErrorCode.FILE_001.getStatus())
-                .body(BaseResponse.fail(FileErrorCode.FILE_001));
+        return ResponseEntity.status(CommonErrorCode.PAYLOAD_TOO_LARGE.getStatus())
+                .body(BaseResponse.fail(CommonErrorCode.PAYLOAD_TOO_LARGE));
     }
 
     /** 매핑되지 않은 경로. 스택트레이스 없이 404로 끝낸다. */
