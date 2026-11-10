@@ -12,6 +12,7 @@ import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,5 +70,13 @@ public class MeetingController implements MeetingApi {
     ) {
         MeetingUpdateResponse response = meetingService.updateMeeting(meetingId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 회의를 삭제한다(상태 무관 허용)
+    @Override
+    @DeleteMapping("/api/meetings/{meetingId}")
+    public ResponseEntity<BaseResponse<Void>> deleteMeeting(@PathVariable Long meetingId) {
+        meetingService.deleteMeeting(meetingId);
+        return ResponseEntity.ok(BaseResponse.success());
     }
 }

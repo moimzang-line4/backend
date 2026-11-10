@@ -69,4 +69,12 @@ public interface MeetingApi {
     })
     ResponseEntity<BaseResponse<MeetingUpdateResponse>> updateMeeting(
             @Parameter(description = "회의 ID", example = "1") Long meetingId, @Valid MeetingUpdateRequest request);
+
+    @Operation(summary = "회의 삭제", description = "회의 상태(진행중/완료)와 무관하게 삭제를 허용한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "삭제 성공"),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> deleteMeeting(@Parameter(description = "회의 ID", example = "1") Long meetingId);
 }

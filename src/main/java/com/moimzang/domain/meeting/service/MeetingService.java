@@ -197,4 +197,21 @@ public class MeetingService {
                 .meetingId(meeting.getId())
                 .build();
     }
+
+    // 회의를 삭제한다 — 상태와 무관하게 허용한다(decisions #15). 안건을 먼저 지우고 회의를 지운다
+    @Transactional
+    public void deleteMeeting(Long meetingId) {
+        log.info("[회의 삭제] 삭제를 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 삭제] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        meetingAgendaRepository.deleteAllByMeetingId(meetingId);
+        meetingRepository.delete(meeting);
+
+        log.info("[회의 삭제] 삭제를 완료했습니다. meetingId = {}", meetingId);
+    }
 }
