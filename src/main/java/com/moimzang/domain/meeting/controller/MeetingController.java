@@ -1,15 +1,20 @@
 package com.moimzang.domain.meeting.controller;
 
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
 import com.moimzang.domain.meeting.service.MeetingService;
 import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -46,5 +51,32 @@ public class MeetingController implements MeetingApi {
     ) {
         MeetingListResponse response = meetingService.listMeetings(termId, status, categoryId, keyword, cursor, size);
         return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 회의 상세(안건 목록 + 진행률)를 조회한다
+    @Override
+    @GetMapping("/api/meetings/{meetingId}")
+    public ResponseEntity<BaseResponse<MeetingDetailResponse>> getMeetingDetail(@PathVariable Long meetingId) {
+        MeetingDetailResponse response = meetingService.getMeetingDetail(meetingId);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 회의 정보를 부분 수정한다(안건은 별도 API)
+    @Override
+    @PatchMapping("/api/meetings/{meetingId}")
+    public ResponseEntity<BaseResponse<MeetingUpdateResponse>> updateMeeting(
+            @PathVariable Long meetingId,
+            @Valid @RequestBody MeetingUpdateRequest request
+    ) {
+        MeetingUpdateResponse response = meetingService.updateMeeting(meetingId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 회의를 삭제한다(상태 무관 허용)
+    @Override
+    @DeleteMapping("/api/meetings/{meetingId}")
+    public ResponseEntity<BaseResponse<Void>> deleteMeeting(@PathVariable Long meetingId) {
+        meetingService.deleteMeeting(meetingId);
+        return ResponseEntity.ok(BaseResponse.success());
     }
 }

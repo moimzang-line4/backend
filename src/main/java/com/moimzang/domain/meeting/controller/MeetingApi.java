@@ -1,8 +1,11 @@
 package com.moimzang.domain.meeting.controller;
 
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
 import com.moimzang.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,4 +47,34 @@ public interface MeetingApi {
             @Parameter(description = "검색어(제목·목록 요약·참석자 중 하나라도 일치하면 조회)", example = "운영진") String keyword,
             @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지", example = "MjAyNi0xMS0wNw.5") String cursor,
             @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
+
+    @Operation(summary = "회의 상세 조회", description = "회의 진행 화면·정리 화면이 공통으로 쓰는 상세 조회. 안건 전체 목록과 진행률을 함께 내려준다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingDetailResponse>> getMeetingDetail(
+            @Parameter(description = "회의 ID", example = "1") Long meetingId);
+
+    @Operation(summary = "회의 정보 수정", description = "제목·날짜·카테고리·참석자·목록 요약 중 보낸 필드만 수정한다. 안건은 별도 API로 처리한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "수정 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(검증 실패)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND 또는 MEETING_404_CATEGORY_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "MEETING_409_ALREADY_ENDED",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingUpdateResponse>> updateMeeting(
+            @Parameter(description = "회의 ID", example = "1") Long meetingId, @Valid MeetingUpdateRequest request);
+
+    @Operation(summary = "회의 삭제", description = "회의 상태(진행중/완료)와 무관하게 삭제를 허용한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "삭제 성공"),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> deleteMeeting(@Parameter(description = "회의 ID", example = "1") Long meetingId);
 }

@@ -92,4 +92,29 @@ public class Meeting extends BaseEntity {
                 .status(MeetingStatus.IN_PROGRESS)
                 .build();
     }
+
+    // 회의 정보를 부분 수정한다 — 인자가 null인 필드는 바꾸지 않는다
+    public void updateInfo(MeetingCategory meetingCategory, String title, LocalDate meetingDate,
+                           String attendees, String listSummary) {
+        if (meetingCategory != null) {
+            this.meetingCategory = meetingCategory;
+        }
+        if (title != null) {
+            this.title = title;
+        }
+        if (meetingDate != null) {
+            this.meetingDate = meetingDate;
+        }
+        if (attendees != null) {
+            this.attendees = attendees;
+        }
+        if (listSummary != null) {
+            this.listSummary = listSummary;
+        }
+    }
+
+    // 회의가 이미 종료됐는지 확인한다
+    public boolean isEnded() {
+        return status == MeetingStatus.COMPLETED;
+    }
 }

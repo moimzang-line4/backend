@@ -3,12 +3,17 @@ package com.moimzang.domain.meeting.service;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingProgressResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
 import com.moimzang.domain.meeting.entity.MeetingCategory;
+import com.moimzang.domain.meeting.enums.AgendaStatus;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
 import com.moimzang.domain.meeting.exception.MeetingErrorCode;
 import com.moimzang.domain.meeting.mapper.MeetingMapper;
@@ -137,5 +142,76 @@ public class MeetingService {
     // 마지막 회의를 기준으로 다음 페이지 cursor를 만든다
     private String buildCursor(Meeting last) {
         return CursorCodec.encode(last.getMeetingDate().toString(), last.getId());
+    }
+
+    // 회의 상세를 조회한다 — 안건 전체 목록과 완료/전체 안건 수 기반 진행률을 함께 내려준다
+    public MeetingDetailResponse getMeetingDetail(Long meetingId) {
+        log.info("[회의 상세 조회] 조회를 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 상세 조회] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        List<MeetingAgenda> agendas = meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(meetingId);
+        MeetingProgressResponse progress = MeetingProgressResponse.builder()
+                .doneCount((int) agendas.stream().filter(a -> a.getStatus() == AgendaStatus.COMPLETED).count())
+                .totalCount(agendas.size())
+                .build();
+
+        log.info("[회의 상세 조회] 조회를 완료했습니다. meetingId = {}, agendaCount = {}", meetingId, agendas.size());
+        return meetingMapper.toDetailResponse(meeting, agendas, progress);
+    }
+
+    // 회의 정보를 부분 수정한다 — 종료된 회의는 수정을 거부한다
+    @Transactional
+    public MeetingUpdateResponse updateMeeting(Long meetingId, MeetingUpdateRequest request) {
+        log.info("[회의 정보 수정] 수정을 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 정보 수정] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        if (meeting.isEnded()) {
+            log.warn("[회의 정보 수정] 이미 종료된 회의입니다. meetingId = {}", meetingId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        MeetingCategory category = null;
+        if (request.getCategoryId() != null) {
+            category = meetingCategoryRepository.findById(request.getCategoryId())
+                    .orElseThrow(() -> {
+                        log.warn("[회의 정보 수정] 존재하지 않는 카테고리입니다. categoryId = {}", request.getCategoryId());
+                        return new CustomException(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
+                    });
+        }
+
+        meeting.updateInfo(category, request.getTitle(), request.getMeetingDate(),
+                request.getAttendees(), request.getListSummary());
+
+        log.info("[회의 정보 수정] 수정을 완료했습니다. meetingId = {}", meetingId);
+        return MeetingUpdateResponse.builder()
+                .meetingId(meeting.getId())
+                .build();
+    }
+
+    // 회의를 삭제한다 — 상태와 무관하게 허용한다(decisions #15). 안건을 먼저 지우고 회의를 지운다
+    @Transactional
+    public void deleteMeeting(Long meetingId) {
+        log.info("[회의 삭제] 삭제를 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 삭제] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        meetingAgendaRepository.deleteAllByMeetingId(meetingId);
+        meetingRepository.delete(meeting);
+
+        log.info("[회의 삭제] 삭제를 완료했습니다. meetingId = {}", meetingId);
     }
 }
