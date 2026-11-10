@@ -58,4 +58,14 @@ public class MeetingAgenda extends BaseEntity {
     // 노출 순서
     @Column(name = "order_no", nullable = false)
     private Integer orderNo;
+
+    // 생성 시점에는 아직 논의 전이라 discussionNote/decision 없이 대기 상태로 시작한다
+    public static MeetingAgenda create(Meeting meeting, String content, int orderNo) {
+        return MeetingAgenda.builder()
+                .meeting(meeting)
+                .content(content)
+                .status(AgendaStatus.PENDING)
+                .orderNo(orderNo)
+                .build();
+    }
 }

@@ -79,4 +79,18 @@ public class Meeting extends BaseEntity {
     // 회의 목록 카드에 표시되는 한 줄 설명
     @Column(name = "list_summary", length = 100)
     private String listSummary;
+
+    // 생성 직후에는 안건을 논의하지 않은 상태이므로 항상 진행중으로 시작한다
+    public static Meeting create(GroupTerm groupTerm, ScheduleCategory scheduleCategory, String title,
+                                  LocalDate meetingDate, String attendees, String listSummary) {
+        return Meeting.builder()
+                .groupTerm(groupTerm)
+                .scheduleCategory(scheduleCategory)
+                .title(title)
+                .meetingDate(meetingDate)
+                .attendees(attendees)
+                .listSummary(listSummary)
+                .status(MeetingStatus.IN_PROGRESS)
+                .build();
+    }
 }
