@@ -23,7 +23,6 @@ import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.cursor.CursorPageConstants;
-import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import com.moimzang.global.storage.FileStorage;
 import java.io.IOException;
@@ -76,26 +75,26 @@ public class FileService {
         // 필수값 검증 — 파일이 비었거나 이름이 없으면 더 진행하지 않는다
         if (file.isEmpty() || name == null || name.isBlank()) {
             log.warn("[파일 업로드] 필수 값이 비어 있습니다. termId = {}, fileEmpty = {}", termId, file.isEmpty());
-            throw new CustomException(CommonErrorCode.BAD_REQUEST);
+            throw new CustomException(FileErrorCode.FILE_400_REQUIRED_FIELD_MISSING);
         }
 
         // 확장자 검증 — 허용 목록(FileUploadPolicy)에 없으면 거부
         String extension = extractExtension(file.getOriginalFilename());
         if (!FileUploadPolicy.isAllowed(extension)) {
             log.warn("[파일 업로드] 허용하지 않는 확장자입니다. termId = {}, extension = {}", termId, extension);
-            throw new CustomException(FileErrorCode.FILE_002);
+            throw new CustomException(FileErrorCode.FILE_400_EXTENSION_NOT_ALLOWED);
         }
         // 용량 검증 — Tomcat의 multipart 상한과 별개로 이 상수 하나로 기준을 통일한다
         if (file.getSize() > FileUploadPolicy.MAX_SIZE_BYTES) {
             log.warn("[파일 업로드] 허용 용량을 초과했습니다. termId = {}, size = {}", termId, file.getSize());
-            throw new CustomException(FileErrorCode.FILE_001);
+            throw new CustomException(FileErrorCode.FILE_413_SIZE_EXCEEDED);
         }
 
         // 업로드 대상 기수 조회
         GroupTerm groupTerm = groupTermRepository.findById(termId)
                 .orElseThrow(() -> {
                     log.warn("[파일 업로드] 기수를 찾을 수 없습니다. termId = {}", termId);
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(FileErrorCode.FILE_404_GROUP_TERM_NOT_FOUND);
                 });
 
         // 일정 조회 — 장부 파일은 일정과 무관하므로 scheduleId가 와도 무시한다
@@ -104,11 +103,11 @@ public class FileService {
             schedule = scheduleRepository.findById(scheduleId)
                     .orElseThrow(() -> {
                         log.warn("[파일 업로드] 일정을 찾을 수 없습니다. scheduleId = {}", scheduleId);
-                        return new CustomException(CommonErrorCode.NOT_FOUND);
+                        return new CustomException(FileErrorCode.FILE_404_SCHEDULE_NOT_FOUND);
                     });
             if (!schedule.getGroupTerm().getId().equals(termId)) {
                 log.warn("[파일 업로드] 일정이 해당 기수에 속하지 않습니다. termId = {}, scheduleId = {}", termId, scheduleId);
-                throw new CustomException(FileErrorCode.FILE_003);
+                throw new CustomException(FileErrorCode.FILE_400_SCHEDULE_TERM_MISMATCH);
             }
         }
 
@@ -145,7 +144,7 @@ public class FileService {
         groupTermRepository.findById(termId)
                 .orElseThrow(() -> {
                     log.warn("[문서함 목록 조회] 기수를 찾을 수 없습니다. termId = {}", termId);
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(FileErrorCode.FILE_404_GROUP_TERM_NOT_FOUND);
                 });
 
         int limit = CursorPageConstants.resolveSize(size);
@@ -166,7 +165,7 @@ public class FileService {
                 }
             } catch (RuntimeException e) {
                 log.warn("[문서함 목록 조회] cursor 형식이 올바르지 않습니다. termId = {}, cursor = {}", termId, cursor);
-                throw new CustomException(CommonErrorCode.BAD_REQUEST);
+                throw new CustomException(FileErrorCode.FILE_400_INVALID_CURSOR);
             }
         }
 
@@ -208,7 +207,7 @@ public class FileService {
         File file = fileRepository.findById(fileId)
                 .orElseThrow(() -> {
                     log.warn("[다운로드 URL 발급] 파일을 찾을 수 없습니다. fileId = {}", fileId);
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
 
         // URL 조립 — 우리 서버의 콘텐츠 서빙 엔드포인트를 가리킨다. mode를 쿼리로 그대로 넘겨서
@@ -229,7 +228,7 @@ public class FileService {
         File file = fileRepository.findById(fileId)
                 .orElseThrow(() -> {
                     log.warn("[파일 콘텐츠 서빙] 파일을 찾을 수 없습니다. fileId = {}", fileId);
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
 
         log.info("[파일 콘텐츠 서빙] 대상 조회를 완료했습니다. fileId = {}", fileId);
@@ -260,7 +259,7 @@ public class FileService {
         File file = fileRepository.findById(fileId)
                 .orElseThrow(() -> {
                     log.warn("[파일 삭제] 파일을 찾을 수 없습니다. fileId = {}", fileId);
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
         file.softDelete();
 
@@ -274,7 +273,7 @@ public class FileService {
         File file = fileRepository.findById(fileId)
                 .orElseThrow(() -> {
                     log.warn("[파일 복구] 파일을 찾을 수 없습니다. fileId = {}", fileId);
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
         // 이미 복구된 상태여도 에러 없이 통과한다 — 기간 제한이 없어 막을 이유가 없다
         file.restore();
@@ -290,7 +289,7 @@ public class FileService {
         GroupTerm groupTerm = groupTermRepository.findById(termId)
                 .orElseThrow(() -> {
                     log.warn("[문서함 전체 다운로드] 기수를 찾을 수 없습니다. termId = {}", termId);
-                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                    return new CustomException(FileErrorCode.FILE_404_GROUP_TERM_NOT_FOUND);
                 });
 
         // 조건에 맞는 파일 전체 조회 — ZIP은 "전부 내려받기"라 페이지네이션 대상이 아니다.
@@ -298,7 +297,7 @@ public class FileService {
         List<File> files = fileRepository.searchAll(termId, category.toFileCategoryOrNull(), keyword);
         if (files.isEmpty()) {
             log.warn("[문서함 전체 다운로드] 다운로드할 파일이 없습니다. termId = {}", termId);
-            throw new CustomException(CommonErrorCode.NOT_FOUND);
+            throw new CustomException(FileErrorCode.FILE_404_NO_DOWNLOADABLE_FILES);
         }
 
         // ZIP에 쓸 엔트리 목록 조립(이름 중복 처리 포함)

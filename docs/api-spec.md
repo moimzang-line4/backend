@@ -232,12 +232,18 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | LEDGER_001 | 409 | 자동 기록 내역은 삭제할 수 없습니다(원본이 살아있는 경우) / 수정은 예외 없이 항상 거부. | API-072, API-073 |
 
-### 문서함 (FileErrorCode) — API-063
+### 문서함 (FileErrorCode) — API-063~068
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| FILE_001 | 413 | 파일 용량이 허용 범위를 초과했습니다. | API-063 |
-| FILE_002 | 400 | 허용하지 않는 형식입니다. | API-063 |
-| FILE_003 | 400 | 일정이 해당 기수에 속하지 않습니다. | API-063 |
+| FILE_413_SIZE_EXCEEDED | 413 | 파일 용량이 허용 범위를 초과했습니다. | API-063 |
+| FILE_400_EXTENSION_NOT_ALLOWED | 400 | 허용하지 않는 형식입니다. | API-063 |
+| FILE_400_SCHEDULE_TERM_MISMATCH | 400 | 일정이 해당 기수에 속하지 않습니다. | API-063 |
+| FILE_400_REQUIRED_FIELD_MISSING | 400 | 파일과 이름은 필수입니다. | API-063 |
+| FILE_400_INVALID_CURSOR | 400 | cursor 형식이 올바르지 않습니다. | API-064 |
+| FILE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-063, API-064, API-068 |
+| FILE_404_SCHEDULE_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-063 |
+| FILE_404_NOT_FOUND | 404 | 존재하지 않는 파일입니다. | API-065, API-080, API-066, API-067 |
+| FILE_404_NO_DOWNLOADABLE_FILES | 404 | 다운로드할 파일이 없습니다. | API-068 |
 
 ---
 
@@ -851,7 +857,7 @@ scheduleId가 있으면 일정 자료로 연결되고 문서함에도 자동 노
 scheduleId(선택)
 
 **Response data**: fileId, name
-**에러**: COMMON_400(필수 누락), FILE_002, COMMON_404, FILE_001(413), FILE_003(scheduleId가 다른 기수 소속)
+**에러**: FILE_400_REQUIRED_FIELD_MISSING(필수 누락), FILE_400_EXTENSION_NOT_ALLOWED, FILE_404_GROUP_TERM_NOT_FOUND(기수 없음), FILE_404_SCHEDULE_NOT_FOUND(일정 없음), FILE_413_SIZE_EXCEEDED(413), FILE_400_SCHEDULE_TERM_MISMATCH(scheduleId가 다른 기수 소속)
 
 ---
 
@@ -868,13 +874,13 @@ API-037 targetCount와 같은 패턴. 페이지네이션용 totalCount가 아니
 cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 createdAt, NAME은 name.
 둘 다 id를 tiebreaker로 쓴다.
 
-**에러**: COMMON_404, COMMON_400(잘못된 cursor)
+**에러**: FILE_404_GROUP_TERM_NOT_FOUND(기수 없음), FILE_400_INVALID_CURSOR(잘못된 cursor)
 
 ---
 
 #### API-065 · GET /api/files/{fileId}/download-url · 파일 미리보기·다운로드 URL 발급
 인증: 불필요. **Query**: mode(PREVIEW|DOWNLOAD, 기본 DOWNLOAD). **Response data**: url, expiresAt.
-**에러**: COMMON_404
+**에러**: FILE_404_NOT_FOUND
 
 `url`은 외부 스토리지 주소가 아니라 이 서버 자신의 API-080을 가리킨다(`mode`를 그대로 실어서).
 실제 파일 바이트가 나가는 동작은 API-080 쪽에서 일어난다.
@@ -892,13 +898,13 @@ cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 
 `Content-Disposition`은 `mode=DOWNLOAD`면 `attachment`(브라우저가 저장 대화상자를 띄움),
 `PREVIEW`면 `inline`(브라우저가 바로 열어서 보여줌)으로 서버가 강제한다.
 
-**에러**: COMMON_404
+**에러**: FILE_404_NOT_FOUND
 
 #### API-066 · DELETE /api/files/{fileId} · 파일 삭제
-인증: 불필요. 소프트 삭제(deleted_at). **에러**: COMMON_404
+인증: 불필요. 소프트 삭제(deleted_at). **에러**: FILE_404_NOT_FOUND
 
 #### API-067 · POST /api/files/{fileId}/restore · 파일 삭제 되돌리기
-인증: 불필요. **Response data**: fileId. **에러**: COMMON_404
+인증: 불필요. **Response data**: fileId. **에러**: FILE_404_NOT_FOUND
 
 > **미확정**: 되돌리기 가능 기간, 실제 스토리지 파일의 영구 삭제 시점은 구현 시점에 정한다.
 
@@ -910,7 +916,7 @@ cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 
 **Query**: category(ALL|ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE, 기본 ALL), keyword(선택)
 **Response**: `Content-Type: application/zip` 파일 스트림(JSON 래퍼 없음). 파일명 형식:
 `{기수}자료{N}개.zip`.
-**에러**: COMMON_404(다운로드할 파일 없음)
+**에러**: FILE_404_GROUP_TERM_NOT_FOUND(기수 없음), FILE_404_NO_DOWNLOADABLE_FILES(다운로드할 파일 없음)
 
 ### 예산
 

@@ -27,7 +27,6 @@ import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.cursor.CursorCodec;
-import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import com.moimzang.global.storage.FileStorage;
 import java.time.LocalDateTime;
@@ -89,28 +88,28 @@ class FileServiceTest {
     }
 
     @Test
-    void upload_허용하지_않는_확장자면_FILE_002를_던진다() {
+    void upload_허용하지_않는_확장자면_FILE_400_EXTENSION_NOT_ALLOWED를_던진다() {
         MultipartFile multipartFile = new MockMultipartFile("file", "virus.exe", "application/octet-stream", "content".getBytes());
 
         assertThatThrownBy(() -> fileService.upload(1L, multipartFile, "바이러스", FileCategory.ACTIVITY_DOC, null))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(FileErrorCode.FILE_002);
+                .isEqualTo(FileErrorCode.FILE_400_EXTENSION_NOT_ALLOWED);
     }
 
     @Test
-    void upload_허용_용량을_넘으면_FILE_001을_던진다() {
+    void upload_허용_용량을_넘으면_FILE_413_SIZE_EXCEEDED를_던진다() {
         byte[] content = new byte[(int) (FileUploadPolicy.MAX_SIZE_BYTES + 1)];
         MultipartFile multipartFile = new MockMultipartFile("file", "big.pdf", "application/pdf", content);
 
         assertThatThrownBy(() -> fileService.upload(1L, multipartFile, "큰 파일", FileCategory.ACTIVITY_DOC, null))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(FileErrorCode.FILE_001);
+                .isEqualTo(FileErrorCode.FILE_413_SIZE_EXCEEDED);
     }
 
     @Test
-    void upload_scheduleId가_다른_기수_소속이면_FILE_003을_던진다() {
+    void upload_scheduleId가_다른_기수_소속이면_FILE_400_SCHEDULE_TERM_MISMATCH를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         GroupTerm otherTerm = mock(GroupTerm.class);
         Schedule schedule = mock(Schedule.class);
@@ -124,18 +123,18 @@ class FileServiceTest {
         assertThatThrownBy(() -> fileService.upload(1L, multipartFile, "자료", FileCategory.ACTIVITY_DOC, 999L))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(FileErrorCode.FILE_003);
+                .isEqualTo(FileErrorCode.FILE_400_SCHEDULE_TERM_MISMATCH);
     }
 
     @Test
-    void upload_기수가_없으면_COMMON_404를_던진다() {
+    void upload_기수가_없으면_FILE_404_GROUP_TERM_NOT_FOUND를_던진다() {
         MultipartFile multipartFile = new MockMultipartFile("file", "a.pdf", "application/pdf", "content".getBytes());
         given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> fileService.upload(1L, multipartFile, "자료", FileCategory.ACTIVITY_DOC, null))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(CommonErrorCode.NOT_FOUND);
+                .isEqualTo(FileErrorCode.FILE_404_GROUP_TERM_NOT_FOUND);
     }
 
     @Test
@@ -156,7 +155,7 @@ class FileServiceTest {
     }
 
     @Test
-    void getZipTargets_대상이_없으면_COMMON_404를_던진다() {
+    void getZipTargets_대상이_없으면_FILE_404_NO_DOWNLOADABLE_FILES를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(fileRepository.searchAll(eq(1L), isNull(), isNull())).willReturn(List.of());
@@ -164,7 +163,7 @@ class FileServiceTest {
         assertThatThrownBy(() -> fileService.getZipTargets(1L, FileCategoryFilter.ALL, null))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(CommonErrorCode.NOT_FOUND);
+                .isEqualTo(FileErrorCode.FILE_404_NO_DOWNLOADABLE_FILES);
     }
 
     @Test
@@ -235,34 +234,34 @@ class FileServiceTest {
     }
 
     @Test
-    void listFiles_기수가_없으면_COMMON_404를_던진다() {
+    void listFiles_기수가_없으면_FILE_404_GROUP_TERM_NOT_FOUND를_던진다() {
         given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() ->
                 fileService.listFiles(1L, FileCategoryFilter.ALL, null, FileSortOption.LATEST, null, null, null))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(CommonErrorCode.NOT_FOUND);
+                .isEqualTo(FileErrorCode.FILE_404_GROUP_TERM_NOT_FOUND);
     }
 
     @Test
-    void getFileContent_파일이_없으면_COMMON_404를_던진다() {
+    void getFileContent_파일이_없으면_FILE_404_NOT_FOUND를_던진다() {
         given(fileRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> fileService.getFileContent(1L))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(CommonErrorCode.NOT_FOUND);
+                .isEqualTo(FileErrorCode.FILE_404_NOT_FOUND);
     }
 
     @Test
-    void listFiles_cursor가_잘못됐으면_COMMON_400을_던진다() {
+    void listFiles_cursor가_잘못됐으면_FILE_400_INVALID_CURSOR를_던진다() {
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
 
         assertThatThrownBy(() ->
                 fileService.listFiles(1L, FileCategoryFilter.ALL, null, FileSortOption.LATEST, null, "not-a-cursor", null))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
-                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+                .isEqualTo(FileErrorCode.FILE_400_INVALID_CURSOR);
     }
 }
