@@ -2,6 +2,7 @@ package com.moimzang.domain.meeting.dto.request;
 
 import com.moimzang.domain.meeting.enums.AgendaStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,6 +16,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class MeetingAgendaUpdateRequest {
+
+    @Schema(description = "안건 내용(선택)", example = "관객 참여 이벤트 기획안")
+    @Size(max = 100)
+    private String content;
 
     @Schema(description = "논의 내용(선택)", example = "참여 이벤트 2종 진행하기로 함")
     private String discussionNote;

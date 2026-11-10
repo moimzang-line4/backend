@@ -119,7 +119,8 @@ public interface MeetingApi {
     ResponseEntity<BaseResponse<MeetingAgendaCreateResponse>> addAgenda(
             @Parameter(description = "회의 ID", example = "1") Long meetingId, @Valid MeetingAgendaCreateRequest request);
 
-    @Operation(summary = "안건 내용 저장", description = "'다음 안건' 버튼은 이 API를 status=COMPLETED로 호출하는 것이고, '회의 중단하기'는 status 없이(내용만) 호출한다.")
+    @Operation(summary = "안건 내용 저장", description = "안건 내용(content)·논의 내용·결정 사항·상태 중 보낸 필드만 수정한다. "
+            + "'다음 안건' 버튼은 이 API를 status=COMPLETED로 호출하는 것이고, '회의 중단하기'는 status 없이(내용만) 호출한다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "저장 성공"),
         @ApiResponse(responseCode = "404", description = "AGENDA_404_NOT_FOUND",
@@ -128,7 +129,7 @@ public interface MeetingApi {
                      content = @Content(schema = @Schema(implementation = BaseResponse.class)))
     })
     ResponseEntity<BaseResponse<MeetingAgendaUpdateResponse>> updateAgendaContent(
-            @Parameter(description = "안건 ID", example = "3") Long agendaId, MeetingAgendaUpdateRequest request);
+            @Parameter(description = "안건 ID", example = "3") Long agendaId, @Valid MeetingAgendaUpdateRequest request);
 
     @Operation(summary = "안건 삭제", description = "안건을 삭제한다. 안건이 1개만 남은 회의는 삭제할 수 없다.")
     @ApiResponses({
