@@ -10,7 +10,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 80�
 - **공통 응답 포맷**: 모든 응답을 `{success, code, message, data}`로 감싼다.
   ```json
   { "success": true, "code": "COMMON_200", "message": "요청에 성공했습니다.", "data": { } }
-  { "success": false, "code": "SETTLEMENT_003", "message": "이미 영수증이 등록된 차수입니다.", "data": null }
+  { "success": false, "code": "SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED", "message": "이미 영수증이 등록된 차수입니다.", "data": null }
   ```
   HTTP 상태 코드는 해당 ErrorCode가 결정한다(§5).
 - **페이징**: 검색어·필터가 있거나 데이터가 무한정 쌓일 수 있는 목록 API(§6에 "cursor 페이지네이션"
@@ -192,33 +192,33 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ### 정산 (SettlementErrorCode) — API-034~045
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| SETTLEMENT_001 | 400 | 금액은 양의 정수여야 합니다. | API-034 |
-| SETTLEMENT_002 | 400 | 지원금은 0원 이상이며 영수증 금액 이하여야 합니다. | API-034 |
-| SETTLEMENT_003 | 409 | 이미 영수증이 등록된 차수입니다. | API-034 |
-| SETTLEMENT_004 | 423 | 입금 내역이 있어 영수증을 수정할 수 없습니다. | API-034 |
-| SETTLEMENT_005 | 423 | 입금 완료 상태는 삭제할 수 없습니다. | API-041 |
-| SETTLEMENT_006 | 409 | 영수증이 등록되지 않았습니다. | API-038, API-039 |
-| SETTLEMENT_007 | 423 | 입금 완료된 인원이 포함되어 있어 명단을 수정할 수 없습니다. | API-038 |
-| SETTLEMENT_008 | 423 | 차수에 연결된 입금 내역이 있어 삭제할 수 없습니다. | API-035 |
-| SETTLEMENT_009 | 409 | 영수증이 등록되지 않은 차수가 포함되어 있습니다. | API-044 |
-| SETTLEMENT_010 | 409 | 입금 안내 계좌가 설정되지 않았습니다. | API-044 |
-| SETTLEMENT_011 | 400 | 포함할 차수를 1개 이상 선택해주세요. | API-044 |
-| RECEIPT_001 | 502 | 영수증 인식에 실패했습니다. 다시 시도해 주세요. | API-036 |
+| SETTLEMENT_400_AMOUNT_NOT_POSITIVE | 400 | 금액은 양의 정수여야 합니다. | API-034 |
+| SETTLEMENT_400_SUBSIDY_OUT_OF_RANGE | 400 | 지원금은 0원 이상이며 영수증 금액 이하여야 합니다. | API-034 |
+| SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED | 409 | 이미 영수증이 등록된 차수입니다. | API-034 |
+| SETTLEMENT_423_RECEIPT_LOCKED_BY_PAYMENT | 423 | 입금 내역이 있어 영수증을 수정할 수 없습니다. | API-034 |
+| SETTLEMENT_423_PAID_CANNOT_DELETE | 423 | 입금 완료 상태는 삭제할 수 없습니다. | API-041 |
+| SETTLEMENT_409_RECEIPT_NOT_REGISTERED | 409 | 영수증이 등록되지 않았습니다. | API-038, API-039 |
+| SETTLEMENT_423_PAID_MEMBER_LOCKED | 423 | 입금 완료된 인원이 포함되어 있어 명단을 수정할 수 없습니다. | API-038 |
+| SETTLEMENT_423_ROUND_LOCKED_BY_PAYMENT | 423 | 차수에 연결된 입금 내역이 있어 삭제할 수 없습니다. | API-035 |
+| SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED | 409 | 영수증이 등록되지 않은 차수가 포함되어 있습니다. | API-044 |
+| SETTLEMENT_409_ACCOUNT_NOT_SET | 409 | 입금 안내 계좌가 설정되지 않았습니다. | API-044 |
+| SETTLEMENT_400_ROUND_SELECTION_REQUIRED | 400 | 포함할 차수를 1개 이상 선택해주세요. | API-044 |
+| RECEIPT_502_RECOGNITION_FAILED | 502 | 영수증 인식에 실패했습니다. 다시 시도해 주세요. | API-036 |
 
 ### 출석 (AttendanceErrorCode) — API-030
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| ATTENDANCE_001 | 409 | 같은 이름의 사람이 있어요. | API-030 |
+| ATTENDANCE_409_DUPLICATE_NAME | 409 | 같은 이름의 사람이 있어요. | API-030 |
 
 ### 운영 공간 (SpaceErrorCode) — API-013
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| SPACE_001 | 409 | 이미 연결된 안건입니다. | API-013 |
+| SPACE_409_AGENDA_ALREADY_LINKED | 409 | 이미 연결된 안건입니다. | API-013 |
 
 ### 운영 메모 (NoteErrorCode) — API-050
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| NOTE_001 | 400 | 할 일 유형이 아닙니다. | API-050 |
+| NOTE_400_NOT_TODO_TYPE | 400 | 할 일 유형이 아닙니다. | API-050 |
 
 ### 회의 / 안건 (MeetingErrorCode, AgendaErrorCode) — API-051~061, 056~058
 | 코드 | HTTP | 메시지 | 발생 API |
@@ -230,7 +230,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ### 예산/장부 (LedgerErrorCode) — API-069~075
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| LEDGER_001 | 409 | 자동 기록 내역은 삭제할 수 없습니다(원본이 살아있는 경우) / 수정은 예외 없이 항상 거부. | API-072, API-073 |
+| LEDGER_409_AUTO_ENTRY_LOCKED | 409 | 자동 기록 내역은 삭제할 수 없습니다(원본이 살아있는 경우) / 수정은 예외 없이 항상 거부. | API-072, API-073 |
 
 ### 문서함 (FileErrorCode) — API-063
 | 코드 | HTTP | 메시지 | 발생 API |
@@ -321,7 +321,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ```json
 { "success": true, "code": "COMMON_201", "message": "생성에 성공했습니다.", "data": { "scheduleId": 10, "hasOperationSpace": true } }
 ```
-**에러**: COMMON_400(필수 누락), SCHEDULE_001(종료가 시작보다 빠름, 400), COMMON_404(카테고리 없음)
+**에러**: COMMON_400(필수 누락), SCHEDULE_400_END_BEFORE_START(종료가 시작보다 빠름), COMMON_404(카테고리 없음)
 
 ---
 
@@ -349,7 +349,7 @@ cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 
 #### API-007 · PATCH /api/schedules/{scheduleId} · 일정 수정
 인증: 불필요. Request 필드는 API-004와 동일(createOperationSpace 제외). **Response**: scheduleId
-**에러**: COMMON_400, SCHEDULE_001, COMMON_404
+**에러**: COMMON_400, SCHEDULE_400_END_BEFORE_START, COMMON_404
 
 ---
 
@@ -405,7 +405,7 @@ NAME은 title. 둘 다 id를 tiebreaker로 쓴다.
 
 #### API-013 · POST /api/schedules/{scheduleId}/agenda-links · 안건 연결(수동)
 인증: 불필요. **Request**: agendaIds(number[]). **Response data**: links[].linkId/agendaId
-**에러**: COMMON_400(안건 미선택), COMMON_404, SPACE_001(409, 이미 연결된 안건)
+**에러**: COMMON_400(안건 미선택), COMMON_404, SPACE_409_AGENDA_ALREADY_LINKED(이미 연결된 안건)
 
 ---
 
@@ -547,11 +547,11 @@ cursor 페이지네이션(정렬 기준: createdAt).
 **Request**: name, affiliation, phoneLast4(전화번호 뒤 4자리, 숫자 4자리), allowSameName(boolean, 기본
 false)
 
-**Logics**: source=ON_SITE, 미출석으로 추가. 같은 이름이 이미 있으면 409(ATTENDANCE_001)로 응답하고
+**Logics**: source=ON_SITE, 미출석으로 추가. 같은 이름이 이미 있으면 409(ATTENDANCE_409_DUPLICATE_NAME)로 응답하고
 기존 인원 카드를 보여준다. "다른 사람으로 새로 추가"를 누르면 allowSameName=true로 재요청.
 
 **Response data**: attendeeId, name, affiliation, phoneLast4, isCheckedIn
-**에러**: COMMON_400, ATTENDANCE_001
+**에러**: COMMON_400, ATTENDANCE_409_DUPLICATE_NAME
 
 ---
 
@@ -580,11 +580,11 @@ registeredAt, isLocked. **에러**: COMMON_404
 imageKey(사진 없이 등록 시 생략)
 
 **Logics**: 금액(totalAmount/clubSubsidyAmount)이 바뀌면 그 차수에 이미 저장된 정산 명단의 1인
-청구액도 API-038과 같은 공식으로 재계산한다. 입금 완료자가 있으면 SETTLEMENT_004로 수정 자체가
+청구액도 API-038과 같은 공식으로 재계산한다. 입금 완료자가 있으면 SETTLEMENT_423_RECEIPT_LOCKED_BY_PAYMENT로 수정 자체가
 막히므로 재계산은 아직 아무도 입금하지 않은 상태에서만 일어난다.
 
 **Response data**: roundId, label, totalAmount, clubSubsidyAmount
-**에러**: COMMON_400, SETTLEMENT_001, SETTLEMENT_002, COMMON_404, SETTLEMENT_003, SETTLEMENT_004
+**에러**: COMMON_400, SETTLEMENT_400_AMOUNT_NOT_POSITIVE, SETTLEMENT_400_SUBSIDY_OUT_OF_RANGE, COMMON_404, SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED, SETTLEMENT_423_RECEIPT_LOCKED_BY_PAYMENT
 
 ---
 
@@ -597,7 +597,7 @@ imageKey(사진 없이 등록 시 생략)
 **장부(ledger_entry)는 영향받지 않는다** — 이미 생성된 내역·잔액은 유지되고 `schedule_round_id` 참조만
 NULL로 전환된다(고아 상태). 상세 근거는 `docs/decisions.md` #4.
 
-**Response**: 204. **에러**: COMMON_404, SETTLEMENT_008
+**Response**: 204. **에러**: COMMON_404, SETTLEMENT_423_ROUND_LOCKED_BY_PAYMENT
 
 ---
 
@@ -607,7 +607,7 @@ null. "다시 촬영하기"는 이 API 재호출.
 
 **Request**: image(multipart/form-data)
 **Response data**: storeName, transactedAt, totalAmount, imageKey
-**에러**: COMMON_400(이미지 없음/형식 오류), RECEIPT_001(502)
+**에러**: COMMON_400(이미지 없음/형식 오류), RECEIPT_502_RECOGNITION_FAILED
 
 ---
 
@@ -632,7 +632,7 @@ cursor 페이지네이션(정렬 기준: createdAt).
 
 **Request**: attendeeIds(number[])
 **Response data**: label, targetCount, billedAmount
-**에러**: COMMON_400(명단 비어있음), COMMON_404, SETTLEMENT_006, SETTLEMENT_007
+**에러**: COMMON_400(명단 비어있음), COMMON_404, SETTLEMENT_409_RECEIPT_NOT_REGISTERED, SETTLEMENT_423_PAID_MEMBER_LOCKED
 
 ---
 
@@ -640,7 +640,7 @@ cursor 페이지네이션(정렬 기준: createdAt).
 인증: 불필요. 그 차수의 출석 완료자를 미리보기로 반환(저장 안 함) — API-038로 확정.
 
 **Response data**: attendees[].attendeeId/name/affiliation/phoneLast4, expectedBilledAmount
-**에러**: COMMON_404, SETTLEMENT_006
+**에러**: COMMON_404, SETTLEMENT_409_RECEIPT_NOT_REGISTERED
 
 ---
 
@@ -658,7 +658,7 @@ cursor 페이지네이션(정렬 기준: createdAt).
 인증: 불필요. 미입금 카드 스와이프 "삭제하기". URL에 roundId가 없으므로 scheduleId 기준으로 그
 일정의 **모든 차수**에서 그 사람을 제외한다(특정 차수 1개만 빼는 게 아니다). 각 차수는 남은
 인원으로 청구액 재계산.
-**에러**: COMMON_404, SETTLEMENT_005
+**에러**: COMMON_404, SETTLEMENT_423_PAID_CANNOT_DELETE
 
 #### API-042 · GET /api/schedules/{scheduleId}/payments · 입금 현황 조회
 인증: 불필요. **Query**: status(UNPAID|PAID|ALL, 기본 UNPAID), keyword(선택), cursor(선택),
@@ -689,7 +689,7 @@ cursor 페이지네이션(정렬 기준: createdAt).
 **Response data**: scheduleTitle, rounds[].label/billedAmount, combinedAmount, account.bankName/
 accountNumber/accountHolder, noticeText
 
-**에러**: SETTLEMENT_011, COMMON_404, SETTLEMENT_009, SETTLEMENT_010
+**에러**: SETTLEMENT_400_ROUND_SELECTION_REQUIRED, COMMON_404, SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED, SETTLEMENT_409_ACCOUNT_NOT_SET
 
 > **미확정**: 선택한 차수들의 계좌가 서로 다를 때 공지에 어느 계좌를 쓸지는 구현 시점에 정한다.
 
@@ -732,7 +732,7 @@ cursor 페이지네이션(정렬 기준: createdAt).
 
 #### API-050 · PATCH /api/notes/{noteId}/todo · 할 일 완료 처리
 인증: 불필요. **Request**: isTodoDone(boolean). **Response data**: noteId, isTodoDone
-**에러**: COMMON_404, NOTE_001(400, 할일 유형이 아님)
+**에러**: COMMON_404, NOTE_400_NOT_TODO_TYPE(할일 유형이 아님)
 
 ### 회의
 
@@ -947,16 +947,16 @@ cursor 페이지네이션(정렬 기준: entryDate 내림차순).
 달리 예외 없음(decisions #5).
 
 **Request**: type, itemName, amount, entryDate
-**에러**: COMMON_400, COMMON_404, LEDGER_001
+**에러**: COMMON_400, COMMON_404, LEDGER_409_AUTO_ENTRY_LOCKED
 
 ---
 
 #### API-073 · DELETE /api/ledger/{entryId} · 장부 내역 삭제
-인증: 불필요. `schedule_round_id`가 아직 연결된 자동 기록은 LEDGER_001로 삭제 불가(다음 "정산 내역
+인증: 불필요. `schedule_round_id`가 아직 연결된 자동 기록은 LEDGER_409_AUTO_ENTRY_LOCKED로 삭제 불가(다음 "정산 내역
 새로고침" 때 재계산과 충돌). 원본 차수가 삭제되어 고아가 된 자동 기록은 일반 항목처럼 삭제 가능.
 직접 입력 내역은 항상 삭제 가능(decisions #5).
 
-**에러**: COMMON_404, LEDGER_001(원본이 살아있는 경우)
+**에러**: COMMON_404, LEDGER_409_AUTO_ENTRY_LOCKED(원본이 살아있는 경우)
 
 ---
 
