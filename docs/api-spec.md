@@ -183,6 +183,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | COMMON_204 | 204 | 삭제에 성공했습니다. |
 | COMMON_400 | 400 | 잘못된 요청입니다. |
 | COMMON_404 | 404 | 정보를 찾을 수 없습니다. |
+| COMMON_413 | 413 | 요청 용량이 허용 범위를 초과했습니다. |
 | COMMON_500 | 500 | 서버 오류가 발생했습니다. |
 
 ### 정산 (SettlementErrorCode) — API-034~045
@@ -233,6 +234,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | FILE_001 | 413 | 파일 용량이 허용 범위를 초과했습니다. | API-063 |
 | FILE_002 | 400 | 허용하지 않는 형식입니다. | API-063 |
+| FILE_003 | 400 | 일정이 해당 기수에 속하지 않습니다. | API-063 |
 
 ---
 
@@ -846,7 +848,7 @@ scheduleId가 있으면 일정 자료로 연결되고 문서함에도 자동 노
 scheduleId(선택)
 
 **Response data**: fileId, name
-**에러**: COMMON_400(필수 누락), FILE_002, COMMON_404, FILE_001(413)
+**에러**: COMMON_400(필수 누락), FILE_002, COMMON_404, FILE_001(413), FILE_003(scheduleId가 다른 기수 소속)
 
 ---
 
@@ -861,7 +863,7 @@ sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택), cursor(선택), siz
 cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 createdAt, NAME은 name.
 둘 다 id를 tiebreaker로 쓴다.
 
-**에러**: COMMON_400(잘못된 cursor)
+**에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 ---
 

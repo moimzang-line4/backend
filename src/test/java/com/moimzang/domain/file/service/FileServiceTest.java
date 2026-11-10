@@ -23,6 +23,7 @@ import com.moimzang.domain.file.mapper.FileMapper;
 import com.moimzang.domain.file.repository.FileRepository;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
+import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
@@ -107,6 +108,24 @@ class FileServiceTest {
     }
 
     @Test
+    void upload_scheduleId가_다른_기수_소속이면_FILE_003을_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        GroupTerm otherTerm = mock(GroupTerm.class);
+        Schedule schedule = mock(Schedule.class);
+        MultipartFile multipartFile = new MockMultipartFile("file", "a.pdf", "application/pdf", "content".getBytes());
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(scheduleRepository.findById(999L)).willReturn(Optional.of(schedule));
+        given(schedule.getGroupTerm()).willReturn(otherTerm);
+        given(otherTerm.getId()).willReturn(2L);
+
+        assertThatThrownBy(() -> fileService.upload(1L, multipartFile, "자료", FileCategory.ACTIVITY_DOC, 999L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_003);
+    }
+
+    @Test
     void upload_기수가_없으면_COMMON_404를_던진다() {
         MultipartFile multipartFile = new MockMultipartFile("file", "a.pdf", "application/pdf", "content".getBytes());
         given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
@@ -172,6 +191,7 @@ class FileServiceTest {
         ReflectionTestUtils.setField(file2, "id", 2L);
         ReflectionTestUtils.setField(file2, "createdAt", LocalDateTime.now());
 
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(fileRepository.search(eq(1L), isNull(), isNull(), isNull(), eq(FileSortOption.LATEST),
                 isNull(), isNull(), isNull(), eq(2)))
                 .willReturn(List.of(file1, file2));
@@ -180,6 +200,17 @@ class FileServiceTest {
 
         assertThat(response.getFiles()).hasSize(1);
         assertThat(response.getNextCursor()).isNotNull();
+    }
+
+    @Test
+    void listFiles_기수가_없으면_COMMON_404를_던진다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                fileService.listFiles(1L, FileCategoryFilter.ALL, null, FileSortOption.LATEST, null, null, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
     }
 
     @Test
@@ -194,6 +225,8 @@ class FileServiceTest {
 
     @Test
     void listFiles_cursor가_잘못됐으면_COMMON_400을_던진다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
+
         assertThatThrownBy(() ->
                 fileService.listFiles(1L, FileCategoryFilter.ALL, null, FileSortOption.LATEST, null, "not-a-cursor", null))
                 .isInstanceOf(CustomException.class)
