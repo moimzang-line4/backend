@@ -22,13 +22,8 @@ public class FileRepositoryImpl implements FileRepositoryCustom {
     public List<File> search(Long groupTermId, FileCategory category, String keyword, Long scheduleId, FileSortOption sort,
                               LocalDateTime cursorCreatedAt, String cursorName, Long cursorId, int limit) {
         return queryFactory.selectFrom(file)
-                .where(
-                        file.groupTerm.id.eq(groupTermId),
-                        file.deletedAt.isNull(),
-                        categoryEq(category),
-                        nameContains(keyword),
-                        scheduleIdEq(scheduleId),
-                        cursorCondition(sort, cursorCreatedAt, cursorName, cursorId))
+                .where(baseConditions(groupTermId, category, keyword, scheduleId))
+                .where(cursorCondition(sort, cursorCreatedAt, cursorName, cursorId))
                 .orderBy(orderSpecifiers(sort))
                 .limit(limit)
                 .fetch();
@@ -37,11 +32,7 @@ public class FileRepositoryImpl implements FileRepositoryCustom {
     @Override
     public List<File> searchAll(Long groupTermId, FileCategory category, String keyword) {
         return queryFactory.selectFrom(file)
-                .where(
-                        file.groupTerm.id.eq(groupTermId),
-                        file.deletedAt.isNull(),
-                        categoryEq(category),
-                        nameContains(keyword))
+                .where(baseConditions(groupTermId, category, keyword, null))
                 .orderBy(file.name.asc(), file.id.asc())
                 .fetch();
     }
@@ -50,14 +41,21 @@ public class FileRepositoryImpl implements FileRepositoryCustom {
     public long count(Long groupTermId, FileCategory category, String keyword, Long scheduleId) {
         Long count = queryFactory.select(file.count())
                 .from(file)
-                .where(
-                        file.groupTerm.id.eq(groupTermId),
-                        file.deletedAt.isNull(),
-                        categoryEq(category),
-                        nameContains(keyword),
-                        scheduleIdEq(scheduleId))
+                .where(baseConditions(groupTermId, category, keyword, scheduleId))
                 .fetchOne();
         return count == null ? 0 : count;
+    }
+
+    // search()/searchAll()/count()가 공유하는 조건 — scheduleId를 안 쓰는 호출(searchAll)은 null로 넘기면
+    // scheduleIdEq(null)이 조건을 빼준다
+    private BooleanExpression[] baseConditions(Long groupTermId, FileCategory category, String keyword, Long scheduleId) {
+        return new BooleanExpression[]{
+                file.groupTerm.id.eq(groupTermId),
+                file.deletedAt.isNull(),
+                categoryEq(category),
+                nameContains(keyword),
+                scheduleIdEq(scheduleId)
+        };
     }
 
     private BooleanExpression categoryEq(FileCategory category) {
