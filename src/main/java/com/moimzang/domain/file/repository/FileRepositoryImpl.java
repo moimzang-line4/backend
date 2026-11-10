@@ -46,6 +46,20 @@ public class FileRepositoryImpl implements FileRepositoryCustom {
                 .fetch();
     }
 
+    @Override
+    public long count(Long groupTermId, FileCategory category, String keyword, Long scheduleId) {
+        Long count = queryFactory.select(file.count())
+                .from(file)
+                .where(
+                        file.groupTerm.id.eq(groupTermId),
+                        file.deletedAt.isNull(),
+                        categoryEq(category),
+                        nameContains(keyword),
+                        scheduleIdEq(scheduleId))
+                .fetchOne();
+        return count == null ? 0 : count;
+    }
+
     private BooleanExpression categoryEq(FileCategory category) {
         return category == null ? null : file.category.eq(category);
     }

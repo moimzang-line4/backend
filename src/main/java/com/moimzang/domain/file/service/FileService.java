@@ -170,18 +170,26 @@ public class FileService {
         }
 
         // size + 1건을 조회해서 그중 마지막 1건이 있으면 "다음 페이지가 있다"는 뜻이다
-        List<File> fetched = fileRepository.search(termId, category.toFileCategoryOrNull(), keyword, scheduleId, sort,
+        List<File> fetched = fileRepository.search(
+                termId, category.toFileCategoryOrNull(), keyword, scheduleId, sort,
                 cursorCreatedAt, cursorName, cursorId, limit + 1);
+
         boolean hasNext = fetched.size() > limit;
         List<File> page = hasNext ? fetched.subList(0, limit) : fetched;
 
         List<FileSummaryResponse> summaries = fileMapper.toSummaryResponses(page);
         String nextCursor = hasNext ? buildCursor(sort, page.get(page.size() - 1)) : null;
 
+        // 첫 페이지(cursor 없음)에서만 count 쿼리를 날린다 — 스크롤마다 다시 세지 않는다
+        Long totalCount = cursor == null
+                ? fileRepository.count(termId, category.toFileCategoryOrNull(), keyword, scheduleId)
+                : null;
+
         log.info("[문서함 목록 조회] 조회를 완료했습니다. termId = {}, count = {}, hasNext = {}", termId, summaries.size(), hasNext);
         return FileListResponse.builder()
                 .files(summaries)
                 .nextCursor(nextCursor)
+                .totalCount(totalCount)
                 .build();
     }
 
