@@ -14,8 +14,8 @@ import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
 import com.moimzang.domain.meeting.repository.MeetingAgendaRepository;
 import com.moimzang.domain.meeting.repository.MeetingRepository;
-import com.moimzang.domain.schedule.entity.ScheduleCategory;
-import com.moimzang.domain.schedule.repository.ScheduleCategoryRepository;
+import com.moimzang.domain.meeting.entity.MeetingCategory;
+import com.moimzang.domain.meeting.repository.MeetingCategoryRepository;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDate;
@@ -42,20 +42,20 @@ class MeetingServiceTest {
     private GroupTermRepository groupTermRepository;
 
     @Mock
-    private ScheduleCategoryRepository scheduleCategoryRepository;
+    private MeetingCategoryRepository meetingCategoryRepository;
 
     private MeetingService meetingService;
 
     @BeforeEach
     void setUp() {
         meetingService = new MeetingService(
-                meetingRepository, meetingAgendaRepository, groupTermRepository, scheduleCategoryRepository);
+                meetingRepository, meetingAgendaRepository, groupTermRepository, meetingCategoryRepository);
     }
 
     @Test
     void createMeeting_정상_요청이면_회의와_안건을_함께_생성한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
-        ScheduleCategory category = mock(ScheduleCategory.class);
+        MeetingCategory category = mock(MeetingCategory.class);
         MeetingCreateRequest request = MeetingCreateRequest.builder()
                 .title("가을 정기공연 운영진 회의")
                 .meetingDate(LocalDate.of(2026, 11, 7))
@@ -65,7 +65,7 @@ class MeetingServiceTest {
                 .build();
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(scheduleCategoryRepository.findById(1L)).willReturn(Optional.of(category));
+        given(meetingCategoryRepository.findById(1L)).willReturn(Optional.of(category));
         given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
             Meeting saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 100L);
@@ -111,7 +111,7 @@ class MeetingServiceTest {
                 .agendas(List.of("안건1"))
                 .build();
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(scheduleCategoryRepository.findById(999L)).willReturn(Optional.empty());
+        given(meetingCategoryRepository.findById(999L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
                 .isInstanceOf(CustomException.class)

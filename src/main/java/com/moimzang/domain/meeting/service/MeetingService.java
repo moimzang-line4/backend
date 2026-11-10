@@ -6,10 +6,10 @@ import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
+import com.moimzang.domain.meeting.entity.MeetingCategory;
 import com.moimzang.domain.meeting.repository.MeetingAgendaRepository;
+import com.moimzang.domain.meeting.repository.MeetingCategoryRepository;
 import com.moimzang.domain.meeting.repository.MeetingRepository;
-import com.moimzang.domain.schedule.entity.ScheduleCategory;
-import com.moimzang.domain.schedule.repository.ScheduleCategoryRepository;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.util.ArrayList;
@@ -28,7 +28,7 @@ public class MeetingService {
     private final MeetingRepository meetingRepository;
     private final MeetingAgendaRepository meetingAgendaRepository;
     private final GroupTermRepository groupTermRepository;
-    private final ScheduleCategoryRepository scheduleCategoryRepository;
+    private final MeetingCategoryRepository meetingCategoryRepository;
 
     @Transactional
     public MeetingCreateResponse createMeeting(Long termId, MeetingCreateRequest request) {
@@ -41,8 +41,9 @@ public class MeetingService {
                     return new CustomException(CommonErrorCode.NOT_FOUND);
                 });
 
-        // " + 새 카테고리 추가" 는 별도의 일정 -> 카테고리 추가 api로 운영
-        ScheduleCategory category = scheduleCategoryRepository.findById(request.getCategoryId())
+        // 회의 카테고리는 일정 카테고리와 별도 테이블(meeting_category)로 운영한다
+        // 회의 카테고리 생성은 별도 api
+        MeetingCategory category = meetingCategoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> {
                     log.warn("[회의 생성] 존재하지 않는 카테고리입니다. categoryId = {}", request.getCategoryId());
                     return new CustomException(CommonErrorCode.NOT_FOUND);

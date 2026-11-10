@@ -28,7 +28,7 @@ public class MeetingCreateRequest {
     @NotNull
     private LocalDate meetingDate;
 
-    @Schema(description = "카테고리 ID(일정 카테고리와 공유)", example = "1")
+    @Schema(description = "회의 카테고리 ID(일정 카테고리와 별도 운영)", example = "1")
     @NotNull
     private Long categoryId;
 
