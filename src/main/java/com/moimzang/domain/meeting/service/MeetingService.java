@@ -36,9 +36,17 @@ public class MeetingService {
                 termId, request.getAgendas().size());
 
         GroupTerm groupTerm = groupTermRepository.findById(termId)
-                .orElseThrow(() -> new CustomException(CommonErrorCode.NOT_FOUND));
+                .orElseThrow(() -> {
+                    log.warn("[회의 생성] 존재하지 않는 기수입니다. termId = {}", termId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        // " + 새 카테고리 추가" 는 별도의 일정 -> 카테고리 추가 api로 운영
         ScheduleCategory category = scheduleCategoryRepository.findById(request.getCategoryId())
-                .orElseThrow(() -> new CustomException(CommonErrorCode.NOT_FOUND));
+                .orElseThrow(() -> {
+                    log.warn("[회의 생성] 존재하지 않는 카테고리입니다. categoryId = {}", request.getCategoryId());
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
 
         Meeting meeting = meetingRepository.save(Meeting.create(
                 groupTerm, category, request.getTitle(), request.getMeetingDate(),
@@ -55,6 +63,7 @@ public class MeetingService {
 
         log.info("[회의 생성] 생성을 완료했습니다. meetingId = {}, agendaCount = {}",
                 meeting.getId(), agendaIds.size());
+
         return MeetingCreateResponse.builder()
                 .meetingId(meeting.getId())
                 .agendaIds(agendaIds)
