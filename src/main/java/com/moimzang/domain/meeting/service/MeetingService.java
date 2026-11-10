@@ -13,6 +13,7 @@ import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingProgressResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryResponse;
@@ -350,5 +351,37 @@ public class MeetingService {
         meetingAgendaRepository.delete(agenda);
 
         log.info("[안건 삭제] 삭제를 완료했습니다. agendaId = {}", agendaId);
+    }
+
+    // 회의를 종료한다 — 안건이 전부 완료되지 않았어도 허용한다
+    @Transactional
+    public MeetingEndResponse endMeeting(Long meetingId) {
+        log.info("[회의 종료] 종료를 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 종료] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        if (meeting.isEnded()) {
+            log.warn("[회의 종료] 이미 종료된 회의입니다. meetingId = {}", meetingId);
+            throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+        }
+
+        meeting.end();
+
+        long doneAgendaCount = meetingAgendaRepository.countByMeetingIdAndStatus(meetingId, AgendaStatus.COMPLETED);
+        long totalAgendaCount = meetingAgendaRepository.countByMeetingId(meetingId);
+
+        log.info("[회의 종료] 종료를 완료했습니다. meetingId = {}, doneAgendaCount = {}, totalAgendaCount = {}",
+                meetingId, doneAgendaCount, totalAgendaCount);
+        return MeetingEndResponse.builder()
+                .meetingId(meeting.getId())
+                .status(meeting.getStatus())
+                .endedAt(meeting.getEndedAt())
+                .doneAgendaCount(doneAgendaCount)
+                .totalAgendaCount(totalAgendaCount)
+                .build();
     }
 }

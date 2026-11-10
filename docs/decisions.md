@@ -204,3 +204,9 @@ meeting·file 도메인은 코드까지 전부 이 형식으로 바꿨다. 다�
 코드도 이 이름을 그대로 따르면 된다. `CommonErrorCode`(`COMMON_400`/`COMMON_404` 등)는
 대상이 아니다 — 이미 Java enum 상수 이름 자체가 `BAD_REQUEST`/`NOT_FOUND`처럼 서술적이고,
 `COMMON_xxx`는 번호가 아니라 상태코드 그 자체라 바꿀 이유가 없다.
+
+## 23. 회의 종료(API-059)는 안건이 전부 완료되지 않아도 허용한다
+`doneAgendaCount`/`totalAgendaCount`를 응답에 따로 내려주는 것 자체가 둘이 다를 수 있다는
+전제다 — 미완료 안건이 남아있어도 종료를 막지 않는다(사용자 결정, 2026-11-11). 안건별
+`content`/`discussionNote`/`decision`은 원본 그대로 보존되므로, 나중에 "회의 정리" 화면에서
+미완료 안건의 내용도 그대로 확인할 수 있다.

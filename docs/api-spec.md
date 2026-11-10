@@ -225,10 +225,12 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ### 회의 / 안건 (MeetingErrorCode, AgendaErrorCode) — API-051~061, 056~058
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| MEETING_409_ALREADY_ENDED | 409 | 이미 종료된 회의입니다. | API-056, API-057, API-058 |
+| MEETING_409_ALREADY_ENDED | 409 | 이미 종료된 회의입니다. | API-054, API-056, API-057, API-058, API-059 |
 | MEETING_502_SUMMARY_FAILED | 502 | AI 요약에 실패했습니다. 다시 시도해 주세요. | API-060 |
 | MEETING_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 회의 카테고리입니다. | API-051 |
 | MEETING_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-051, API-052, API-081, API-082 |
+| MEETING_404_NOT_FOUND | 404 | 존재하지 않는 회의입니다. | API-053, API-054, API-055, API-056, API-059 |
+| AGENDA_404_NOT_FOUND | 404 | 존재하지 않는 안건입니다. | API-057, API-058 |
 | AGENDA_409_AT_LEAST_ONE_REQUIRED | 409 | 안건이 1개만 남아 삭제할 수 없습니다. | API-058 |
 
 ### 예산/장부 (LedgerErrorCode) — API-069~075
@@ -800,13 +802,13 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 **Request**: title, meetingDate, categoryId, attendees, listSummary
 **Response data**: meetingId
-**에러**: COMMON_400, COMMON_404, MEETING_409_ALREADY_ENDED
+**에러**: COMMON_400, MEETING_404_NOT_FOUND, MEETING_404_CATEGORY_NOT_FOUND, MEETING_409_ALREADY_ENDED
 
 ---
 
 #### API-055 · DELETE /api/meetings/{meetingId} · 회의 삭제
 인증: 불필요. 회의 상태(IN_PROGRESS/COMPLETED)와 무관하게 삭제를 허용한다(decisions #15).
-**에러**: COMMON_404
+**에러**: MEETING_404_NOT_FOUND
 
 ---
 
@@ -815,7 +817,7 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 **Request**: content(1~100자)
 **Response data**: agendaId, orderNo
-**에러**: COMMON_400, COMMON_404, MEETING_409_ALREADY_ENDED
+**에러**: COMMON_400, MEETING_404_NOT_FOUND, MEETING_409_ALREADY_ENDED
 
 ---
 
@@ -827,17 +829,18 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 유지한다.
 
 **Response data**: agendaId, status, progress
-**에러**: COMMON_404, MEETING_409_ALREADY_ENDED
+**에러**: AGENDA_404_NOT_FOUND, MEETING_409_ALREADY_ENDED
 
 #### API-058 · DELETE /api/agendas/{agendaId} · 안건 삭제
 인증: 불필요. 삭제 후 남은 안건들의 진행률 재계산. 안건 1개만 남은 회의는 삭제 불가.
-**에러**: COMMON_404, MEETING_409_ALREADY_ENDED, AGENDA_409_AT_LEAST_ONE_REQUIRED
+**에러**: AGENDA_404_NOT_FOUND, MEETING_409_ALREADY_ENDED, AGENDA_409_AT_LEAST_ONE_REQUIRED
 
 ---
 
 #### API-059 · POST /api/meetings/{meetingId}/end · 회의 종료
-인증: 불필요. **Response data**: meetingId, status, endedAt, doneAgendaCount, totalAgendaCount
-**에러**: COMMON_404, MEETING_409_ALREADY_ENDED(이미 종료)
+인증: 불필요. 안건이 전부 완료되지 않았어도 종료를 허용한다.
+**Response data**: meetingId, status, endedAt, doneAgendaCount, totalAgendaCount
+**에러**: MEETING_404_NOT_FOUND, MEETING_409_ALREADY_ENDED(이미 종료)
 
 ---
 

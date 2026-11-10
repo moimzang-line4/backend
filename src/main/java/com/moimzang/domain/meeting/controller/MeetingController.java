@@ -11,6 +11,7 @@ import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
@@ -134,5 +135,13 @@ public class MeetingController implements MeetingApi {
     public ResponseEntity<BaseResponse<Void>> deleteAgenda(@PathVariable Long agendaId) {
         meetingService.deleteAgenda(agendaId);
         return ResponseEntity.ok(BaseResponse.success());
+    }
+
+    // 회의를 종료한다
+    @Override
+    @PostMapping("/api/meetings/{meetingId}/end")
+    public ResponseEntity<BaseResponse<MeetingEndResponse>> endMeeting(@PathVariable Long meetingId) {
+        MeetingEndResponse response = meetingService.endMeeting(meetingId);
+        return ResponseEntity.ok(BaseResponse.success(response));
     }
 }

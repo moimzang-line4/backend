@@ -11,6 +11,7 @@ import com.moimzang.domain.meeting.dto.response.MeetingCategoryListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
@@ -138,4 +139,14 @@ public interface MeetingApi {
                      content = @Content(schema = @Schema(implementation = BaseResponse.class)))
     })
     ResponseEntity<BaseResponse<Void>> deleteAgenda(@Parameter(description = "안건 ID", example = "3") Long agendaId);
+
+    @Operation(summary = "회의 종료", description = "회의를 종료한다. 안건이 전부 완료되지 않았어도 허용한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "종료 성공"),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "MEETING_409_ALREADY_ENDED(이미 종료)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingEndResponse>> endMeeting(@Parameter(description = "회의 ID", example = "1") Long meetingId);
 }

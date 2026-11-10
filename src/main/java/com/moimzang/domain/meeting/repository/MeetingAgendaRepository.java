@@ -1,6 +1,7 @@
 package com.moimzang.domain.meeting.repository;
 
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
+import com.moimzang.domain.meeting.enums.AgendaStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,4 +20,7 @@ public interface MeetingAgendaRepository extends JpaRepository<MeetingAgenda, Lo
 
     // 회의의 전체 안건 수 — "안건 1개만 남으면 삭제 불가" 검증용
     long countByMeetingId(Long meetingId);
+
+    // 회의 종료 응답의 doneAgendaCount 계산용 — 상태별 안건 수
+    long countByMeetingIdAndStatus(Long meetingId, AgendaStatus status);
 }
