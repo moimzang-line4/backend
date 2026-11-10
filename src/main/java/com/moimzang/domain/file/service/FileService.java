@@ -21,9 +21,10 @@ import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.global.cursor.CursorCodec;
+import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
-import com.moimzang.global.response.CursorPageConstants;
 import com.moimzang.global.storage.FileStorage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -155,12 +156,12 @@ public class FileService {
         Long cursorId = null;
         if (cursor != null) {
             try {
-                FileCursor decoded = FileCursor.decode(cursor);
-                cursorId = decoded.id();
+                CursorCodec decoded = CursorCodec.decode(cursor);
+                cursorId = decoded.getId();
                 if (sort == FileSortOption.NAME) {
-                    cursorName = decoded.sortValue();
+                    cursorName = decoded.getSortValue();
                 } else {
-                    cursorCreatedAt = Instant.ofEpochMilli(Long.parseLong(decoded.sortValue()))
+                    cursorCreatedAt = Instant.ofEpochMilli(Long.parseLong(decoded.getSortValue()))
                             .atZone(ZoneId.systemDefault()).toLocalDateTime();
                 }
             } catch (RuntimeException e) {
@@ -197,7 +198,7 @@ public class FileService {
         String sortValue = sort == FileSortOption.NAME
                 ? last.getName()
                 : String.valueOf(last.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
-        return FileCursor.encode(sortValue, last.getId());
+        return CursorCodec.encode(sortValue, last.getId());
     }
 
     public FileDownloadUrlResponse getDownloadUrl(Long fileId, FileDownloadMode mode) {

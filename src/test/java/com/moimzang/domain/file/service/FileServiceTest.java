@@ -26,6 +26,7 @@ import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import com.moimzang.global.storage.FileStorage;
@@ -221,7 +222,7 @@ class FileServiceTest {
     @Test
     void listFiles_cursor가_있으면_totalCount를_조회하지_않는다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
-        String cursor = FileCursor.encode(String.valueOf(System.currentTimeMillis()), 1L);
+        String cursor = CursorCodec.encode(String.valueOf(System.currentTimeMillis()), 1L);
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(fileRepository.search(any(), any(), any(), any(), any(), any(), any(), any(), anyInt()))
