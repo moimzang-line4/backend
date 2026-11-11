@@ -6,6 +6,7 @@ import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingSummaryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
@@ -16,7 +17,9 @@ import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingProgressResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingSummaryGenerateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingSummaryUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
@@ -28,6 +31,8 @@ import com.moimzang.domain.meeting.mapper.MeetingMapper;
 import com.moimzang.domain.meeting.repository.MeetingAgendaRepository;
 import com.moimzang.domain.meeting.repository.MeetingCategoryRepository;
 import com.moimzang.domain.meeting.repository.MeetingRepository;
+import com.moimzang.global.ai.AiClient;
+import com.moimzang.global.ai.AiClientException;
 import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CustomException;
@@ -52,6 +57,8 @@ public class MeetingService {
     private final GroupTermRepository groupTermRepository;
     private final MeetingCategoryRepository meetingCategoryRepository;
     private final MeetingMapper meetingMapper;
+    private final AiClient aiClient;
+    private final MeetingSummaryPromptBuilder summaryPromptBuilder;
 
     // 회의와 안건을 한 번에 생성한다
     @Transactional
@@ -316,6 +323,16 @@ public class MeetingService {
             throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
         }
 
+        // 완료된 안건을 다른 상태로 되돌리는 요청만 막는다 — status 없이 내용만 고치는 건 허용
+        if (agenda.getStatus() == AgendaStatus.COMPLETED
+                && request.getStatus() != null
+                && request.getStatus() != AgendaStatus.COMPLETED) {
+            log.warn("[안건 내용 저장] 이미 완료된 안건의 상태를 되돌리려 했습니다. agendaId = {}, requestedStatus = {}",
+                    agendaId, request.getStatus());
+
+            throw new CustomException(MeetingErrorCode.AGENDA_409_ALREADY_COMPLETED);
+        }
+
         agenda.updateContent(request.getContent(), request.getDiscussionNote(), request.getDecision(), request.getStatus());
 
         List<MeetingAgenda> agendas = meetingAgendaRepository.findOrderedAgendas(agenda.getMeeting().getId());
@@ -384,6 +401,59 @@ public class MeetingService {
                 .endedAt(meeting.getEndedAt())
                 .doneAgendaCount(doneAgendaCount)
                 .totalAgendaCount(totalAgendaCount)
+                .build();
+    }
+
+    // AI로 회의 전체를 요약한다 — 원본 안건(content·discussionNote·decision)은 항상 보존.
+    // 회의 종료 후 화면에서만 쓰는 동작이라 종료 여부를 따로 검사하지 않는다.
+    // "다시 요약하기"도 이 메서드를 그대로 재호출한다
+    @Transactional
+    public MeetingSummaryGenerateResponse generateSummary(Long meetingId) {
+        log.info("[AI 요약 생성] 생성을 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[AI 요약 생성] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        List<MeetingAgenda> agendas = meetingAgendaRepository.findOrderedAgendas(meetingId);
+        String prompt = summaryPromptBuilder.build(meeting, agendas);
+
+        String summaryContent;
+        try {
+            summaryContent = aiClient.generateContent(prompt);
+        } catch (AiClientException e) {
+            log.warn("[AI 요약 생성] AI 호출에 실패했습니다. meetingId = {}", meetingId, e);
+            throw new CustomException(MeetingErrorCode.MEETING_502_SUMMARY_FAILED);
+        }
+
+        meeting.applySummary(summaryContent);
+
+        log.info("[AI 요약 생성] 생성을 완료했습니다. meetingId = {}, agendaCount = {}", meetingId, agendas.size());
+        return MeetingSummaryGenerateResponse.builder()
+                .summarizedAgendaCount(agendas.size())
+                .summaryContent(meeting.getSummaryContent())
+                .summaryGeneratedAt(meeting.getSummaryGeneratedAt())
+                .build();
+    }
+
+    // 사용자가 직접 고친 요약을 저장한다 — AI 재호출 없이 받은 텍스트로 그대로 덮어쓴다
+    @Transactional
+    public MeetingSummaryUpdateResponse updateSummary(Long meetingId, MeetingSummaryUpdateRequest request) {
+        log.info("[회의록 저장] 저장을 시작합니다. meetingId = {}", meetingId);
+
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> {
+                    log.warn("[회의록 저장] 존재하지 않는 회의입니다. meetingId = {}", meetingId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
+                });
+
+        meeting.updateSummaryContent(request.getSummaryContent());
+
+        log.info("[회의록 저장] 저장을 완료했습니다. meetingId = {}", meetingId);
+        return MeetingSummaryUpdateResponse.builder()
+                .meetingId(meeting.getId())
                 .build();
     }
 }

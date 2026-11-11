@@ -123,4 +123,15 @@ public class Meeting extends BaseEntity {
         this.status = MeetingStatus.COMPLETED;
         this.endedAt = LocalDateTime.now();
     }
+
+    // AI가 생성한 요약으로 덮어쓴다 — "다시 요약하기"도 이 메서드를 그대로 쓴다
+    public void applySummary(String summaryContent) {
+        this.summaryContent = summaryContent;
+        this.summaryGeneratedAt = LocalDateTime.now();
+    }
+
+    // 사용자가 요약을 직접 고친 내용을 저장한다 — 생성 시각은 그대로 둔다
+    public void updateSummaryContent(String summaryContent) {
+        this.summaryContent = summaryContent;
+    }
 }

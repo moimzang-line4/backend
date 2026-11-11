@@ -4,6 +4,7 @@ import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingSummaryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
@@ -13,6 +14,8 @@ import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingSummaryGenerateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingSummaryUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
 import com.moimzang.domain.meeting.service.MeetingService;
@@ -142,6 +145,25 @@ public class MeetingController implements MeetingApi {
     @PostMapping("/api/meetings/{meetingId}/end")
     public ResponseEntity<BaseResponse<MeetingEndResponse>> endMeeting(@PathVariable Long meetingId) {
         MeetingEndResponse response = meetingService.endMeeting(meetingId);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // AI로 회의 전체를 요약한다("다시 요약하기"도 동일 호출)
+    @Override
+    @PostMapping("/api/meetings/{meetingId}/summary")
+    public ResponseEntity<BaseResponse<MeetingSummaryGenerateResponse>> generateSummary(@PathVariable Long meetingId) {
+        MeetingSummaryGenerateResponse response = meetingService.generateSummary(meetingId);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 사용자가 직접 고친 요약을 저장한다
+    @Override
+    @PatchMapping("/api/meetings/{meetingId}/summary")
+    public ResponseEntity<BaseResponse<MeetingSummaryUpdateResponse>> updateSummary(
+            @PathVariable Long meetingId,
+            @Valid @RequestBody MeetingSummaryUpdateRequest request
+    ) {
+        MeetingSummaryUpdateResponse response = meetingService.updateSummary(meetingId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }
