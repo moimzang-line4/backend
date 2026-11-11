@@ -323,6 +323,16 @@ public class MeetingService {
             throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
         }
 
+        // 완료된 안건을 다른 상태로 되돌리는 요청만 막는다 — status 없이 내용만 고치는 건 허용
+        if (agenda.getStatus() == AgendaStatus.COMPLETED
+                && request.getStatus() != null
+                && request.getStatus() != AgendaStatus.COMPLETED) {
+            log.warn("[안건 내용 저장] 이미 완료된 안건의 상태를 되돌리려 했습니다. agendaId = {}, requestedStatus = {}",
+                    agendaId, request.getStatus());
+
+            throw new CustomException(MeetingErrorCode.AGENDA_409_ALREADY_COMPLETED);
+        }
+
         agenda.updateContent(request.getContent(), request.getDiscussionNote(), request.getDecision(), request.getStatus());
 
         List<MeetingAgenda> agendas = meetingAgendaRepository.findOrderedAgendas(agenda.getMeeting().getId());

@@ -232,6 +232,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | MEETING_404_NOT_FOUND | 404 | 존재하지 않는 회의입니다. | API-053, API-054, API-055, API-056, API-059 |
 | AGENDA_404_NOT_FOUND | 404 | 존재하지 않는 안건입니다. | API-057, API-058 |
 | AGENDA_409_AT_LEAST_ONE_REQUIRED | 409 | 안건이 1개만 남아 삭제할 수 없습니다. | API-058 |
+| AGENDA_409_ALREADY_COMPLETED | 409 | 이미 완료된 안건은 상태를 되돌릴 수 없습니다. | API-057 |
 
 ### 예산/장부 (LedgerErrorCode) — API-069~075
 | 코드 | HTTP | 메시지 | 발생 API |
@@ -827,10 +828,11 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 **Logics**: 화면의 '다음 안건' 버튼은 이 API를 status='COMPLETED'로 호출하는 것이다. '회의
 중단하기'는 같은 API를 status 없이(또는 바꾸지 않고) 호출해 내용만 저장하며 회의는 '진행중'을
-유지한다.
+유지한다. 이미 COMPLETED인 안건을 다른 상태로 되돌리는 요청(예: status=PENDING)은 거부한다 —
+status 없이 내용(content/discussionNote/decision)만 고치는 건 완료된 안건이어도 허용한다.
 
 **Response data**: agendaId, status, progress
-**에러**: AGENDA_404_NOT_FOUND, MEETING_409_ALREADY_ENDED
+**에러**: AGENDA_404_NOT_FOUND, MEETING_409_ALREADY_ENDED, AGENDA_409_ALREADY_COMPLETED
 
 #### API-058 · DELETE /api/agendas/{agendaId} · 안건 삭제
 인증: 불필요. 삭제 후 남은 안건들의 진행률 재계산. 안건 1개만 남은 회의는 삭제 불가.

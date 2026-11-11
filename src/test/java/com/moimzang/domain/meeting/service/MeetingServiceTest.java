@@ -616,6 +616,73 @@ class MeetingServiceTest {
     }
 
     @Test
+    void updateAgendaContent_완료된_안건을_다른_상태로_되돌리려_하면_AGENDA_409_ALREADY_COMPLETED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        ReflectionTestUtils.setField(agenda, "status", AgendaStatus.COMPLETED);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+
+        MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
+                .status(AgendaStatus.PENDING)
+                .build();
+
+        assertThatThrownBy(() -> meetingService.updateAgendaContent(3L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.AGENDA_409_ALREADY_COMPLETED);
+    }
+
+    @Test
+    void updateAgendaContent_완료된_안건이어도_status_없이_내용만_고치는건_허용한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        ReflectionTestUtils.setField(agenda, "status", AgendaStatus.COMPLETED);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.findOrderedAgendas(10L)).willReturn(List.of(agenda));
+
+        MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
+                .decision("결정 사항 보완")
+                .build();
+
+        MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(3L, request);
+
+        assertThat(response.getStatus()).isEqualTo(AgendaStatus.COMPLETED);
+        assertThat(agenda.getDecision()).isEqualTo("결정 사항 보완");
+    }
+
+    @Test
+    void updateAgendaContent_완료된_안건에_status_COMPLETED를_다시_보내도_허용한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+        ReflectionTestUtils.setField(agenda, "status", AgendaStatus.COMPLETED);
+        given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
+        given(meetingAgendaRepository.findOrderedAgendas(10L)).willReturn(List.of(agenda));
+
+        MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
+                .status(AgendaStatus.COMPLETED)
+                .build();
+
+        MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(3L, request);
+
+        assertThat(response.getStatus()).isEqualTo(AgendaStatus.COMPLETED);
+    }
+
+    @Test
     void deleteAgenda_정상_요청이면_삭제한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
