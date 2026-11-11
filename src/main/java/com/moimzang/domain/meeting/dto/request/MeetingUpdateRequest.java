@@ -1,6 +1,7 @@
 package com.moimzang.domain.meeting.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import lombok.AccessLevel;
@@ -18,6 +19,7 @@ public class MeetingUpdateRequest {
 
     @Schema(description = "회의 제목(선택)", example = "가을 정기공연 운영진 회의")
     @Size(max = 100)
+    @Pattern(regexp = "(?s).*\\S.*", message = "공백일 수 없습니다")
     private String title;
 
     @Schema(description = "회의 날짜(선택)", example = "2026-11-07")
