@@ -850,10 +850,13 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 원본(meeting_agenda)은 항상 보존. "다시 요약하기"도 이 API 재호출.
 
 **Response data**: summarizedAgendaCount, summaryContent, summaryGeneratedAt
-**에러**: COMMON_404, MEETING_502_SUMMARY_FAILED(502)
+**에러**: MEETING_404_NOT_FOUND, MEETING_502_SUMMARY_FAILED(502)
+
+> 원문엔 404가 COMMON_404로 적혀 있었으나, meeting 도메인 다른 API와의 일관성을 위해
+> MEETING_404_NOT_FOUND로 구현했다(decisions #25).
 
 #### API-061 · PATCH /api/meetings/{meetingId}/summary · 회의록 저장(요약 수정)
-인증: 불필요. **Request**: summaryContent. **Response data**: meetingId. **에러**: COMMON_404
+인증: 불필요. **Request**: summaryContent. **Response data**: meetingId. **에러**: MEETING_404_NOT_FOUND
 
 ### 문서함
 
@@ -1066,8 +1069,10 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 14. API-014 자동 매칭 알고리즘 상세 기준
 15. API-007 일정 수정 시 운영 공간 토글(`hasOperationSpace`) 변경 허용 여부 — 보류(decisions #12)
 16. API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지
-17. AI 연동 벤더/모델 — 영수증 인식(API-036), 회의 요약(API-060), AI 채팅 응답(API-078) 전부
-    미지정. 현재 Gemini 무료 티어가 유력 후보로 검토 중이나 확정은 아니다.
+17. ~~AI 연동 벤더/모델 — 영수증 인식(API-036), 회의 요약(API-060), AI 채팅 응답(API-078)~~ —
+    **해소됨(2026-11-12)**: meeting 쪽은 벤더 하나로 확정하지 않고 Gemini/OpenAI를
+    `app.ai.provider` 설정값으로 전환하는 구조로 구현(decisions #26). 영수증 인식·AI 채팅이
+    같은 구조를 재사용할지는 그 도메인 구현 시점에 별도 결정.
 18. API-051/052/053/054 `listSummary`(회의 목록 카드 한 줄 요약) 입력 경로 — 사용자가 직접
     입력하는지, AI 요약(API-060/061)에서 자동 생성하는지 미정. 필드·API는 이미 있고 입력
     UI만 아직 없다(2026-11-11, 피그마 회의 만들기 화면 재확인으로 발견) — 17번(AI 벤더)

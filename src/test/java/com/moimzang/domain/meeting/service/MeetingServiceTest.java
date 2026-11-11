@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 
 import com.moimzang.domain.group.entity.GroupTerm;
@@ -13,6 +14,7 @@ import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingSummaryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
@@ -22,6 +24,8 @@ import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingSummaryGenerateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingSummaryUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
@@ -33,6 +37,8 @@ import com.moimzang.domain.meeting.repository.MeetingRepository;
 import com.moimzang.domain.meeting.entity.MeetingCategory;
 import com.moimzang.domain.meeting.exception.MeetingErrorCode;
 import com.moimzang.domain.meeting.repository.MeetingCategoryRepository;
+import com.moimzang.global.ai.AiClient;
+import com.moimzang.global.ai.AiClientException;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDate;
 import java.util.List;
@@ -64,15 +70,22 @@ class MeetingServiceTest {
     @Mock
     private MeetingCategoryRepository meetingCategoryRepository;
 
+    // 외부 연동이라 mock한다
+    @Mock
+    private AiClient aiClient;
+
     // mapper는 mock하지 않는다 — 매핑 누락을 테스트에서도 실제 생성 코드로 검증한다
     private final MeetingMapper meetingMapper = Mappers.getMapper(MeetingMapper.class);
+
+    // 순수 계산 로직이라 mock하지 않는다
+    private final MeetingSummaryPromptBuilder summaryPromptBuilder = new MeetingSummaryPromptBuilder();
 
     private MeetingService meetingService;
 
     @BeforeEach
     void setUp() {
-        meetingService = new MeetingService(
-                meetingRepository, meetingAgendaRepository, groupTermRepository, meetingCategoryRepository, meetingMapper);
+        meetingService = new MeetingService(meetingRepository, meetingAgendaRepository, groupTermRepository,
+                meetingCategoryRepository, meetingMapper, aiClient, summaryPromptBuilder);
     }
 
     @Test
@@ -708,5 +721,88 @@ class MeetingServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
+    }
+
+    @Test
+    void generateSummary_정상_요청이면_AI_요약을_저장하고_반환한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "가을 정기공연 운영진 회의", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "관객 참여 이벤트", 0);
+        ReflectionTestUtils.setField(agenda, "decision", "경품은 홍보팀이 준비");
+        given(meetingAgendaRepository.findOrderedAgendas(10L)).willReturn(List.of(agenda));
+
+        given(aiClient.generateContent(any())).willReturn("가을 정기공연 준비를 위해 관객 참여 이벤트를 논의했어요.");
+
+        MeetingSummaryGenerateResponse response = meetingService.generateSummary(10L);
+
+        assertThat(response.getSummarizedAgendaCount()).isEqualTo(1);
+        assertThat(response.getSummaryContent()).isEqualTo("가을 정기공연 준비를 위해 관객 참여 이벤트를 논의했어요.");
+        assertThat(response.getSummaryGeneratedAt()).isNotNull();
+        assertThat(meeting.getSummaryContent()).isEqualTo("가을 정기공연 준비를 위해 관객 참여 이벤트를 논의했어요.");
+    }
+
+    @Test
+    void generateSummary_회의가_없으면_MEETING_404_NOT_FOUND를_던진다() {
+        given(meetingRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.generateSummary(999L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_NOT_FOUND);
+    }
+
+    @Test
+    void generateSummary_AI_호출이_실패하면_MEETING_502_SUMMARY_FAILED를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+        given(meetingAgendaRepository.findOrderedAgendas(10L))
+                .willReturn(List.of(MeetingAgenda.create(meeting, "안건1", 0)));
+
+        willThrow(new AiClientException("AI 호출 실패")).given(aiClient).generateContent(any());
+
+        assertThatThrownBy(() -> meetingService.generateSummary(10L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_502_SUMMARY_FAILED);
+    }
+
+    @Test
+    void updateSummary_정상_요청이면_사용자가_고친_내용을_그대로_저장한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        meeting.applySummary("AI가 생성한 원본 요약");
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        MeetingSummaryUpdateRequest request = MeetingSummaryUpdateRequest.builder()
+                .summaryContent("사용자가 고친 요약")
+                .build();
+
+        MeetingSummaryUpdateResponse response = meetingService.updateSummary(10L, request);
+
+        assertThat(response.getMeetingId()).isEqualTo(10L);
+        assertThat(meeting.getSummaryContent()).isEqualTo("사용자가 고친 요약");
+    }
+
+    @Test
+    void updateSummary_회의가_없으면_MEETING_404_NOT_FOUND를_던진다() {
+        given(meetingRepository.findById(999L)).willReturn(Optional.empty());
+
+        MeetingSummaryUpdateRequest request = MeetingSummaryUpdateRequest.builder()
+                .summaryContent("요약")
+                .build();
+
+        assertThatThrownBy(() -> meetingService.updateSummary(999L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_NOT_FOUND);
     }
 }

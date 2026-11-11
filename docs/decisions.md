@@ -223,3 +223,54 @@ meeting·file 도메인은 코드까지 전부 이 형식으로 바꿨다. 다�
 `status`와 동일한 부분 수정 규칙(보낸 필드만 반영)을 따른다. 안건 추가·삭제(API-056/058)와
 회의 삭제(API-055)도 전부 이 "회의 수정" 화면에서 호출되는 것으로 확인됐고, 이미 구현돼
 있어 추가 API 변경은 필요 없다.
+
+## 25. AI 요약(API-060/061) — 벤더는 Gemini, 에러코드는 도메인 컨벤션을 따른다
+**(2026-11-12 갱신: "벤더는 Gemini로 확정"은 더 이상 유효하지 않다 — #26 참고. 모델·
+에러코드·종료체크·프롬프트 내용에 대한 아래 결정 자체는 그대로 유효하다.)**
+
+AI 벤더는 Gemini로 확정(2026-11-11, 무료 티어 키 발급 완료). 모델은 `gemini-3.8-flash`
+(preview가 아닌 가장 최신 stable flash — 무료 티어는 Flash/Flash-Lite/Gemma 계열만 해당하고
+Pro는 2026-04-01부로 빠졌다)로 고정하되, `GEMINI_MODEL` 환경변수로 교체 가능하게 둔다.
+
+`api-spec.md` 원문은 API-060/061의 404 에러를 "COMMON_404"로 적어뒀지만, meeting 도메인의
+다른 모든 API(API-053~059)가 `MEETING_404_NOT_FOUND`를 쓰는 것과의 일관성을 위해
+`MEETING_404_NOT_FOUND`로 구현한다 — `COMMON_404`는 오타/누락으로 보고 기존 도메인 컨벤션을
+따르기로 했다(사용자 결정, 2026-11-11).
+
+API-060/061은 "회의 종료 후" 화면(`64:1616`→`64:1789`)에서만 쓰이므로, 다른 meeting API와
+달리 `MEETING_409_ALREADY_ENDED` 체크를 하지 않는다 — 오히려 종료된 회의에서 호출되는 게
+정상 흐름이다. 프롬프트에는 안건의 `content`·`discussionNote`·`decision`만 담고 참석자 등
+개인정보는 포함하지 않는다. AI 호출 실패는 재시도 없이 바로 `MEETING_502_SUMMARY_FAILED`를
+반환하고, "다시 요약하기"는 사용자가 버튼을 다시 눌러 API-060을 재호출하는 것으로 처리한다.
+
+## 26. AI 벤더는 하나로 고정하지 않는다 — Gemini/OpenAI를 `app.ai.provider`로 전환
+#25에서 "Gemini로 확정"했지만, 실제 구현 뒤 무료 티어가 "This model is currently
+experiencing high demand" 503과 read timeout을 반복적으로 반환하는 걸 세션 내내(2026-11-11~
+12) 실측으로 확인했다. 마침 사용자가 OpenAI 계정에 남은 크레딧이 있어, "벤더 하나를 다시
+고르는" 대신 **둘 다 코드에 유지하고 설정값 하나로 전환**하는 쪽으로 바꿨다(사용자 결정,
+2026-11-12) — Gemini가 나중에 안정화되면 다시 돌아올 수 있게.
+
+구조는 이 프로젝트에 이미 있던 `FileStorage`(local/s3) 패턴을 그대로 따른다
+(`global/storage/local/LocalFileStorage.java`, `global/storage/s3/S3FileStorage.java`):
+`global/ai/AiClient`(인터페이스) + `global/ai/gemini/GeminiClient`·`global/ai/openai/OpenAiClient`
+(각각 `@ConditionalOnProperty(name = "app.ai.provider", havingValue = "gemini|openai")`)
++ `AiClientException`(벤더 무관 공용 예외). `MeetingService`는 `AiClient` 인터페이스에만
+의존하므로 벤더가 바뀌어도 도메인 코드는 손대지 않는다.
+
+`GeminiProperties`/`OpenAiProperties`는 `app.ai.provider`와 무관하게 둘 다 항상 바인딩되므로
+(`@ConfigurationPropertiesScan`이 전부 스캔), 여기에 `@NotBlank` 하드 검증을 걸면 **선택
+안 한 벤더의 키가 없어도 기동이 막히는** 문제가 생긴다. 그래서 Properties 레코드 자체의
+검증은 없애고, 각 Client의 생성자에서 자기 키만 수동으로 검사해 하드 실패시킨다 —
+`@ConditionalOnProperty`가 걸려 있어 선택 안 된 Client는 빈 자체가 안 만들어지므로,
+결과적으로 "선택된 벤더의 키만" 검증된다. 팀원이 자기가 안 쓰는 벤더의 키를 안 넣어도
+로컬 실행에 지장이 없다.
+
+모델은 OpenAI 쪽을 `gpt-4o-mini`로 기본값을 뒀다(환경변수 `OPENAI_MODEL`로 교체 가능).
+OpenAI는 Chat Completions API(`POST {baseUrl}/v1/chat/completions`)를 쓰고, 키는 Gemini와
+동일하게 쿼리파라미터가 아니라 `Authorization: Bearer` 헤더로 보낸다(로그에 키 노출 방지,
+#25의 교훈을 그대로 적용).
+
+**이 변경으로 TBD #17(AI 연동 벤더/모델 미정)을 해소 처리한다** — "벤더 하나를 확정"하는
+대신 "전환 가능한 구조로 구현하고 설정값으로 결정"하는 것으로 결론 지었다. 단 영수증 인식
+(API-036)·AI 채팅(API-078)이 같은 `AiClient`를 재사용할지는 그 도메인 구현 시점에 별도로
+정한다.

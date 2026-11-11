@@ -15,7 +15,8 @@ public enum MeetingErrorCode implements ErrorCode {
     MEETING_404_NOT_FOUND(HttpStatus.NOT_FOUND, "MEETING_404_NOT_FOUND", "존재하지 않는 회의입니다."),
     MEETING_409_ALREADY_ENDED(HttpStatus.CONFLICT, "MEETING_409_ALREADY_ENDED", "이미 종료된 회의입니다."),
     AGENDA_404_NOT_FOUND(HttpStatus.NOT_FOUND, "AGENDA_404_NOT_FOUND", "존재하지 않는 안건입니다."),
-    AGENDA_409_AT_LEAST_ONE_REQUIRED(HttpStatus.CONFLICT, "AGENDA_409_AT_LEAST_ONE_REQUIRED", "안건이 1개만 남아 삭제할 수 없습니다.");
+    AGENDA_409_AT_LEAST_ONE_REQUIRED(HttpStatus.CONFLICT, "AGENDA_409_AT_LEAST_ONE_REQUIRED", "안건이 1개만 남아 삭제할 수 없습니다."),
+    MEETING_502_SUMMARY_FAILED(HttpStatus.BAD_GATEWAY, "MEETING_502_SUMMARY_FAILED", "AI 요약에 실패했습니다. 다시 시도해 주세요.");
 
     private final HttpStatus status;
     private final String code;

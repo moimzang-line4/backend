@@ -4,6 +4,7 @@ import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingSummaryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaUpdateResponse;
@@ -13,6 +14,8 @@ import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingSummaryGenerateResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingSummaryUpdateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingUpdateResponse;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
 import com.moimzang.global.response.BaseResponse;
@@ -150,4 +153,27 @@ public interface MeetingApi {
                      content = @Content(schema = @Schema(implementation = BaseResponse.class)))
     })
     ResponseEntity<BaseResponse<MeetingEndResponse>> endMeeting(@Parameter(description = "회의 ID", example = "1") Long meetingId);
+
+    @Operation(summary = "AI 요약 생성", description = "안건의 논의 내용·결정 사항을 외부 AI로 종합 요약해 summaryContent를 덮어쓴다. "
+            + "원본 안건은 항상 보존된다. '다시 요약하기'도 이 API를 그대로 재호출한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "생성 성공"),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "502", description = "MEETING_502_SUMMARY_FAILED",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingSummaryGenerateResponse>> generateSummary(
+            @Parameter(description = "회의 ID", example = "1") Long meetingId);
+
+    @Operation(summary = "회의록 저장(요약 수정)", description = "사용자가 AI 요약을 직접 고친 내용을 그대로 저장한다. AI를 다시 호출하지 않는다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "저장 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(검증 실패)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingSummaryUpdateResponse>> updateSummary(
+            @Parameter(description = "회의 ID", example = "1") Long meetingId, @Valid MeetingSummaryUpdateRequest request);
 }
