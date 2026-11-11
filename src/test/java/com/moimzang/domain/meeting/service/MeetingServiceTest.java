@@ -3,6 +3,7 @@ package com.moimzang.domain.meeting.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -256,7 +257,7 @@ class MeetingServiceTest {
         MeetingAgenda done = MeetingAgenda.create(meeting, "관객 참여 이벤트", 0);
         ReflectionTestUtils.setField(done, "status", AgendaStatus.COMPLETED);
         MeetingAgenda pending = MeetingAgenda.create(meeting, "공연 홍보 계획", 1);
-        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L))
+        given(meetingAgendaRepository.findOrderedAgendas(10L))
                 .willReturn(List.of(done, pending));
 
         MeetingDetailResponse response = meetingService.getMeetingDetail(10L);
@@ -276,7 +277,7 @@ class MeetingServiceTest {
         Meeting meeting = Meeting.create(groupTerm, category, "안건 없는 회의", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
-        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of());
+        given(meetingAgendaRepository.findOrderedAgendas(10L)).willReturn(List.of());
 
         MeetingDetailResponse response = meetingService.getMeetingDetail(10L);
 
@@ -446,7 +447,7 @@ class MeetingServiceTest {
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
 
         MeetingAgenda last = MeetingAgenda.create(meeting, "안건2", 1);
-        given(meetingAgendaRepository.findTopByMeetingIdOrderByOrderNoDesc(10L)).willReturn(Optional.of(last));
+        given(meetingAgendaRepository.findLastAgendas(eq(10L), any())).willReturn(List.of(last));
         given(meetingAgendaRepository.save(any(MeetingAgenda.class))).willAnswer(invocation -> {
             MeetingAgenda saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 99L);
@@ -467,7 +468,7 @@ class MeetingServiceTest {
         Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
-        given(meetingAgendaRepository.findTopByMeetingIdOrderByOrderNoDesc(10L)).willReturn(Optional.empty());
+        given(meetingAgendaRepository.findLastAgendas(eq(10L), any())).willReturn(List.of());
         given(meetingAgendaRepository.save(any(MeetingAgenda.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         MeetingAgendaCreateResponse response = meetingService.addAgenda(
@@ -513,7 +514,7 @@ class MeetingServiceTest {
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
         ReflectionTestUtils.setField(agenda, "id", 3L);
         given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
-        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of(agenda));
+        given(meetingAgendaRepository.findOrderedAgendas(10L)).willReturn(List.of(agenda));
 
         MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
                 .decision("경품은 홍보팀이 준비")
@@ -539,7 +540,7 @@ class MeetingServiceTest {
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
         ReflectionTestUtils.setField(agenda, "id", 3L);
         given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
-        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of(agenda));
+        given(meetingAgendaRepository.findOrderedAgendas(10L)).willReturn(List.of(agenda));
 
         MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
                 .discussionNote("논의 중간 메모")
@@ -561,7 +562,7 @@ class MeetingServiceTest {
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "원래 내용", 0);
         ReflectionTestUtils.setField(agenda, "id", 3L);
         given(meetingAgendaRepository.findById(3L)).willReturn(Optional.of(agenda));
-        given(meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(10L)).willReturn(List.of(agenda));
+        given(meetingAgendaRepository.findOrderedAgendas(10L)).willReturn(List.of(agenda));
 
         MeetingAgendaUpdateRequest request = MeetingAgendaUpdateRequest.builder()
                 .content("고친 내용")

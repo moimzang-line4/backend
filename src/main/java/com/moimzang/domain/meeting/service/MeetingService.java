@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -162,7 +163,7 @@ public class MeetingService {
                     return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
                 });
 
-        List<MeetingAgenda> agendas = meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(meetingId);
+        List<MeetingAgenda> agendas = meetingAgendaRepository.findOrderedAgendas(meetingId);
         MeetingProgressResponse progress = calculateProgress(agendas);
 
         log.info("[회의 상세 조회] 조회를 완료했습니다. meetingId = {}, agendaCount = {}", meetingId, agendas.size());
@@ -284,7 +285,8 @@ public class MeetingService {
             throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
         }
 
-        int nextOrderNo = meetingAgendaRepository.findTopByMeetingIdOrderByOrderNoDesc(meetingId)
+        int nextOrderNo = meetingAgendaRepository.findLastAgendas(meetingId, PageRequest.of(0, 1))
+                .stream().findFirst()
                 .map(last -> last.getOrderNo() + 1)
                 .orElse(0);
 
@@ -316,7 +318,7 @@ public class MeetingService {
 
         agenda.updateContent(request.getContent(), request.getDiscussionNote(), request.getDecision(), request.getStatus());
 
-        List<MeetingAgenda> agendas = meetingAgendaRepository.findByMeetingIdOrderByOrderNoAsc(agenda.getMeeting().getId());
+        List<MeetingAgenda> agendas = meetingAgendaRepository.findOrderedAgendas(agenda.getMeeting().getId());
         MeetingProgressResponse progress = calculateProgress(agendas);
 
         log.info("[안건 내용 저장] 저장을 완료했습니다. agendaId = {}, status = {}", agendaId, agenda.getStatus());
