@@ -286,3 +286,21 @@ api-spec에 명시되지 않은 3가지를 구현 시점에 확정했다(사용�
 - **attendees의 cursor 정렬 기준은 `round_attendee.createdAt` 오름차순, 동일 시 id 오름차순**
   (그 차수에 합류한 순서). `schedule_attendee.createdAt`(원래 참가자 등록 시점)이 아니다 —
   차수별 출석 현황이라는 API 성격상 "이 차수에 참가자가 추가된 순서"가 자연스럽다고 판단했다.
+
+## 28. API-032(참가자 제외)는 그 차수의 `round_attendee`만 지운다
+`docs/api-spec.md` §3 CRUD 커버리지 표는 "schedule_attendee 삭제=API-032, round_attendee
+삭제=API-032 cascade"로 적혀 있어 문자 그대로 읽으면 참가자 원본까지 지우는 것처럼 보이지만,
+API-032 설명 문구("차수에서 참가자 제외")와 PRD 스와이프 동작("미출석 카드 → 삭제")은 이 차수
+하나에서만 빼는 동작이라 **좁게 구현한다**(사용자 결정, 2026-11-13): `schedule_attendee`는
+그대로 두고 그 차수의 `round_attendee` 행만 삭제한다. 다른 차수의 출석 기록과 참가자 원본은
+영향받지 않는다.
+
+`round_attendee.id`를 FK로 참조하는 테이블이 없음을 Flyway(`V1__init.sql`)로 확인했다 —
+`settlement_target`은 `schedule_round_id`·`schedule_attendee_id`를 직접 참조하므로 이 좁은
+범위 구현에서 FK 충돌 가능성은 없다.
+
+## 29. API-030 에러 목록에 COMMON_404가 없는 건 문서 누락으로 간주한다
+`docs/api-spec.md`의 API-030 에러 목록은 COMMON_400·ATTENDANCE_409_DUPLICATE_NAME만 적혀
+있지만, roundId가 존재하지 않는 경우를 처리하지 않을 이유가 없고 다른 모든 차수 관련 API(027/
+028/029/031/032)는 전부 COMMON_404를 포함한다. 문서 누락으로 보고 API-030도 roundId가
+없으면 COMMON_404를 던지도록 구현한다(사용자 결정, 2026-11-13).
