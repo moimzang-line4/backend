@@ -9,6 +9,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
 
@@ -28,6 +29,14 @@ public class ScheduleRepositoryImpl implements ScheduleRepositoryCustom {
                 .orderBy(schedule.startAt.desc(), schedule.id.desc())
                 .limit(limit)
                 .fetch();
+    }
+
+    @Override
+    public Optional<Schedule> findForAssistant(Long groupTermId, Long scheduleId) {
+        return Optional.ofNullable(queryFactory.selectFrom(schedule)
+                .leftJoin(schedule.scheduleCategory, scheduleCategory).fetchJoin()
+                .where(schedule.id.eq(scheduleId), schedule.groupTerm.id.eq(groupTermId))
+                .fetchOne());
     }
 
     private BooleanExpression titleContains(String keyword) {
