@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.moimzang.domain.attendance.entity.ScheduleRound;
+import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
+import com.moimzang.domain.budget.repository.LedgerEntryRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.settlement.dto.request.ReceiptRegisterRequest;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
@@ -29,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.BeanUtils;
@@ -42,6 +46,12 @@ class SettlementServiceTest {
 
     @Mock
     private ScheduleRoundRepository scheduleRoundRepository;
+
+    @Mock
+    private RoundAttendeeRepository roundAttendeeRepository;
+
+    @Mock
+    private LedgerEntryRepository ledgerEntryRepository;
 
     @Mock
     private FileStorage fileStorage;
@@ -58,8 +68,8 @@ class SettlementServiceTest {
     @BeforeEach
     void setUp() {
         settlementService = new SettlementService(
-                settlementTargetRepository, scheduleRoundRepository, settlementMapper,
-                receiptAmountValidator, billedAmountCalculator, fileStorage);
+                settlementTargetRepository, scheduleRoundRepository, roundAttendeeRepository, ledgerEntryRepository,
+                settlementMapper, receiptAmountValidator, billedAmountCalculator, fileStorage);
     }
 
     private ScheduleRound roundWithId(Long id) {
@@ -283,6 +293,50 @@ class SettlementServiceTest {
         given(scheduleRoundRepository.findById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> settlementService.registerReceipt(1L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void deleteReceipt_정상_삭제하면_settlementTarget_roundAttendee_ledger_scheduleRound_순서로_처리한다() {
+        ScheduleRound round = roundWithId(1L);
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(settlementTargetRepository.existsByScheduleRoundIdAndPaymentStatus(1L, PaymentStatus.PAID)).willReturn(false);
+
+        settlementService.deleteReceipt(1L);
+
+        InOrder inOrder = inOrder(settlementTargetRepository, roundAttendeeRepository, ledgerEntryRepository, scheduleRoundRepository);
+        inOrder.verify(settlementTargetRepository).deleteByScheduleRoundId(1L);
+        inOrder.verify(roundAttendeeRepository).deleteByScheduleRoundId(1L);
+        inOrder.verify(ledgerEntryRepository).clearScheduleRoundReference(1L);
+        inOrder.verify(scheduleRoundRepository).delete(round);
+    }
+
+    @Test
+    void deleteReceipt_입금완료자가_있으면_SETTLEMENT_423_ROUND_LOCKED_BY_PAYMENT를_던지고_아무것도_지우지_않는다() {
+        ScheduleRound round = roundWithId(1L);
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(settlementTargetRepository.existsByScheduleRoundIdAndPaymentStatus(1L, PaymentStatus.PAID)).willReturn(true);
+
+        assertThatThrownBy(() -> settlementService.deleteReceipt(1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(SettlementErrorCode.SETTLEMENT_423_ROUND_LOCKED_BY_PAYMENT);
+
+        verify(settlementTargetRepository, never()).deleteByScheduleRoundId(any());
+        verify(roundAttendeeRepository, never()).deleteByScheduleRoundId(any());
+        verify(ledgerEntryRepository, never()).clearScheduleRoundReference(any());
+        verify(scheduleRoundRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteReceipt_존재하지_않는_차수면_CommonErrorCode_NOT_FOUND를_던진다() {
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> settlementService.deleteReceipt(1L))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.NOT_FOUND);
