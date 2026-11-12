@@ -46,7 +46,8 @@ class AttendanceStatusToolTest {
 
         assertThat(round.get("roundNo").asInt()).isEqualTo(1);
         assertThat(round.get("label").asText()).isEqualTo("1차");
-        assertThat(round.get("totalCount").asInt()).isEqualTo(2);
+        // 출석 대상 2명 중 1명 참석 — 이름이 비슷하면 모델이 둘을 섞어 쓴다
+        assertThat(round.get("targetCount").asInt()).isEqualTo(2);
         assertThat(round.get("checkedInCount").asInt()).isEqualTo(1);
         assertThat(round.get("notCheckedInCount").asInt()).isEqualTo(1);
     }
@@ -64,7 +65,7 @@ class AttendanceStatusToolTest {
         JsonNode result = execute("{\"scheduleId\":10}");
         JsonNode member = result.get("members").get(0);
 
-        assertThat(result.get("memberCount").asInt()).isEqualTo(1);
+        assertThat(result.get("attendeeCount").asInt()).isEqualTo(1);
         assertThat(member.get("attendeeId").asLong()).isEqualTo(401L);
         assertThat(member.get("roundCount").asInt()).isEqualTo(2);
         assertThat(member.get("checkedInCount").asInt()).isEqualTo(1);
@@ -98,7 +99,7 @@ class AttendanceStatusToolTest {
         // 0건은 에러가 아니다 — 아직 출석을 만들지 않은 일정일 수 있어 AI가 설명하게 둔다
         assertThat(result.get("rounds")).isEmpty();
         assertThat(result.get("members")).isEmpty();
-        assertThat(result.get("memberCount").asInt()).isZero();
+        assertThat(result.get("attendeeCount").asInt()).isZero();
     }
 
     @Test
