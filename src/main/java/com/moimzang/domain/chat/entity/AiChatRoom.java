@@ -40,7 +40,15 @@ public class AiChatRoom extends BaseEntity {
     @JoinColumn(name = "group_term_id", nullable = false)
     private GroupTerm groupTerm;
 
-    // title은 선택이라 비어 있을 수 있다 — 첫 질문을 보낼 때 그 질문 텍스트로 채운다
+    public boolean hasNoTitle() {
+        return title == null || title.isBlank();
+    }
+
+    public void applyTitle(String title) {
+        this.title = title;
+    }
+
+    // title은 선택이라 비어 있을 수 있다 — 첫 질문을 보낼 때 그 질문으로 지은 제목으로 채운다
     public static AiChatRoom create(GroupTerm groupTerm, String title) {
         return AiChatRoom.builder()
                 .groupTerm(groupTerm)

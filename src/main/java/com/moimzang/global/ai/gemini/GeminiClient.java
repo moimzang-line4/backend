@@ -1,7 +1,10 @@
 package com.moimzang.global.ai.gemini;
 
+import com.moimzang.global.ai.AiChatMessage;
+import com.moimzang.global.ai.AiChatResult;
 import com.moimzang.global.ai.AiClient;
 import com.moimzang.global.ai.AiClientException;
+import com.moimzang.global.ai.AiTool;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
@@ -11,6 +14,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 // Gemini generateContent 호출 전담
 @Component
@@ -53,12 +57,26 @@ public class GeminiClient implements AiClient {
                     .body(request)
                     .retrieve()
                     .body(GenerateContentResponse.class);
+        } catch (RestClientResponseException e) {
+            // 상태 코드를 메시지에 남긴다 — 429(요청 한도)와 401(키 문제)은 대응이 전혀 달라서
+            // "호출 실패"로만 뭉뚱그리면 운영에서 원인을 못 찾는다. 키는 헤더에 있어 노출되지 않는다
+            throw new AiClientException(
+                    "Gemini 호출에 실패했습니다. status = " + e.getStatusCode().value(), e);
         } catch (RestClientException e) {
-            // 타임아웃·연결 실패·4xx/5xx 응답 등 RestClient가 던지는 건 전부 여기로 모은다
+            // 타임아웃·연결 실패 등 응답 자체를 못 받은 경우
             throw new AiClientException("Gemini 호출에 실패했습니다.", e);
         }
 
         return extractText(response);
+    }
+
+    // Gemini도 함수 호출(functionDeclarations)을 지원하지만 구현하지 않는다 —
+    // app.ai.provider가 openai로 고정 운영 중이라, 쓰지 않는 벤더에 도구 호출 스키마 변환까지
+    // 맞추는 건 검증할 수 없는 코드만 늘린다. Gemini로 전환할 일이 생기면 그때 구현한다
+    @Override
+    public AiChatResult chat(List<AiChatMessage> messages, List<AiTool> tools) {
+        throw new UnsupportedOperationException(
+                "Gemini는 도구 호출을 지원하지 않습니다. app.ai.provider=openai로 설정하세요.");
     }
 
     private String extractText(GenerateContentResponse response) {
