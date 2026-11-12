@@ -34,11 +34,13 @@ global/            config, entity, exception, response, storage(local, s3)
 
 베이스 패키지: `com.moimzang`
 
-구현된 도메인 10개: `group`, `schedule`, `memberlist`, `attendance`, `settlement`, `note`,
+도메인 10개: `group`, `schedule`, `memberlist`, `attendance`, `settlement`, `note`,
 `meeting`, `file`, `budget`, `chat`. 전부 엔티티(ERD 필드 전체 포함)·레포지토리와
-Controller/Api/Service/Mapper/ErrorCode 껍데기까지 갖춰져 있고, 실제 비즈니스 로직과 DTO는
-아직 없다 — 구현 시점에 `dto/request`, `dto/response` 패키지를 추가한다. 구조·DTO·예외 처리
-세부 규칙은 `my-spring-conventions`(Claude Code 스킬) 또는 동급 컨벤션 문서를 따른다.
+Controller/Api/Service/Mapper/ErrorCode 틀을 갖추고 있고, 비즈니스 로직은 도메인마다 진행도가
+다르다 — `file`·`meeting`·`chat`은 구현 완료, `attendance`·`settlement`는 진행 중, 나머지는
+아직 껍데기다. 어느 도메인을 건드리기 전에 그 패키지에 `dto/request`·`dto/response`와 Service
+구현이 있는지 먼저 확인한다(없으면 그 시점에 추가한다). 구조·DTO·예외 처리 세부 규칙은
+`my-spring-conventions`(Claude Code 스킬) 또는 동급 컨벤션 문서를 따른다.
 
 ## 참조 문서
 

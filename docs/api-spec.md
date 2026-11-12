@@ -1054,11 +1054,14 @@ navigation, cardType, card(결과 카드 — 예: 미입금자 조회)
 #### API-079 · GET /api/ai/chat-rooms/{chatRoomId}/messages · AI 메시지 목록 조회
 인증: 불필요. **Query**: cursor(선택), size(선택, 기본 20)
 
-**Response data**: messages[].messageId/role/content/cardType/card/createdAt, nextCursor
+**Response data**: messages[].messageId/role/content/navigation/cardType/card/createdAt, nextCursor
 
 cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순서대로).
 
 **에러**: COMMON_404, COMMON_400(잘못된 cursor)
+
+`navigation`은 API-078과 같은 형식이다. 대화를 다시 열어도 "…로 이동 →" 버튼이 보여야 하므로
+메시지에 함께 저장해 두고 목록에서도 그대로 내려준다.
 
 `card`는 전송 시점의 스냅샷(`content_json`)이라 이후 상태(예: 입금 여부)가 바뀌어도 갱신되지
 않는다. FE가 최신값이 필요하면 해당 조회 API(예: 입금 현황 조회)를 다시 호출하는 것을 권장한다.

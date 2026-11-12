@@ -314,7 +314,6 @@
 | file.schedule_id | → schedule.id | ✅ | 일정 1 : N 자료(NULL=자료실 직접등록) |
 | ai_chat_room.group_term_id | → group_term.id | ❌ | 기수 1 : N 채팅방 |
 | ai_message.ai_chat_room_id | → ai_chat_room.id | ❌ | 채팅방 1 : N 메시지 |
-| ai_message.target_schedule_id | → schedule.id | ✅ | 일정 1 : N 메시지(대상 일정 지정 시) |
 | ledger_entry.group_term_id | → group_term.id | ❌ | 기수 1 : N 장부항목 |
 | ledger_entry.schedule_round_id | → schedule_round.id | ✅ | 차수 1 : N 장부항목(자동기록 출처) |
 
@@ -337,6 +336,7 @@ SQL 타입은 전부 VARCHAR을 유지한다(`@Enumerated(EnumType.STRING)` 호�
 | LedgerType | VARCHAR(10) | ledger_entry.type | INCOME(수입), EXPENSE(지출) |
 | AttendeeSource | VARCHAR(20) | schedule_attendee.source | LINK(부원링크), ON_SITE(현장추가) |
 | MessageRole | VARCHAR(20) | ai_message.role | USER(사용자 질문), ASSISTANT(AI 응답) |
+| NavigationType | VARCHAR(20) | ai_message.navigation_type | SETTLEMENT(정산·입금), ATTENDANCE(출석), NOTE(메모장), SCHEDULE(일정 운영 공간), MEETING(회의록), FILE(자료실), BUDGET(장부) |
 
 `schedule.color`는 8종 자유 선택이지만 실제 값 목록이 디자인에서 아직 확정되지 않아 enum 도메인으로
 묶지 않았다(일반 String 유지).
