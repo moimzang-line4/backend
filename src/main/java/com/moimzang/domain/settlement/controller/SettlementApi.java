@@ -43,4 +43,17 @@ public interface SettlementApi {
     ResponseEntity<BaseResponse<ReceiptRegisterResponse>> registerReceipt(
             @Parameter(description = "차수 ID", example = "1") Long roundId,
             @Valid ReceiptRegisterRequest request);
+
+    @Operation(summary = "영수증 삭제", description = "그 차수(schedule_round) 행과 연결된 settlement_target·round_attendee를 "
+            + "함께 삭제한다. 입금 완료 내역이 1건이라도 있으면 423으로 거부한다. ledger_entry는 삭제하지 않고 "
+            + "schedule_round_id 참조만 NULL로 전환해 보존한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "삭제 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "423", description = "SETTLEMENT_423_ROUND_LOCKED_BY_PAYMENT",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> deleteReceipt(
+            @Parameter(description = "차수 ID", example = "1") Long roundId);
 }

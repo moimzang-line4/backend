@@ -24,4 +24,7 @@ public interface RoundAttendeeRepository extends JpaRepository<RoundAttendee, Lo
     // 차수에서 참가자 제외(API-032) 대상 조회 — attendeeId는 round_attendee가 아니라
     // schedule_attendee의 id다
     Optional<RoundAttendee> findByScheduleRoundIdAndScheduleAttendeeId(Long scheduleRoundId, Long scheduleAttendeeId);
+
+    // 영수증 삭제(API-035)로 차수가 사라질 때 그 차수의 출석 기록을 함께 삭제한다
+    void deleteByScheduleRoundId(Long scheduleRoundId);
 }

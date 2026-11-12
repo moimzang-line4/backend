@@ -8,6 +8,7 @@ import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -37,5 +38,13 @@ public class SettlementController implements SettlementApi {
     ) {
         ReceiptRegisterResponse response = settlementService.registerReceipt(roundId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 그 차수의 영수증을 삭제한다(그 차수 자체를 cascade 삭제, 장부는 보존)
+    @Override
+    @DeleteMapping("/api/rounds/{roundId}/receipt")
+    public ResponseEntity<BaseResponse<Void>> deleteReceipt(@PathVariable Long roundId) {
+        settlementService.deleteReceipt(roundId);
+        return ResponseEntity.ok(BaseResponse.success());
     }
 }
