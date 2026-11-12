@@ -29,8 +29,9 @@ import com.moimzang.global.ai.AiClientException;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.global.cursor.CursorCodec;
+import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -200,13 +201,13 @@ class ChatServiceTest {
     }
 
     @Test
-    void sendMessage_질문이_비어_있으면_CHAT_400_EMPTY_CONTENT를_던진다() {
+    void sendMessage_질문이_비어_있으면_COMMON_400을_던진다() {
         ChatMessageSendRequest request = ChatMessageSendRequest.builder().content("   ").build();
 
         assertThatThrownBy(() -> chatService.sendMessage(8L, request))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
-                .isEqualTo(ChatErrorCode.CHAT_400_EMPTY_CONTENT);
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
     }
 
     @Test
@@ -232,7 +233,8 @@ class ChatServiceTest {
         given(chatToolLoop.run(eq(1L), any())).willReturn(settlementOutcome("{\"scheduleId\":10}",
                 "{\"totalUnpaidAmount\":47000,\"members\":[{\"attendeeId\":401,\"name\":\"강민준\","
                         + "\"affiliation\":\"광고홍보학과\",\"phoneLast4\":\"1140\","
-                        + "\"totalBilledAmount\":47000,\"paymentStatus\":\"UNPAID\",\"rounds\":[]}]}"));
+                        + "\"totalBilledAmount\":47000,\"unpaidAmount\":47000,"
+                        + "\"paymentStatus\":\"UNPAID\",\"rounds\":[]}]}"));
         given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule(10L, "가을공연")));
         givenSavedAnswer(8L, 202L);
 
@@ -377,7 +379,7 @@ class ChatServiceTest {
 
     private ChatToolLoop.Outcome settlementOutcome(String argumentsJson, String resultJson) {
         return new ChatToolLoop.Outcome("확인했어요",
-                Map.of("get_settlement_status", new ChatToolLoop.ToolRun(argumentsJson, resultJson)));
+                Map.of("get_settlement_status", List.of(new ChatToolLoop.ToolRun(argumentsJson, resultJson))));
     }
 
     private AiMessage message(Long id, MessageRole role, String content, LocalDateTime createdAt) {

@@ -56,7 +56,7 @@ public interface ChatApi {
                            + "금액·인원은 서버가 집계한 값이라 AI 응답 문장과 무관하게 정확하다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "응답 성공"),
-        @ApiResponse(responseCode = "400", description = "CHAT_400_EMPTY_CONTENT 또는 COMMON_400(검증 실패)",
+        @ApiResponse(responseCode = "400", description = "COMMON_400(내용 없음·검증 실패)",
                      content = @Content(schema = @Schema(implementation = BaseResponse.class))),
         @ApiResponse(responseCode = "404", description = "CHAT_404_NOT_FOUND",
                      content = @Content(schema = @Schema(implementation = BaseResponse.class))),

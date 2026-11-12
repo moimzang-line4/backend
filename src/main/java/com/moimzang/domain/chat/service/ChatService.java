@@ -1,8 +1,8 @@
 package com.moimzang.domain.chat.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.moimzang.domain.chat.dto.request.ChatMessageSendRequest;
 import com.moimzang.domain.chat.dto.request.ChatRoomCreateRequest;
 import com.moimzang.domain.chat.dto.response.ChatMessageListResponse;
@@ -26,6 +26,7 @@ import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.ai.AiClientException;
 import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.cursor.CursorPageConstants;
+import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -134,10 +135,11 @@ public class ChatService {
      */
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ChatMessageResponse sendMessage(Long chatRoomId, ChatMessageSendRequest request) {
+        // 컨트롤러의 @NotBlank가 먼저 걸러내지만, 서비스를 직접 호출하는 경로를 위한 방어다
         String question = request.getContent() == null ? null : request.getContent().trim();
         if (question == null || question.isEmpty()) {
             log.warn("[AI 메시지 전송] 질문이 비어 있습니다. chatRoomId = {}", chatRoomId);
-            throw new CustomException(ChatErrorCode.CHAT_400_EMPTY_CONTENT);
+            throw new CustomException(CommonErrorCode.BAD_REQUEST);
         }
 
         log.info("[AI 메시지 전송] 전송을 시작합니다. chatRoomId = {}", chatRoomId);
@@ -224,7 +226,7 @@ public class ChatService {
     // 입금 현황 도구가 실행됐고 미입금자가 있을 때만 카드를 만든다.
     // 카드 포맷이 확정된 건 '미입금자 조회' 하나뿐이라 나머지 도구는 텍스트 답변만 한다
     private ChatConversationStore.Card buildCard(ChatToolLoop.Outcome outcome) {
-        ChatToolLoop.ToolRun run = outcome.toolRun(SettlementStatusTool.NAME);
+        ChatToolLoop.ToolRun run = outcome.singleRun(SettlementStatusTool.NAME);
         if (run == null) {
             return ChatConversationStore.Card.none();
         }
@@ -253,7 +255,7 @@ public class ChatService {
         try {
             JsonNode node = objectMapper.readTree(argumentsJson).get("scheduleId");
             return node == null || node.isNull() ? null : node.asLong();
-        } catch (JsonProcessingException | RuntimeException e) {
+        } catch (JacksonException e) {
             log.warn("[AI 메시지 전송] 도구 인자에서 scheduleId를 읽지 못했습니다. arguments = {}", argumentsJson);
             return null;
         }
@@ -278,7 +280,7 @@ public class ChatService {
         }
         try {
             return objectMapper.readTree(contentJson);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("[AI 메시지 목록 조회] 저장된 카드 JSON을 읽지 못했습니다.", e);
             return null;
         }
