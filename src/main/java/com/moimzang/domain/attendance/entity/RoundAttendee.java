@@ -48,4 +48,14 @@ public class RoundAttendee extends BaseEntity {
     // 출석 처리 일시
     @Column(name = "checked_in_at")
     private LocalDateTime checkedInAt;
+
+    // 차수에 참가자를 미출석 상태로 연결한다. 새 차수 생성 시 기존 참가자 전원을, 현장 추가 시
+    // 그 차수 하나를 이 상태로 시작한다
+    public static RoundAttendee create(ScheduleRound scheduleRound, ScheduleAttendee scheduleAttendee) {
+        return RoundAttendee.builder()
+                .scheduleRound(scheduleRound)
+                .scheduleAttendee(scheduleAttendee)
+                .isCheckedIn(false)
+                .build();
+    }
 }
