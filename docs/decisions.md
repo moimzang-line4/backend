@@ -330,6 +330,7 @@ API-041(입금 명단에서 삭제)로 어떤 차수의 남은 인원이 0명이
 2026-11-13) — 그 차액은 계산기의 책임이 아니라, 전원 입금 완료 시 "추가 동아리 지원금"
 지출 1건으로 자동기록되는 로직(결정 2)에서 API-074(정산 내역 새로고침) 시점에 별도로
 계산해 `ledger_entry`에 반영한다.
+
 ## 33. AI 채팅(API-078)은 질문 분기가 아니라 도구 기반 라우터로 만든다
 AI 비서는 "그 기수의 일정·정산·출석·예산·회의·메모·자료 전부에 대해 자연어로 물으면 답하는"
 기능이라, 사용자가 어떤 문장을 던질지 미리 알 수 없다. 질문 유형별로 분기를 박는 방식은
@@ -433,3 +434,34 @@ MEETING(회의 ID), FILE·BUDGET(기수 단위 화면이라 targetId 없음). �
 `navigation_target_id`에는 **FK를 걸지 않는다**. `navigation_type`에 따라 `schedule`·`meeting` 중
 서로 다른 테이블을 가리키는 다형 참조라 하나의 FK로 묶을 수 없다. 값은 도구가 실제로 조회에
 성공한 ID만 들어가므로 저장 시점에 존재가 이미 검증돼 있다.
+
+## 41. API-033/API-034(영수증 조회·등록) 구현 시점에 정한 세부 사항
+`docs/api-spec.md`의 API-034 설명 자체가 서로 충돌하는 부분이 있어 구현 전 확인했다(사용자
+결정, 2026-11-13).
+
+- **PUT은 등록·수정 공용 upsert다**: 에러 목록의 `SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED`와
+  Logics 문단("금액이 바뀌면 재계산")이 서로 충돌한다 — 재계산이 일어나려면 이미 등록된
+  차수에도 PUT이 다시 들어와야 하는데, 409로 막으면 그 경로 자체가 죽은 코드가 된다. CRUD
+  커버리지 표가 `schedule_round`의 API-034를 "생성"이 아니라 "수정" 칸에 적어둔 것과도
+  일치하므로, PUT은 차수가 존재하고 입금 완료자가 없으면 이미 영수증이 등록돼 있는지 여부와
+  무관하게 항상 반영되는 upsert로 구현한다. `SettlementErrorCode.SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED`는
+  enum에는 남겨두지만(문서상 번호 유지 목적) 이번 구현에서는 어디서도 던지지 않는 미사용
+  상수다. 수정을 막는 유일한 조건은 입금 완료자가 1명이라도 있을 때(`SETTLEMENT_423_RECEIPT_LOCKED_BY_PAYMENT`)뿐이다.
+  `SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED`는 api-spec 원문을 유지하기 위해
+  `SettlementErrorCode`에 그대로 남겨두되 API-034에서는 사용하지 않는다 — API-033(영수증
+  조회)의 `isLocked`가 입금 완료 전에는 false이고 그 동안은 화면의 수정 버튼이 활성화돼
+  있으므로, 입금 완료 전 재등록은 곧 "수정"이지 "중복 등록"이 아니기 때문이다.
+- **storeName/transactedAt은 선택값이다**: `schedule_round`의 두 컬럼 모두 DB에서도
+  nullable이고, "가격만 등록"하는 경우(가게명·거래일시를 모르거나 생략하는 경우)를 지원한다.
+  totalAmount/clubSubsidyAmount만 필수로 검증한다.
+- **imageKey → image_url은 등록 시점에 변환해서 저장한다**: file 도메인은 "키를 저장하고
+  화면에 보여줄 때 `FileStorage.toUrl()`로 변환"하는 패턴이지만, `schedule_round`에는 키를
+  저장할 별도 컬럼이 없고 컬럼명·응답 필드명이 전부 `image_url`/`imageUrl`이다. 그래서 PUT
+  처리 시점에 `FileStorage.toUrlOrNull(imageKey)`로 변환한 완성된 URL 문자열을 `image_url`에
+  저장한다. `toUrl()`은 presigned가 아니라 만료되지 않는 고정 URL이다(local/S3 둘 다
+  `baseUrl + "/" + key` 결합만 함 — `docs/decisions.md` #18과 동일한 전제). imageKey를
+  생략한 요청(수정 중 사진은 그대로 두는 경우)은 기존 `image_url`을 그대로 유지하고, 새
+  값으로 덮어쓰지 않는다.
+- **API-034는 장부를 건드리지 않는다**: 영수증 지출 행은 API-074(정산 내역 새로고침)가
+  영수증 등록된 차수마다 1건씩 생성한다. 따라서 API-034 구현에는 ledger_entry 생성을
+  포함하지 않는다.
