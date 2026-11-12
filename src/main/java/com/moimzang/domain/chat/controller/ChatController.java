@@ -1,6 +1,9 @@
 package com.moimzang.domain.chat.controller;
 
+import com.moimzang.domain.chat.dto.request.ChatMessageSendRequest;
 import com.moimzang.domain.chat.dto.request.ChatRoomCreateRequest;
+import com.moimzang.domain.chat.dto.response.ChatMessageListResponse;
+import com.moimzang.domain.chat.dto.response.ChatMessageResponse;
 import com.moimzang.domain.chat.dto.response.ChatRoomCreateResponse;
 import com.moimzang.domain.chat.dto.response.ChatRoomListResponse;
 import com.moimzang.domain.chat.service.ChatService;
@@ -42,6 +45,29 @@ public class ChatController implements ChatApi {
             @RequestParam(required = false) Integer size
     ) {
         ChatRoomListResponse response = chatService.listChatRooms(termId, cursor, size);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 자연어 질문을 받아 기수 데이터를 조회해 답하고, 결과 카드가 있으면 함께 내려준다
+    @Override
+    @PostMapping("/api/ai/chat-rooms/{chatRoomId}/messages")
+    public ResponseEntity<BaseResponse<ChatMessageResponse>> sendMessage(
+            @PathVariable Long chatRoomId,
+            @Valid @RequestBody ChatMessageSendRequest request
+    ) {
+        ChatMessageResponse response = chatService.sendMessage(chatRoomId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 대화방의 메시지를 대화 순서대로 조회한다
+    @Override
+    @GetMapping("/api/ai/chat-rooms/{chatRoomId}/messages")
+    public ResponseEntity<BaseResponse<ChatMessageListResponse>> listMessages(
+            @PathVariable Long chatRoomId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer size
+    ) {
+        ChatMessageListResponse response = chatService.listMessages(chatRoomId, cursor, size);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }
