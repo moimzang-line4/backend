@@ -153,7 +153,7 @@ public class AttendanceService {
     // 그 차수 전체 참가자 기준 출석 진행률(필터·검색어와 무관하게 매번 다시 계산한다)
     private RoundAttendanceProgressResponse calculateProgress(Long roundId) {
         long totalCount = roundAttendeeRepository.countByScheduleRoundId(roundId);
-        long checkedCount = roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(roundId, true);
+        long checkedCount = roundAttendeeRepository.countCheckedIn(roundId);
         int rate = totalCount == 0 ? 0 : (int) Math.round(checkedCount * 100.0 / totalCount);
 
         return RoundAttendanceProgressResponse.builder()

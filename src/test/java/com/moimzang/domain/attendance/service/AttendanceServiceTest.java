@@ -210,7 +210,7 @@ class AttendanceServiceTest {
         given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
         given(roundAttendeeRepository.search(1L, false, null, null, null, 21)).willReturn(List.of(ra1, ra2));
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(3L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(3L);
 
         RoundAttendanceListResponse response = attendanceService.getRoundAttendees(1L, null, null, null, null);
 
@@ -233,7 +233,7 @@ class AttendanceServiceTest {
         given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
         given(roundAttendeeRepository.search(1L, null, null, null, null, 21)).willReturn(List.of());
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(0L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(0L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
 
         RoundAttendanceListResponse response = attendanceService.getRoundAttendees(1L, AttendanceStatusFilter.ALL, null, null, null);
 
@@ -256,7 +256,7 @@ class AttendanceServiceTest {
         given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
         given(roundAttendeeRepository.search(1L, false, null, null, null, 2)).willReturn(List.of(ra1, ra2));
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(2L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(0L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
 
         RoundAttendanceListResponse response = attendanceService.getRoundAttendees(1L, null, null, null, 1);
 
@@ -296,14 +296,14 @@ class AttendanceServiceTest {
         given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
         given(roundAttendeeRepository.search(1L, true, null, null, null, 21)).willReturn(List.of());
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(10L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(4L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(4L);
 
         RoundAttendanceListResponse response = attendanceService.getRoundAttendees(1L, AttendanceStatusFilter.CHECKED, null, null, null);
 
         assertThat(response.getProgress().getTotalCount()).isEqualTo(10L);
         assertThat(response.getProgress().getCheckedCount()).isEqualTo(4L);
         verify(roundAttendeeRepository).countByScheduleRoundId(1L);
-        verify(roundAttendeeRepository).countByScheduleRoundIdAndIsCheckedIn(1L, true);
+        verify(roundAttendeeRepository).countCheckedIn(1L);
     }
 
     @Test
@@ -315,7 +315,7 @@ class AttendanceServiceTest {
         given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
         given(roundAttendeeRepository.search(1L, false, null, null, null, 21)).willReturn(List.of());
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(0L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(0L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
 
         RoundAttendanceListResponse response = attendanceService.getRoundAttendees(1L, null, null, null, null);
 
@@ -461,7 +461,7 @@ class AttendanceServiceTest {
         given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
                 .willReturn(Optional.of(roundAttendee));
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(1L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(1L);
 
         RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(1L, 200L, request);
 
@@ -486,7 +486,7 @@ class AttendanceServiceTest {
         given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
                 .willReturn(Optional.of(roundAttendee));
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(0L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
 
         RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(1L, 200L, request);
 
@@ -508,7 +508,7 @@ class AttendanceServiceTest {
         given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
                 .willReturn(Optional.of(roundAttendee));
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(1L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(1L);
 
         RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(1L, 200L, request);
 
@@ -527,7 +527,7 @@ class AttendanceServiceTest {
         given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
                 .willReturn(Optional.of(roundAttendee));
         given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
-        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(0L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
 
         RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(1L, 200L, request);
 
