@@ -1,6 +1,6 @@
 package com.moimzang.domain.chat.service.tool;
 
-import tools.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.ai.AiTool;
@@ -11,6 +11,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
 
 // 일정 검색 도구. 다른 도구(정산·출석)가 scheduleId를 요구하므로 이 도구가 id를 찾아주는 입구가 된다
 @Component
@@ -28,7 +29,9 @@ public class ScheduleSearchTool implements ChatTool {
                 "search_schedules",
                 "이 기수의 일정(행사)을 제목이나 기간으로 검색해 일정 ID·제목·일시·장소·카테고리와 "
                         + "차수 번호 목록을 반환한다. 정산·출석·메모 조회는 scheduleId가 필요하므로, "
-                        + "사용자가 일정을 이름으로만 말했다면 반드시 이 도구를 먼저 호출해 ID를 얻어야 한다.",
+                        + "사용자가 일정을 이름으로만 말했다면 반드시 이 도구를 먼저 호출해 ID를 얻어야 한다. "
+                        + "검색 결과가 0건이면 availableTitles에 등록된 일정 제목이 함께 오므로, "
+                        + "그중 사용자가 말한 일정과 같은 것이 있으면 그 제목으로 다시 검색한다.",
                 Map.of(
                         "type", "object",
                         "properties", Map.of(
@@ -56,7 +59,16 @@ public class ScheduleSearchTool implements ChatTool {
         boolean truncated = found.size() > MAX_ROWS;
         List<Schedule> page = truncated ? found.subList(0, MAX_ROWS) : found;
 
-        return new Result(page.size(), truncated, page.stream().map(Row::from).toList());
+        // 검색어가 안 맞아 0건이면 등록된 제목을 함께 돌려준다.
+        // 사용자는 '가을 정기공연'을 '가을공연'처럼 줄여 부르는데 부분 일치로는 잡히지 않아서,
+        // 실제 제목을 보여줘야 AI가 "없다"고 단정하지 않고 올바른 일정을 고를 수 있다
+        List<String> availableTitles = null;
+        if (page.isEmpty() && keyword != null) {
+            availableTitles = scheduleRepository.searchForAssistant(termId, null, from, to, MAX_ROWS)
+                    .stream().map(Schedule::getTitle).toList();
+        }
+
+        return new Result(page.size(), truncated, page.stream().map(Row::from).toList(), availableTitles);
     }
 
     private LocalDate parseDate(JsonNode args, String field) {
@@ -71,7 +83,9 @@ public class ScheduleSearchTool implements ChatTool {
         }
     }
 
-    private record Result(int count, boolean truncated, List<Row> schedules) {}
+    // availableTitles는 검색어가 0건일 때만 채워진다 — 비어 있으면 JSON에서 빠진다
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private record Result(int count, boolean truncated, List<Row> schedules, List<String> availableTitles) {}
 
     private record Row(Long scheduleId, String title, String startAt, String endAt, boolean allDay,
                        String location, String categoryName, boolean hasOperationSpace, String memo) {
