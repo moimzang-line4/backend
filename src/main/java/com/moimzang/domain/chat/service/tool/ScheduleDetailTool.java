@@ -74,7 +74,7 @@ public class ScheduleDetailTool implements ChatTool {
                         "scheduleId " + scheduleId + "에 해당하는 일정이 이 기수에 없습니다. "
                                 + "search_schedules로 일정 ID를 먼저 확인하세요."));
 
-        List<ScheduleRound> rounds = scheduleRoundRepository.findByScheduleIdOrderByRoundNoAsc(scheduleId);
+        List<ScheduleRound> rounds = scheduleRoundRepository.findOrderedRounds(scheduleId);
         List<ScheduleAttendee> attendees = scheduleAttendeeRepository.findByScheduleIdOrderByNameAsc(scheduleId);
         boolean attendeesTruncated = attendees.size() > MAX_ATTENDEES;
         List<ScheduleAttendee> attendeePage =

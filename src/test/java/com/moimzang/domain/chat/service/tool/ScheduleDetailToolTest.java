@@ -85,7 +85,7 @@ class ScheduleDetailToolTest {
     @Test
     void execute_차수_영수증과_지원금의_합계를_내려준다() throws Exception {
         givenSchedule();
-        given(scheduleRoundRepository.findByScheduleIdOrderByRoundNoAsc(10L))
+        given(scheduleRoundRepository.findOrderedRounds(10L))
                 .willReturn(List.of(
                         round(1, "1차", "삼겹살집", 320000, 100000),
                         round(2, "2차", "코인노래방", 135000, 0)));
@@ -102,7 +102,7 @@ class ScheduleDetailToolTest {
         givenSchedule();
         ScheduleRound noReceipt = BeanUtils.instantiateClass(ScheduleRound.class);
         ReflectionTestUtils.setField(noReceipt, "roundNo", 2);
-        given(scheduleRoundRepository.findByScheduleIdOrderByRoundNoAsc(10L))
+        given(scheduleRoundRepository.findOrderedRounds(10L))
                 .willReturn(List.of(round(1, "1차", "삼겹살집", 320000, 100000), noReceipt));
 
         JsonNode result = execute("{\"scheduleId\":10}");
