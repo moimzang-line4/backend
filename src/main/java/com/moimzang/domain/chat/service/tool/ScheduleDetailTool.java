@@ -17,6 +17,8 @@ import com.moimzang.global.ai.AiTool;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,9 +44,12 @@ public class ScheduleDetailTool implements ChatTool {
     public AiTool definition() {
         return new AiTool(
                 "get_schedule_detail",
-                "일정 하나의 상세 정보를 조회해 차수별 영수증(가게·총액·회비 지원금)과 입금 안내 계좌, "
+                "일정 하나의 상세 정보를 조회해 차수별 영수증(가게·금액·회비 지원금)과 입금 안내 계좌, "
                         + "참가자 명단, 연결된 회의 안건, 첨부 자료를 반환한다. "
-                        + "장소·차수·계좌·참가자처럼 일정에 딸린 내용을 물으면 이 도구를 쓴다. "
+                        + "영수증 금액(receiptAmount, totalReceiptAmount)은 가게에서 실제 결제한 총액이다 — "
+                        + "'얼마 나왔어', '얼마 썼어'처럼 결제한 금액을 물으면 이 도구를 쓴다. "
+                        + "부원에게 걷을 청구 금액은 여기가 아니라 get_settlement_status에 있다. "
+                        + "장소·차수·계좌·참가자처럼 일정에 딸린 내용을 물을 때도 이 도구를 쓴다. "
                         + "scheduleId가 필요하므로 일정 이름만 아는 경우 search_schedules를 먼저 호출한다.",
                 Map.of(
                         "type", "object",
@@ -67,6 +72,7 @@ public class ScheduleDetailTool implements ChatTool {
                         "scheduleId " + scheduleId + "에 해당하는 일정이 이 기수에 없습니다. "
                                 + "search_schedules로 일정 ID를 먼저 확인하세요."));
 
+        List<ScheduleRound> rounds = scheduleRoundRepository.findByScheduleIdOrderByRoundNoAsc(scheduleId);
         List<ScheduleAttendee> attendees = scheduleAttendeeRepository.findByScheduleIdOrderByNameAsc(scheduleId);
         boolean attendeesTruncated = attendees.size() > MAX_ATTENDEES;
         List<ScheduleAttendee> attendeePage =
@@ -88,8 +94,9 @@ public class ScheduleDetailTool implements ChatTool {
                 schedule.getScheduleCategory() == null ? null : schedule.getScheduleCategory().getName(),
                 Boolean.TRUE.equals(schedule.getHasOperationSpace()),
                 schedule.getMemo(),
-                scheduleRoundRepository.findOrderedRounds(scheduleId).stream()
-                        .map(RoundRow::from).toList(),
+                sumAmount(rounds, ScheduleRound::getTotalAmount),
+                sumAmount(rounds, ScheduleRound::getClubSubsidyAmount),
+                rounds.stream().map(RoundRow::from).toList(),
                 attendees.size(),
                 attendeesTruncated,
                 attendeePage.stream().map(AttendeeRow::from).toList(),
@@ -103,16 +110,28 @@ public class ScheduleDetailTool implements ChatTool {
         return value == null ? null : value.toString();
     }
 
+    // 차수 합계는 여기서 더해 내려준다 — AI가 차수 금액을 직접 더하면 틀린다.
+    // 영수증을 아직 안 올린 차수는 금액이 비어 있어 0으로 친다
+    private static int sumAmount(List<ScheduleRound> rounds, Function<ScheduleRound, Integer> field) {
+        return rounds.stream()
+                .map(field)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+    }
+
+    // totalReceiptAmount는 모든 차수에서 실제 결제한 금액의 합이고, totalSubsidyAmount는 그중
+    // 동아리 회비로 지원한 몫이다. 부원에게 걷는 청구액은 "영수증 − 지원금"이라 이 값과 다르다
     private record Result(Long scheduleId, String title, String startAt, String endAt, boolean allDay,
                           String location, String categoryName, boolean hasOperationSpace, String memo,
-                          List<RoundRow> rounds, int attendeeCount, boolean attendeesTruncated,
-                          List<AttendeeRow> attendees, List<AgendaRow> linkedAgendas,
-                          boolean filesTruncated, List<FileRow> files) {}
+                          int totalReceiptAmount, int totalSubsidyAmount, List<RoundRow> rounds,
+                          int attendeeCount, boolean attendeesTruncated, List<AttendeeRow> attendees,
+                          List<AgendaRow> linkedAgendas, boolean filesTruncated, List<FileRow> files) {}
 
     // 영수증 이미지 URL은 싣지 않는다 — 답변 문장에 넣을 수 없는 값이라 토큰만 쓴다.
     // 영수증이 등록됐는지 여부만 알려주면 AI가 "영수증은 화면에서 보라"고 안내할 수 있다
     private record RoundRow(Integer roundNo, String label, String storeName, String transactedAt,
-                            Integer totalAmount, Integer clubSubsidyAmount, boolean hasReceiptImage,
+                            Integer receiptAmount, Integer clubSubsidyAmount, boolean hasReceiptImage,
                             String bankName, String accountNumber, String accountHolder) {
 
         static RoundRow from(ScheduleRound round) {
