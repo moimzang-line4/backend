@@ -173,7 +173,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | 회의 진행 | API-053, API-057 |
 | 회의 종료 | API-059 |
 | AI 회의 요약 | API-060, API-061 |
-| AI 챗 | API-076, API-077, API-078, API-079, API-040(딥링크) |
+| AI 챗 | API-076, API-077, API-078, API-079, API-040(카드의 입금 확인 버튼), `navigation`으로 정산·출석·메모·일정·회의록·자료실·장부 화면 이동 |
 | 자료 목록 / 문서 첨부 | API-064, API-063, API-065, API-080, API-066, API-067, API-068, API-062 |
 | 예산안 | API-069, API-070, API-071, API-072, API-073, API-074, API-075 |
 | 설정 · 운영진 관리 · 모임장 변경 | 범위 제외(decisions #1) — 매핑 API 없음 |
@@ -1034,7 +1034,15 @@ cursor 페이지네이션(정렬 기준: updatedAt 내림차순 — 최근 대�
 
 #### API-078 · POST /api/ai/chat-rooms/{chatRoomId}/messages · AI 메시지 전송
 인증: 불필요. **Request**: content. **Response data**: messageId, role(USER|ASSISTANT), content,
-targetScheduleId, cardType, card(결과 카드 — 예: 미입금자 조회)
+navigation, cardType, card(결과 카드 — 예: 미입금자 조회)
+
+`navigation`은 답변 아래 "…로 이동 →" 버튼이 가리킬 화면이다. 이동할 곳이 없으면 null.
+경로(URL)는 내려주지 않고 화면 종류와 대상 ID만 준다(decisions #34).
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| navigation.type | string | SETTLEMENT / ATTENDANCE / NOTE / SCHEDULE / MEETING / FILE / BUDGET |
+| navigation.targetId | number | SETTLEMENT·ATTENDANCE·NOTE·SCHEDULE은 일정 ID, MEETING은 회의 ID, 기수 단위 화면인 FILE·BUDGET은 null |
 
 **에러**: COMMON_400(내용 없음), COMMON_404
 
