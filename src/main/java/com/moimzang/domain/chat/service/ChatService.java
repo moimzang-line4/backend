@@ -250,13 +250,18 @@ public class ChatService {
 
     private ChatConversationStore.Navigation buildNavigation(ChatToolLoop.Outcome outcome) {
         for (NavigationRule rule : NAVIGATION_RULES) {
-            // 같은 도구가 서로 다른 인자로 여러 번 불렸으면 어느 화면으로 보낼지 정할 수 없다
+            // 자료실·장부처럼 가리킬 대상이 없는 화면은 도구가 몇 번 불렸든 보낼 곳이 하나다
+            if (rule.idField() == null) {
+                if (outcome.hasRun(rule.toolName())) {
+                    return new ChatConversationStore.Navigation(rule.type(), null);
+                }
+                continue;
+            }
+
+            // 같은 도구가 서로 다른 인자로 여러 번 불렸으면 어느 일정·회의로 보낼지 정할 수 없다
             ChatToolLoop.ToolRun run = outcome.singleRun(rule.toolName());
             if (run == null) {
                 continue;
-            }
-            if (rule.idField() == null) {
-                return new ChatConversationStore.Navigation(rule.type(), null);
             }
             Long targetId = readLong(run.argumentsJson(), rule.idField());
             // 대상 ID가 필요한 화면인데 인자에 없으면(예: 일정을 안 고른 메모 검색) 버튼을 띄우지 않는다

@@ -311,6 +311,19 @@ class ChatServiceTest {
     }
 
     @Test
+    void sendMessage_자료_검색이_여러_번_불려도_자료실로_보낸다() {
+        givenTurn(8L, false);
+        givenSavedAnswer(8L, 215L);
+        given(chatToolLoop.run(eq(1L), any())).willReturn(new ChatToolLoop.Outcome("답변", Map.of(
+                "search_files", List.of(
+                        new ChatToolLoop.ToolRun("{}", "{}"),
+                        new ChatToolLoop.ToolRun("{\"category\":\"PHOTO\"}", "{}")))));
+
+        // 가리킬 대상이 없는 화면이라 몇 번 불렸든 보낼 곳이 하나다
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("FILE", null));
+    }
+
+    @Test
     void sendMessage_일정을_고르지_않은_메모_검색은_이동할_화면이_없다() {
         givenTurn(8L, false);
         givenSavedAnswer(8L, 213L);
