@@ -18,6 +18,8 @@ import tools.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class FileSearchTool implements ChatTool {
 
+    public static final String NAME = "search_files";
+
     // 기수 전체 자료실이 대상이라 파일이 쌓이면 그대로 프롬프트 비용이 된다
     private static final int MAX_ROWS = 50;
 
@@ -26,7 +28,7 @@ public class FileSearchTool implements ChatTool {
     @Override
     public AiTool definition() {
         return new AiTool(
-                "search_files",
+                NAME,
                 "자료실에 올라온 자료를 이름이나 분류로 검색해 자료명·분류·확장자·크기·등록일을 반환한다. "
                         + "'무슨 자료가 있는지', '예산안 올라왔는지' 같은 질문에 쓴다. "
                         + "다운로드 링크는 제공하지 않으므로 자료실 화면에서 받도록 안내한다.",

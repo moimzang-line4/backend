@@ -30,6 +30,8 @@ import tools.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class ScheduleDetailTool implements ChatTool {
 
+    public static final String NAME = "get_schedule_detail";
+
     // 한 일정의 참가자·자료가 이보다 많아도 프롬프트에 다 싣지 않는다 — 토큰이 터지고 정확도도 떨어진다
     private static final int MAX_ATTENDEES = 100;
     private static final int MAX_FILES = 50;
@@ -43,7 +45,7 @@ public class ScheduleDetailTool implements ChatTool {
     @Override
     public AiTool definition() {
         return new AiTool(
-                "get_schedule_detail",
+                NAME,
                 "일정 하나의 상세 정보를 조회해 차수별 영수증(가게·금액·회비 지원금)과 입금 안내 계좌, "
                         + "참가자 명단, 연결된 회의 안건, 첨부 자료를 반환한다. "
                         + "영수증 금액(receiptAmount, totalReceiptAmount)은 가게에서 실제 결제한 총액이다 — "

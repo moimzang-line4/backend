@@ -20,13 +20,15 @@ import tools.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class MeetingDetailTool implements ChatTool {
 
+    public static final String NAME = "get_meeting_detail";
+
     private final MeetingRepository meetingRepository;
     private final MeetingAgendaRepository meetingAgendaRepository;
 
     @Override
     public AiTool definition() {
         return new AiTool(
-                "get_meeting_detail",
+                NAME,
                 "회의 하나의 안건을 논의 내용·결정 사항 원문 그대로 반환하고 AI 요약본이 있으면 함께 준다. "
                         + "회의에서 무엇을 논의했는지, 누가 무엇을 맡기로 했는지 같은 질문은 이 도구로 답한다. "
                         + "meetingId가 필요하므로 회의 이름만 아는 경우 search_meetings를 먼저 호출한다.",

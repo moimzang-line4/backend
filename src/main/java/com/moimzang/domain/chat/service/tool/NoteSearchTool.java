@@ -17,6 +17,8 @@ import tools.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class NoteSearchTool implements ChatTool {
 
+    public static final String NAME = "search_notes";
+
     // 기수 전체를 대상으로 하는 검색이라 메모가 쌓이면 그대로 프롬프트 비용이 된다
     private static final int MAX_ROWS = 50;
 
@@ -25,7 +27,7 @@ public class NoteSearchTool implements ChatTool {
     @Override
     public AiTool definition() {
         return new AiTool(
-                "search_notes",
+                NAME,
                 "일정에 적어둔 운영 메모와 할 일을 검색해 유형·제목·내용·담당자·완료 여부를 반환한다. "
                         + "'무엇을 하기로 했는지', '누가 맡았는지', '남은 할 일'을 묻는 질문에 쓴다. "
                         + "완료 여부는 검색어로 거를 수 없다 — '안 끝난 할 일'은 noteType=TODO로 전체를 받아 "

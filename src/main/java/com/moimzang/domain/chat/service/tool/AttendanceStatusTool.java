@@ -20,12 +20,14 @@ import tools.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class AttendanceStatusTool implements ChatTool {
 
+    public static final String NAME = "get_attendance_status";
+
     private final RoundAttendeeRepository roundAttendeeRepository;
 
     @Override
     public AiTool definition() {
         return new AiTool(
-                "get_attendance_status",
+                NAME,
                 "일정의 출석 현황을 조회해 차수별 출석 인원·미출석 인원과 함께 "
                         + "참가자별 차수 출석 여부 목록을 반환한다. "
                         + "누가 왔는지·누가 빠졌는지·몇 명 왔는지 묻는 질문에 쓴다. "

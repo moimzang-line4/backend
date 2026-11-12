@@ -19,6 +19,8 @@ import tools.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class BudgetSummaryTool implements ChatTool {
 
+    public static final String NAME = "get_budget_summary";
+
     // 장부는 기수 내내 쌓이는 데이터라 최근 것만 싣는다
     private static final int MAX_ROWS = 50;
 
@@ -27,7 +29,7 @@ public class BudgetSummaryTool implements ChatTool {
     @Override
     public AiTool definition() {
         return new AiTool(
-                "get_budget_summary",
+                NAME,
                 "이 기수의 장부를 조회해 누적 수입·누적 지출·잔액과 최근 장부 항목(유형·항목명·금액·거래일)을 "
                         + "반환한다. '회비 얼마 남았어', '얼마 썼어' 같은 예산 질문에 쓴다. "
                         + "인자가 필요 없고 항상 기수 전체 장부를 본다.",
