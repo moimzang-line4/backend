@@ -59,7 +59,7 @@ class OperationNoteRepositoryImplTest {
         OperationNote notMatched = persistNote(schedule, "뒤풀이 예약", "삼겹살집 20인", "홍길동");
 
         List<OperationNote> result =
-                operationNoteRepository.searchForAssistant(groupTerm.getId(), "티켓", null, 10);
+                operationNoteRepository.searchForAssistant(groupTerm.getId(), "티켓", null, null, 10);
 
         assertThat(result).extracting(OperationNote::getId)
                 .containsExactlyInAnyOrder(byTitle.getId(), byContent.getId(), byAssignee.getId())
@@ -71,7 +71,7 @@ class OperationNoteRepositoryImplTest {
         OperationNote noAssignee = persistNote(schedule, "티켓 인쇄", "150장 맡기기", null);
 
         List<OperationNote> result =
-                operationNoteRepository.searchForAssistant(groupTerm.getId(), "티켓", null, 10);
+                operationNoteRepository.searchForAssistant(groupTerm.getId(), "티켓", null, null, 10);
 
         // assignee가 NULL이면 OR 비교에서 통째로 빠질 수 있어 제목 일치로 잡히는지 확인한다
         assertThat(result).extracting(OperationNote::getId).containsExactly(noAssignee.getId());
@@ -84,7 +84,7 @@ class OperationNoteRepositoryImplTest {
         persistNote(other, "버스 예약", "45인승 1대", "이수민");
 
         List<OperationNote> result =
-                operationNoteRepository.searchForAssistant(groupTerm.getId(), null, schedule.getId(), 10);
+                operationNoteRepository.searchForAssistant(groupTerm.getId(), null, schedule.getId(), null, 10);
 
         assertThat(result).extracting(OperationNote::getId).containsExactly(mine.getId());
     }
@@ -96,7 +96,7 @@ class OperationNoteRepositoryImplTest {
         persistNote(persistSchedule(otherTerm, "다른 기수 공연"), "남의 메모", "내용", "남의 담당자");
 
         List<OperationNote> result =
-                operationNoteRepository.searchForAssistant(groupTerm.getId(), null, null, 10);
+                operationNoteRepository.searchForAssistant(groupTerm.getId(), null, null, null, 10);
 
         assertThat(result).extracting(OperationNote::getId).containsExactly(mine.getId());
     }
@@ -106,8 +106,8 @@ class OperationNoteRepositoryImplTest {
         persistNote(schedule, "티켓 인쇄", "150장 맡기기", "김서경");
         persistNote(schedule, "대관 확인", "대강당 예약 완료", "이수민");
 
-        assertThat(operationNoteRepository.countForAssistant(groupTerm.getId(), null, null)).isEqualTo(2);
-        assertThat(operationNoteRepository.countForAssistant(groupTerm.getId(), "티켓", null)).isEqualTo(1);
+        assertThat(operationNoteRepository.countForAssistant(groupTerm.getId(), null, null, null)).isEqualTo(2);
+        assertThat(operationNoteRepository.countForAssistant(groupTerm.getId(), "티켓", null, null)).isEqualTo(1);
     }
 
     private ClubGroup persistClubGroup(String name) {

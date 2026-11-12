@@ -1,6 +1,7 @@
 package com.moimzang.domain.chat.service.tool;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -35,7 +36,7 @@ class NoteSearchToolTest {
 
     @Test
     void execute_메모와_그_메모가_달린_일정을_함께_내려준다() throws Exception {
-        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), anyInt()))
+        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(List.of(note(600L, NoteType.TODO, "티켓 인쇄", "150장 인쇄 맡기기", "강민준", false)));
 
         JsonNode note = execute("{}").get("notes").get(0);
@@ -53,7 +54,7 @@ class NoteSearchToolTest {
 
     @Test
     void execute_일반_메모는_완료_여부가_비어_있다() throws Exception {
-        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), anyInt()))
+        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(List.of(note(601L, NoteType.MEMO, "대관 확인", "대강당 예약 완료", null, null)));
 
         JsonNode note = execute("{}").get("notes").get(0);
@@ -65,7 +66,7 @@ class NoteSearchToolTest {
 
     @Test
     void execute_검색_조건을_그대로_레포지토리에_넘기고_결과에도_싣는다() throws Exception {
-        given(operationNoteRepository.searchForAssistant(eq(1L), eq("티켓"), eq(10L), anyInt()))
+        given(operationNoteRepository.searchForAssistant(eq(1L), eq("티켓"), eq(10L), isNull(), anyInt()))
                 .willReturn(List.of(note(600L, NoteType.TODO, "티켓 인쇄", "150장 인쇄 맡기기", "강민준", false)));
 
         JsonNode result = execute("{\"keyword\":\"티켓\",\"scheduleId\":10}");
@@ -80,8 +81,8 @@ class NoteSearchToolTest {
         List<OperationNote> many = IntStream.rangeClosed(1, 51)
                 .mapToObj(i -> note((long) i, NoteType.MEMO, "메모" + i, "내용", null, null))
                 .toList();
-        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), anyInt())).willReturn(many);
-        given(operationNoteRepository.countForAssistant(eq(1L), isNull(), isNull())).willReturn(51L);
+        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), isNull(), anyInt())).willReturn(many);
+        given(operationNoteRepository.countForAssistant(eq(1L), isNull(), isNull(), isNull())).willReturn(51L);
 
         JsonNode result = execute("{}");
 
@@ -92,7 +93,7 @@ class NoteSearchToolTest {
 
     @Test
     void execute_메모가_없으면_빈_결과를_돌려준다() throws Exception {
-        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), anyInt()))
+        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(List.of());
 
         JsonNode result = execute("{}");
@@ -101,6 +102,25 @@ class NoteSearchToolTest {
         assertThat(result.get("notes")).isEmpty();
         assertThat(result.get("matchedNoteCount").asLong()).isZero();
         assertThat(result.get("truncated").asBoolean()).isFalse();
+    }
+
+    @Test
+    void execute_할_일만_보려면_noteType으로_거른다() throws Exception {
+        given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), eq(NoteType.TODO), anyInt()))
+                .willReturn(List.of(note(600L, NoteType.TODO, "티켓 인쇄", "150장 인쇄 맡기기", "강민준", false)));
+
+        JsonNode result = execute("{\"noteType\":\"TODO\"}");
+
+        // 완료 여부는 검색어로 거를 수 없어서 유형으로 받아 todoDone으로 추려야 한다
+        assertThat(result.get("noteType").asText()).isEqualTo("TODO");
+        assertThat(result.get("notes").get(0).get("todoDone").asBoolean()).isFalse();
+    }
+
+    @Test
+    void execute_없는_유형을_주면_쓸_수_있는_값을_알려주는_예외를_던진다() {
+        assertThatThrownBy(() -> tool.execute(1L, objectMapper.readTree("{\"noteType\":\"할일\"}")))
+                .isInstanceOf(ChatToolArgumentException.class)
+                .hasMessageContaining("TODO");
     }
 
     private JsonNode execute(String argsJson) throws Exception {
