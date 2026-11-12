@@ -12,9 +12,11 @@ import static org.mockito.Mockito.verify;
 import com.moimzang.domain.attendance.entity.RoundAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
+import com.moimzang.domain.attendance.dto.request.AttendeeCheckInRequest;
 import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
+import com.moimzang.domain.attendance.dto.response.RoundAttendeeCheckInResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundCreateResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundListResponse;
 import com.moimzang.domain.attendance.enums.AttendanceStatusFilter;
@@ -443,6 +445,103 @@ class AttendanceServiceTest {
                 .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> attendanceService.removeAttendee(1L, 200L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void checkInAttendee_미출석에서_출석으로_바꾸면_checkedInAt을_채우고_progress를_반환한다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        ScheduleAttendee attendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        RoundAttendee roundAttendee = roundAttendeeWithId(1L, round, attendee, LocalDateTime.now());
+        AttendeeCheckInRequest request = AttendeeCheckInRequest.builder().isCheckedIn(true).build();
+
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(roundAttendee));
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
+        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(1L);
+
+        RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(1L, 200L, request);
+
+        assertThat(response.getAttendeeId()).isEqualTo(200L);
+        assertThat(response.getName()).isEqualTo("김모임");
+        assertThat(response.getIsCheckedIn()).isTrue();
+        assertThat(response.getCheckedInAt()).isNotNull();
+        assertThat(response.getProgress().getCheckedCount()).isEqualTo(1L);
+        assertThat(response.getProgress().getTotalCount()).isEqualTo(5L);
+    }
+
+    @Test
+    void checkInAttendee_출석에서_미출석으로_되돌리면_checkedInAt을_null로_리셋한다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        ScheduleAttendee attendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        RoundAttendee roundAttendee = roundAttendeeWithId(1L, round, attendee, LocalDateTime.now());
+        ReflectionTestUtils.setField(roundAttendee, "isCheckedIn", true);
+        ReflectionTestUtils.setField(roundAttendee, "checkedInAt", LocalDateTime.of(2026, 11, 13, 19, 0, 0));
+        AttendeeCheckInRequest request = AttendeeCheckInRequest.builder().isCheckedIn(false).build();
+
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(roundAttendee));
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
+        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(0L);
+
+        RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(1L, 200L, request);
+
+        assertThat(response.getIsCheckedIn()).isFalse();
+        assertThat(response.getCheckedInAt()).isNull();
+    }
+
+    @Test
+    void checkInAttendee_이미_출석상태에_true를_재요청하면_최초_checkedInAt을_유지한다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        ScheduleAttendee attendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        RoundAttendee roundAttendee = roundAttendeeWithId(1L, round, attendee, LocalDateTime.now());
+        LocalDateTime firstCheckedInAt = LocalDateTime.of(2026, 11, 13, 19, 0, 0);
+        ReflectionTestUtils.setField(roundAttendee, "isCheckedIn", true);
+        ReflectionTestUtils.setField(roundAttendee, "checkedInAt", firstCheckedInAt);
+        AttendeeCheckInRequest request = AttendeeCheckInRequest.builder().isCheckedIn(true).build();
+
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(roundAttendee));
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
+        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(1L);
+
+        RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(1L, 200L, request);
+
+        assertThat(response.getIsCheckedIn()).isTrue();
+        assertThat(response.getCheckedInAt()).isEqualTo(firstCheckedInAt);
+    }
+
+    @Test
+    void checkInAttendee_이미_미출석상태에_false를_재요청하면_그대로_null을_유지한다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        ScheduleAttendee attendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        RoundAttendee roundAttendee = roundAttendeeWithId(1L, round, attendee, LocalDateTime.now());
+        AttendeeCheckInRequest request = AttendeeCheckInRequest.builder().isCheckedIn(false).build();
+
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(roundAttendee));
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(5L);
+        given(roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(1L, true)).willReturn(0L);
+
+        RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(1L, 200L, request);
+
+        assertThat(response.getIsCheckedIn()).isFalse();
+        assertThat(response.getCheckedInAt()).isNull();
+    }
+
+    @Test
+    void checkInAttendee_그_차수에_없으면_COMMON_404를_던진다() {
+        AttendeeCheckInRequest request = AttendeeCheckInRequest.builder().isCheckedIn(true).build();
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> attendanceService.checkInAttendee(1L, 200L, request))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.NOT_FOUND);

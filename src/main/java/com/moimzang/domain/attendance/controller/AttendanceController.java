@@ -1,8 +1,10 @@
 package com.moimzang.domain.attendance.controller;
 
+import com.moimzang.domain.attendance.dto.request.AttendeeCheckInRequest;
 import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
+import com.moimzang.domain.attendance.dto.response.RoundAttendeeCheckInResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundCreateResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundListResponse;
 import com.moimzang.domain.attendance.enums.AttendanceStatusFilter;
@@ -13,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -63,6 +66,18 @@ public class AttendanceController implements AttendanceApi {
             @Valid @RequestBody OnSiteAttendeeAddRequest request
     ) {
         OnSiteAttendeeAddResponse response = attendanceService.addOnSiteAttendee(roundId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 그 차수 참가자의 출석을 처리·되돌린다
+    @Override
+    @PatchMapping("/api/rounds/{roundId}/attendees/{attendeeId}")
+    public ResponseEntity<BaseResponse<RoundAttendeeCheckInResponse>> checkInAttendee(
+            @PathVariable Long roundId,
+            @PathVariable Long attendeeId,
+            @Valid @RequestBody AttendeeCheckInRequest request
+    ) {
+        RoundAttendeeCheckInResponse response = attendanceService.checkInAttendee(roundId, attendeeId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 

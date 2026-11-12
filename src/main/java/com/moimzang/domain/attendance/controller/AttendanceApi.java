@@ -1,8 +1,10 @@
 package com.moimzang.domain.attendance.controller;
 
+import com.moimzang.domain.attendance.dto.request.AttendeeCheckInRequest;
 import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
+import com.moimzang.domain.attendance.dto.response.RoundAttendeeCheckInResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundCreateResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundListResponse;
 import com.moimzang.domain.attendance.enums.AttendanceStatusFilter;
@@ -69,6 +71,20 @@ public interface AttendanceApi {
     ResponseEntity<BaseResponse<OnSiteAttendeeAddResponse>> addOnSiteAttendee(
             @Parameter(description = "차수 ID", example = "1") Long roundId,
             @Valid OnSiteAttendeeAddRequest request);
+
+    @Operation(summary = "출석 처리·되돌리기", description = "그 차수 참가자의 출석 상태를 isCheckedIn 값으로 지정한다(토글이 "
+            + "아니다). 이미 같은 상태로 재요청하면 멱등하게 처리하고 checkedInAt을 바꾸지 않는다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "처리 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(isCheckedIn 누락)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<RoundAttendeeCheckInResponse>> checkInAttendee(
+            @Parameter(description = "차수 ID", example = "1") Long roundId,
+            @Parameter(description = "참가자 ID(schedule_attendee.id)", example = "1") Long attendeeId,
+            @Valid AttendeeCheckInRequest request);
 
     @Operation(summary = "참가자 제외", description = "그 차수에서 참가자를 제외한다(이 차수의 출석 기록만 삭제, "
             + "다른 차수의 출석 기록·참가자 원본은 유지).")
