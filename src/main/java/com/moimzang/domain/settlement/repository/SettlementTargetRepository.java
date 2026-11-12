@@ -13,4 +13,7 @@ public interface SettlementTargetRepository extends JpaRepository<SettlementTarg
 
     // 영수증 금액 변경 시(API-034) 재계산 대상 조회용
     List<SettlementTarget> findByScheduleRoundId(Long scheduleRoundId);
+
+    // 영수증 삭제(API-035)로 차수가 사라질 때 그 차수의 청구 내역을 함께 삭제한다
+    void deleteByScheduleRoundId(Long scheduleRoundId);
 }
