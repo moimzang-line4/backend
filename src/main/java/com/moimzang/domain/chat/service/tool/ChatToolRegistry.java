@@ -1,8 +1,8 @@
 package com.moimzang.domain.chat.service.tool;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.moimzang.global.ai.AiTool;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +54,7 @@ public class ChatToolRegistry {
             args = (argumentsJson == null || argumentsJson.isBlank())
                     ? objectMapper.createObjectNode()
                     : objectMapper.readTree(argumentsJson);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("[AI 도구 실행] 인자 JSON을 파싱하지 못했습니다. termId = {}, toolName = {}", termId, toolName);
             return errorJson("인자가 올바른 JSON이 아닙니다.", "도구 스키마에 맞는 JSON으로 다시 호출하세요.");
         }
@@ -78,7 +78,7 @@ public class ChatToolRegistry {
     private String writeJson(Object result) {
         try {
             return objectMapper.writeValueAsString(result);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             // 우리가 만든 DTO를 직렬화하지 못하는 건 코드 버그다 — AI에게 떠넘기지 않고 올린다
             throw new IllegalStateException("도구 결과를 JSON으로 직렬화하지 못했습니다.", e);
         }

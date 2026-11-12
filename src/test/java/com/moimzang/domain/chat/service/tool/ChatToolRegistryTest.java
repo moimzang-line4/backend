@@ -3,8 +3,8 @@ package com.moimzang.domain.chat.service.tool;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.moimzang.global.ai.AiTool;
 import java.util.List;
 import java.util.Map;

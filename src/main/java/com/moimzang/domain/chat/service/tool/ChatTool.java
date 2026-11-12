@@ -1,6 +1,6 @@
 package com.moimzang.domain.chat.service.tool;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.moimzang.global.ai.AiTool;
 
 // AI 비서가 호출할 수 있는 조회 도구 하나.

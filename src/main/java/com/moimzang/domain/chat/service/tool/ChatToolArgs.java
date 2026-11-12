@@ -1,6 +1,6 @@
 package com.moimzang.domain.chat.service.tool;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 // 모델이 만든 인자 JSON에서 값을 꺼낸다.
 // 모델은 숫자를 문자열로 주거나("10"), 빈 문자열을 null 대신 넣는 등 스키마를 어기는 일이 잦아

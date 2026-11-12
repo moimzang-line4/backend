@@ -1,6 +1,6 @@
 package com.moimzang.domain.chat.dto.response;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;

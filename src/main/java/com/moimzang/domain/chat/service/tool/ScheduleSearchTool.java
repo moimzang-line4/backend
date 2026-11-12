@@ -1,6 +1,6 @@
 package com.moimzang.domain.chat.service.tool;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.ai.AiTool;
