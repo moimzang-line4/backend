@@ -33,8 +33,8 @@ public class ChatToolLoop {
     public Outcome run(Long termId, List<AiChatMessage> initialMessages) {
         List<AiChatMessage> messages = new ArrayList<>(initialMessages);
         // 어떤 도구가 어떤 결과를 냈는지 호출한 쪽이 알아야 카드를 만들 수 있다.
-        // 같은 도구를 여러 번 부르면 마지막 결과를 남긴다
-        Map<String, ToolRun> toolRuns = new LinkedHashMap<>();
+        // 모델이 같은 도구를 여러 번 부를 수 있어(예: "공연"이 여러 일정에 걸릴 때) 전부 모은다
+        Map<String, List<ToolRun>> toolRuns = new LinkedHashMap<>();
 
         for (int round = 1; round <= MAX_ROUNDS; round++) {
             AiChatResult result = aiClient.chat(messages, toolRegistry.definitions());
@@ -50,7 +50,8 @@ public class ChatToolLoop {
                 String output = toolRegistry.execute(termId, call.name(), call.argumentsJson());
                 // 등록된 도구가 아니면 실행 결과가 아니라 에러 JSON이다 — 카드 재료로 쓰면 안 된다
                 if (toolRegistry.contains(call.name())) {
-                    toolRuns.put(call.name(), new ToolRun(call.argumentsJson(), output));
+                    toolRuns.computeIfAbsent(call.name(), name -> new ArrayList<>())
+                            .add(new ToolRun(call.argumentsJson(), output));
                 }
                 messages.add(AiChatMessage.toolResult(call.id(), output));
             }
@@ -62,11 +63,18 @@ public class ChatToolLoop {
         throw new ChatToolLoopExceededException("도구 호출이 " + MAX_ROUNDS + "회를 넘었습니다.");
     }
 
-    // 최종 답변과, 그 과정에서 실행된 도구들의 결과
-    public record Outcome(String content, Map<String, ToolRun> toolRuns) {
+    // 최종 답변과, 그 과정에서 실행된 도구들의 결과(도구별로 실행 순서대로)
+    public record Outcome(String content, Map<String, List<ToolRun>> toolRuns) {
 
-        public ToolRun toolRun(String toolName) {
-            return toolRuns.get(toolName);
+        /**
+         * 그 도구가 정확히 한 번만 실행됐을 때의 결과. 그 외에는 null이다.
+         *
+         * 여러 번 불렸다는 건 답변이 여러 대상(예: 일정 2건)을 아우른다는 뜻이라,
+         * 하나를 골라 카드로 만들면 나머지를 가린 잘못된 카드가 된다.
+         */
+        public ToolRun singleRun(String toolName) {
+            List<ToolRun> runs = toolRuns.get(toolName);
+            return runs != null && runs.size() == 1 ? runs.get(0) : null;
         }
     }
 

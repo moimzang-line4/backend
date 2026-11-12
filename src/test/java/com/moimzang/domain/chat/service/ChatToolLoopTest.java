@@ -59,7 +59,7 @@ class ChatToolLoopTest {
         ChatToolLoop.Outcome outcome = chatToolLoop.run(1L, List.of(AiChatMessage.user("미입금자 알려줘")));
 
         assertThat(outcome.content()).isEqualTo("미입금자는 2명입니다");
-        assertThat(outcome.toolRun("get_settlement_status").resultJson()).isEqualTo("{\"unpaidCount\":2}");
+        assertThat(outcome.singleRun("get_settlement_status").resultJson()).isEqualTo("{\"unpaidCount\":2}");
 
         // 두 번째 호출에는 도구 호출 턴과 그 결과가 누적돼 있어야 모델이 대화를 이어갈 수 있다
         ArgumentCaptor<List<AiChatMessage>> captor = ArgumentCaptor.forClass(List.class);
@@ -136,6 +136,23 @@ class ChatToolLoopTest {
         assertThatThrownBy(() -> chatToolLoop.run(1L, List.of(AiChatMessage.user("질문"))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("DB 연결 실패");
+    }
+
+    @Test
+    void run_같은_도구가_여러_번_불리면_singleRun은_null을_돌려준다() {
+        given(aiClient.chat(any(), any()))
+                .willReturn(new AiChatResult(null, List.of(
+                        new AiToolCall("c1", "get_settlement_status", "{\"scheduleId\":1}"),
+                        new AiToolCall("c2", "get_settlement_status", "{\"scheduleId\":2}"))))
+                .willReturn(new AiChatResult("두 일정 모두 확인했습니다", null));
+        given(toolRegistry.contains("get_settlement_status")).willReturn(true);
+        given(toolRegistry.execute(anyLong(), anyString(), anyString())).willReturn("{}");
+
+        ChatToolLoop.Outcome outcome = chatToolLoop.run(1L, List.of(AiChatMessage.user("공연 미입금자")));
+
+        // 여러 대상을 아우른 답변에 카드를 하나 붙이면 나머지를 가린 잘못된 카드가 된다
+        assertThat(outcome.toolRuns().get("get_settlement_status")).hasSize(2);
+        assertThat(outcome.singleRun("get_settlement_status")).isNull();
     }
 
     private AiChatResult toolCallResult(String id, String name, String argumentsJson) {
