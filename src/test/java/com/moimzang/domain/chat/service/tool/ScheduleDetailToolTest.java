@@ -65,7 +65,7 @@ class ScheduleDetailToolTest {
     @Test
     void execute_차수의_영수증과_입금_계좌를_내려준다() throws Exception {
         givenSchedule();
-        given(scheduleRoundRepository.findByScheduleIdOrderByRoundNoAsc(10L))
+        given(scheduleRoundRepository.findOrderedRounds(10L))
                 .willReturn(List.of(round(1, "1차", "삼겹살집", 320000, 100000)));
 
         JsonNode round = execute("{\"scheduleId\":10}").get("rounds").get(0);

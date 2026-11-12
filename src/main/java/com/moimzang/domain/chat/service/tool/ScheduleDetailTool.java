@@ -88,7 +88,7 @@ public class ScheduleDetailTool implements ChatTool {
                 schedule.getScheduleCategory() == null ? null : schedule.getScheduleCategory().getName(),
                 Boolean.TRUE.equals(schedule.getHasOperationSpace()),
                 schedule.getMemo(),
-                scheduleRoundRepository.findByScheduleIdOrderByRoundNoAsc(scheduleId).stream()
+                scheduleRoundRepository.findOrderedRounds(scheduleId).stream()
                         .map(RoundRow::from).toList(),
                 attendees.size(),
                 attendeesTruncated,
