@@ -76,4 +76,18 @@ public class ScheduleRound extends BaseEntity {
     // 입금 안내 계좌 예금주
     @Column(name = "account_holder", length = 50)
     private String accountHolder;
+
+    // 생성 시점에는 영수증·계좌 정보가 전혀 없는 상태로 시작한다(둘 다 settlement 도메인에서 채운다)
+    public static ScheduleRound create(Schedule schedule, Integer roundNo, String label) {
+        return ScheduleRound.builder()
+                .schedule(schedule)
+                .roundNo(roundNo)
+                .label(label)
+                .build();
+    }
+
+    // 영수증 등록 여부 — 전용 플래그 컬럼이 없어 영수증 등록 시 항상 채워지는 totalAmount로 판단한다
+    public boolean hasReceipt() {
+        return totalAmount != null;
+    }
 }
