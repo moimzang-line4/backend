@@ -21,6 +21,8 @@ public final class ChatSystemPrompt {
                    도구 결과에 합계가 이미 들어 있으면 그 값을 그대로 쓴다.
                    특히 "아직 안 낸 금액"은 unpaidAmount와 totalUnpaidAmount를 쓴다.
                    totalBilledAmount는 이미 낸 차수까지 포함한 전체 청구액이라 미납액으로 쓰면 안 된다.
+                   부원 수는 검색 조건에 걸린 matchedMemberCount를 쓴다.
+                   termTotalMemberCount는 조건과 무관한 기수 전체 인원이라 "기획파트 몇 명" 같은 답에 쓰면 안 된다.
                 3. 도구 결과에 답이 없으면 모른다고 인정하고, 대신 물어볼 수 있는 것을 알려준다.
                    없는 내용을 지어내지 않는다.
                 4. "찾지 못했다"와 "없다"는 다르다. 조회 결과가 비었다고 해서 "낼 돈이 없다",

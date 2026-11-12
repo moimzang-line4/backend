@@ -64,8 +64,10 @@ public class MemberSearchTool implements ChatTool {
                 : memberRepository.countForAssistant(termId, null, null);
 
         return new Result(
-                totalMemberCount,
+                keyword,
+                part,
                 matchedCount,
+                totalMemberCount,
                 truncated,
                 memberListRepository.findByGroupTermIdOrderByIdAsc(termId).stream()
                         .map(MemberListRow::from).toList(),
@@ -82,8 +84,11 @@ public class MemberSearchTool implements ChatTool {
         return digits.length() < PHONE_SUFFIX_LENGTH ? null : digits.substring(digits.length() - PHONE_SUFFIX_LENGTH);
     }
 
-    private record Result(long totalMemberCount, long matchedCount, boolean truncated,
-                          List<MemberListRow> memberLists, List<MemberRow> members) {}
+    // 검색 조건에 걸린 인원(matchedMemberCount)과 기수 전체 인원(termTotalMemberCount)을 둘 다 내려주되
+    // 이름으로 구분되게 한다 — "기획파트 몇 명"에 기수 전체 인원을 답하는 혼동이 실제로 있었다.
+    // 어떤 조건으로 걸러진 수인지 알 수 있게 적용된 검색어도 그대로 돌려준다
+    private record Result(String keyword, String part, long matchedMemberCount, long termTotalMemberCount,
+                          boolean truncated, List<MemberListRow> memberLists, List<MemberRow> members) {}
 
     // 수집 토글을 함께 내려준다 — 학번·파트가 비어 있는 게 '안 받은 항목'이라서인지
     // '아직 안 적은 사람'인지 AI가 구분해 답할 수 있어야 한다

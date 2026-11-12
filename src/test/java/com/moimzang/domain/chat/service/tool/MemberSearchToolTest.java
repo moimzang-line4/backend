@@ -71,8 +71,8 @@ class MemberSearchToolTest {
         JsonNode member = result.get("members").get(0);
         JsonNode memberList = result.get("memberLists").get(0);
 
-        assertThat(result.get("totalMemberCount").asLong()).isEqualTo(1);
-        assertThat(result.get("matchedCount").asLong()).isEqualTo(1);
+        assertThat(result.get("termTotalMemberCount").asLong()).isEqualTo(1);
+        assertThat(result.get("matchedMemberCount").asLong()).isEqualTo(1);
         assertThat(result.get("truncated").asBoolean()).isFalse();
         assertThat(member.get("name").asText()).isEqualTo("강민준");
         assertThat(member.get("department").asText()).isEqualTo("광고홍보학과");
@@ -92,9 +92,9 @@ class MemberSearchToolTest {
 
         JsonNode result = execute("{\"keyword\":\"강\"}");
 
-        assertThat(result.get("matchedCount").asLong()).isEqualTo(1);
+        assertThat(result.get("matchedMemberCount").asLong()).isEqualTo(1);
         // "42명 중 1명"처럼 답하려면 기수 총원이 따로 있어야 한다
-        assertThat(result.get("totalMemberCount").asLong()).isEqualTo(42);
+        assertThat(result.get("termTotalMemberCount").asLong()).isEqualTo(42);
     }
 
     @Test
@@ -109,7 +109,7 @@ class MemberSearchToolTest {
 
         assertThat(result.get("members")).hasSize(100);
         assertThat(result.get("truncated").asBoolean()).isTrue();
-        assertThat(result.get("matchedCount").asLong()).isEqualTo(101);
+        assertThat(result.get("matchedMemberCount").asLong()).isEqualTo(101);
     }
 
     @Test
@@ -121,7 +121,10 @@ class MemberSearchToolTest {
         JsonNode result = execute("{\"part\":\"기획\"}");
 
         assertThat(result.get("members").get(0).get("part").asText()).isEqualTo("기획");
-        assertThat(result.get("matchedCount").asLong()).isEqualTo(1);
+        assertThat(result.get("matchedMemberCount").asLong()).isEqualTo(1);
+        // 어떤 조건으로 걸러진 수인지 보여야 기수 전체 인원과 섞이지 않는다
+        assertThat(result.get("part").asText()).isEqualTo("기획");
+        assertThat(result.get("termTotalMemberCount").asLong()).isEqualTo(42);
     }
 
     private JsonNode execute(String argsJson) throws Exception {
