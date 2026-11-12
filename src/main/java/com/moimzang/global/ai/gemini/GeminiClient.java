@@ -14,6 +14,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 // Gemini generateContent 호출 전담
 @Component
@@ -56,8 +57,13 @@ public class GeminiClient implements AiClient {
                     .body(request)
                     .retrieve()
                     .body(GenerateContentResponse.class);
+        } catch (RestClientResponseException e) {
+            // 상태 코드를 메시지에 남긴다 — 429(요청 한도)와 401(키 문제)은 대응이 전혀 달라서
+            // "호출 실패"로만 뭉뚱그리면 운영에서 원인을 못 찾는다. 키는 헤더에 있어 노출되지 않는다
+            throw new AiClientException(
+                    "Gemini 호출에 실패했습니다. status = " + e.getStatusCode().value(), e);
         } catch (RestClientException e) {
-            // 타임아웃·연결 실패·4xx/5xx 응답 등 RestClient가 던지는 건 전부 여기로 모은다
+            // 타임아웃·연결 실패 등 응답 자체를 못 받은 경우
             throw new AiClientException("Gemini 호출에 실패했습니다.", e);
         }
 
