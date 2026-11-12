@@ -11,4 +11,7 @@ public interface ScheduleAttendeeRepository extends JpaRepository<ScheduleAttend
 
     // 현장 인원 추가(API-030) 동명이인 체크 — 같은 일정 전체 기준
     boolean existsByScheduleIdAndName(Long scheduleId, String name);
+
+    // 일정의 참가자를 이름순으로 조회한다(AI 비서 조회용, 읽기 전용)
+    List<ScheduleAttendee> findByScheduleIdOrderByNameAsc(Long scheduleId);
 }

@@ -2,6 +2,7 @@ package com.moimzang.domain.attendance.repository;
 
 import static com.moimzang.domain.attendance.entity.QRoundAttendee.roundAttendee;
 import static com.moimzang.domain.attendance.entity.QScheduleAttendee.scheduleAttendee;
+import static com.moimzang.domain.attendance.entity.QScheduleRound.scheduleRound;
 
 import com.moimzang.domain.attendance.entity.RoundAttendee;
 import com.querydsl.core.types.dsl.BooleanExpression;
@@ -25,6 +26,20 @@ public class RoundAttendeeRepositoryImpl implements RoundAttendeeRepositoryCusto
                 .where(cursorCondition(cursorCreatedAt, cursorId))
                 .orderBy(roundAttendee.createdAt.asc(), roundAttendee.id.asc())
                 .limit(limit)
+                .fetch();
+    }
+
+    // 차수 번호와 참가자 이름을 모두 응답에 써야 해서 둘 다 fetch join한다.
+    // scheduleId는 모델이 만들어낸 값이라 다른 기수의 일정일 수 있어 기수 조건을 함께 건다
+    @Override
+    public List<RoundAttendee> findByScheduleForAssistant(Long groupTermId, Long scheduleId, Integer roundNo) {
+        return queryFactory.selectFrom(roundAttendee)
+                .join(roundAttendee.scheduleRound, scheduleRound).fetchJoin()
+                .join(roundAttendee.scheduleAttendee, scheduleAttendee).fetchJoin()
+                .where(scheduleRound.schedule.id.eq(scheduleId),
+                        scheduleRound.schedule.groupTerm.id.eq(groupTermId))
+                .where(roundNoEq(roundNo))
+                .orderBy(scheduleRound.roundNo.asc(), scheduleAttendee.name.asc())
                 .fetch();
     }
 
@@ -53,5 +68,9 @@ public class RoundAttendeeRepositoryImpl implements RoundAttendeeRepositoryCusto
         }
         return roundAttendee.createdAt.gt(cursorCreatedAt)
                 .or(roundAttendee.createdAt.eq(cursorCreatedAt).and(roundAttendee.id.gt(cursorId)));
+    }
+
+    private BooleanExpression roundNoEq(Integer roundNo) {
+        return roundNo == null ? null : scheduleRound.roundNo.eq(roundNo);
     }
 }

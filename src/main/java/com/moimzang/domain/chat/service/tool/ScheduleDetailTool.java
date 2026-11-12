@@ -1,0 +1,174 @@
+package com.moimzang.domain.chat.service.tool;
+
+import com.moimzang.domain.attendance.entity.ScheduleAttendee;
+import com.moimzang.domain.attendance.entity.ScheduleRound;
+import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
+import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
+import com.moimzang.domain.file.entity.File;
+import com.moimzang.domain.file.enums.FileSortOption;
+import com.moimzang.domain.file.repository.FileRepository;
+import com.moimzang.domain.meeting.entity.Meeting;
+import com.moimzang.domain.meeting.entity.MeetingAgenda;
+import com.moimzang.domain.schedule.entity.Schedule;
+import com.moimzang.domain.schedule.entity.ScheduleAgendaLink;
+import com.moimzang.domain.schedule.repository.ScheduleAgendaLinkRepository;
+import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.global.ai.AiTool;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+
+// 일정 하나에 딸린 운영 데이터를 한 번에 돌려주는 도구.
+// 차수·참가자·안건·자료를 따로 묻게 하면 도구 라운드만 늘고 상한(5회)에 걸리므로 묶어서 내려준다
+@Component
+@RequiredArgsConstructor
+public class ScheduleDetailTool implements ChatTool {
+
+    // 한 일정의 참가자·자료가 이보다 많아도 프롬프트에 다 싣지 않는다 — 토큰이 터지고 정확도도 떨어진다
+    private static final int MAX_ATTENDEES = 100;
+    private static final int MAX_FILES = 50;
+
+    private final ScheduleRepository scheduleRepository;
+    private final ScheduleRoundRepository scheduleRoundRepository;
+    private final ScheduleAttendeeRepository scheduleAttendeeRepository;
+    private final ScheduleAgendaLinkRepository scheduleAgendaLinkRepository;
+    private final FileRepository fileRepository;
+
+    @Override
+    public AiTool definition() {
+        return new AiTool(
+                "get_schedule_detail",
+                "일정 하나의 상세 정보를 조회해 차수별 영수증(가게·총액·회비 지원금)과 입금 안내 계좌, "
+                        + "참가자 명단, 연결된 회의 안건, 첨부 자료를 반환한다. "
+                        + "장소·차수·계좌·참가자처럼 일정에 딸린 내용을 물으면 이 도구를 쓴다. "
+                        + "scheduleId가 필요하므로 일정 이름만 아는 경우 search_schedules를 먼저 호출한다.",
+                Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "scheduleId", Map.of(
+                                        "type", "integer",
+                                        "description", "search_schedules로 얻은 일정 ID")),
+                        "required", List.of("scheduleId")));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Object execute(Long termId, JsonNode args) {
+        Long scheduleId = ChatToolArgs.requiredLong(args, "scheduleId");
+
+        // 모델이 ID를 지어냈거나 다른 기수의 일정을 가리킬 수 있다. 이건 AI가 고칠 수 있는 실수라
+        // 예외로 올려 error JSON으로 돌려주고 search_schedules부터 다시 하게 둔다
+        Schedule schedule = scheduleRepository.findForAssistant(termId, scheduleId)
+                .orElseThrow(() -> new ChatToolArgumentException(
+                        "scheduleId " + scheduleId + "에 해당하는 일정이 이 기수에 없습니다. "
+                                + "search_schedules로 일정 ID를 먼저 확인하세요."));
+
+        List<ScheduleAttendee> attendees = scheduleAttendeeRepository.findByScheduleIdOrderByNameAsc(scheduleId);
+        boolean attendeesTruncated = attendees.size() > MAX_ATTENDEES;
+        List<ScheduleAttendee> attendeePage =
+                attendeesTruncated ? attendees.subList(0, MAX_ATTENDEES) : attendees;
+
+        // 상한보다 1건 더 조회해서 잘렸는지 판단한다 — AI가 "일부만 보여드렸다"고 말할 수 있어야 한다
+        List<File> files = fileRepository.search(
+                termId, null, null, scheduleId, FileSortOption.LATEST, null, null, null, MAX_FILES + 1);
+        boolean filesTruncated = files.size() > MAX_FILES;
+        List<File> filePage = filesTruncated ? files.subList(0, MAX_FILES) : files;
+
+        return new Result(
+                schedule.getId(),
+                schedule.getTitle(),
+                text(schedule.getStartAt()),
+                text(schedule.getEndAt()),
+                Boolean.TRUE.equals(schedule.getIsAllDay()),
+                schedule.getLocation(),
+                schedule.getScheduleCategory() == null ? null : schedule.getScheduleCategory().getName(),
+                Boolean.TRUE.equals(schedule.getHasOperationSpace()),
+                schedule.getMemo(),
+                scheduleRoundRepository.findOrderedRounds(scheduleId).stream()
+                        .map(RoundRow::from).toList(),
+                attendees.size(),
+                attendeesTruncated,
+                attendeePage.stream().map(AttendeeRow::from).toList(),
+                scheduleAgendaLinkRepository.findByScheduleForAssistant(scheduleId).stream()
+                        .map(AgendaRow::from).toList(),
+                filesTruncated,
+                filePage.stream().map(FileRow::from).toList());
+    }
+
+    private static String text(LocalDateTime value) {
+        return value == null ? null : value.toString();
+    }
+
+    private record Result(Long scheduleId, String title, String startAt, String endAt, boolean allDay,
+                          String location, String categoryName, boolean hasOperationSpace, String memo,
+                          List<RoundRow> rounds, int attendeeCount, boolean attendeesTruncated,
+                          List<AttendeeRow> attendees, List<AgendaRow> linkedAgendas,
+                          boolean filesTruncated, List<FileRow> files) {}
+
+    // 영수증 이미지 URL은 싣지 않는다 — 답변 문장에 넣을 수 없는 값이라 토큰만 쓴다.
+    // 영수증이 등록됐는지 여부만 알려주면 AI가 "영수증은 화면에서 보라"고 안내할 수 있다
+    private record RoundRow(Integer roundNo, String label, String storeName, String transactedAt,
+                            Integer totalAmount, Integer clubSubsidyAmount, boolean hasReceiptImage,
+                            String bankName, String accountNumber, String accountHolder) {
+
+        static RoundRow from(ScheduleRound round) {
+            return new RoundRow(
+                    round.getRoundNo(),
+                    round.getLabel(),
+                    round.getStoreName(),
+                    text(round.getTransactedAt()),
+                    round.getTotalAmount(),
+                    round.getClubSubsidyAmount(),
+                    round.getImageUrl() != null,
+                    round.getBankName(),
+                    round.getAccountNumber(),
+                    round.getAccountHolder());
+        }
+    }
+
+    private record AttendeeRow(Long attendeeId, String name, String affiliation, String phoneLast4, String source) {
+
+        static AttendeeRow from(ScheduleAttendee attendee) {
+            return new AttendeeRow(
+                    attendee.getId(),
+                    attendee.getName(),
+                    attendee.getAffiliation(),
+                    attendee.getPhoneLast4(),
+                    attendee.getSource().name());
+        }
+    }
+
+    private record AgendaRow(Long meetingId, String meetingTitle, String meetingDate,
+                             Long agendaId, String content, String status) {
+
+        static AgendaRow from(ScheduleAgendaLink link) {
+            MeetingAgenda agenda = link.getMeetingAgenda();
+            Meeting meeting = agenda.getMeeting();
+            return new AgendaRow(
+                    meeting.getId(),
+                    meeting.getTitle(),
+                    meeting.getMeetingDate() == null ? null : meeting.getMeetingDate().toString(),
+                    agenda.getId(),
+                    agenda.getContent(),
+                    agenda.getStatus().name());
+        }
+    }
+
+    private record FileRow(Long fileId, String name, String extension, Long size, String category,
+                           String uploadedAt) {
+
+        static FileRow from(File file) {
+            return new FileRow(
+                    file.getId(),
+                    file.getName(),
+                    file.getExtension(),
+                    file.getSize(),
+                    file.getCategory().name(),
+                    text(file.getCreatedAt()));
+        }
+    }
+}

@@ -11,4 +11,8 @@ public interface RoundAttendeeRepositoryCustom {
     // cursorId가 null이면 첫 페이지
     List<RoundAttendee> search(Long roundId, Boolean isCheckedIn, String keyword,
                                 LocalDateTime cursorCreatedAt, Long cursorId, int limit);
+
+    // 일정의 출석 기록을 차수·참가자와 함께 조회한다(AI 비서 조회용, 읽기 전용).
+    // roundNo가 null이면 전체 차수
+    List<RoundAttendee> findByScheduleForAssistant(Long groupTermId, Long scheduleId, Integer roundNo);
 }
