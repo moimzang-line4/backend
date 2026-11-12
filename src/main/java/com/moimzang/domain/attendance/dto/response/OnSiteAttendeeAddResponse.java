@@ -1,0 +1,28 @@
+package com.moimzang.domain.attendance.dto.response;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+
+@Getter
+@Builder
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+public class OnSiteAttendeeAddResponse {
+
+    @Schema(description = "참가자 ID(schedule_attendee.id)", example = "1")
+    private final Long attendeeId;
+
+    @Schema(description = "이름", example = "김모임")
+    private final String name;
+
+    @Schema(description = "학과·소속", example = "컴퓨터공학과")
+    private final String affiliation;
+
+    @Schema(description = "전화번호 뒤 4자리", example = "1234")
+    private final String phoneLast4;
+
+    @Schema(description = "출석 완료 여부", example = "false")
+    private final Boolean isCheckedIn;
+}

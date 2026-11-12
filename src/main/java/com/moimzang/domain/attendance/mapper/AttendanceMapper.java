@@ -1,9 +1,11 @@
 package com.moimzang.domain.attendance.mapper;
 
+import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendeeResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundCreateResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundSummaryResponse;
 import com.moimzang.domain.attendance.entity.RoundAttendee;
+import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -27,4 +29,11 @@ public interface AttendanceMapper {
     @Mapping(target = "affiliation", source = "scheduleAttendee.affiliation")
     @Mapping(target = "phoneLast4", source = "scheduleAttendee.phoneLast4")
     RoundAttendeeResponse toAttendeeResponse(RoundAttendee roundAttendee);
+
+    // 현장 인원 추가(API-030) 응답으로 변환한다. isCheckedIn은 Service가 넘기는 값이다(추가 직후는 항상 false)
+    @Mapping(target = "attendeeId", source = "attendee.id")
+    @Mapping(target = "name", source = "attendee.name")
+    @Mapping(target = "affiliation", source = "attendee.affiliation")
+    @Mapping(target = "phoneLast4", source = "attendee.phoneLast4")
+    OnSiteAttendeeAddResponse toOnSiteAttendeeAddResponse(ScheduleAttendee attendee, Boolean isCheckedIn);
 }
