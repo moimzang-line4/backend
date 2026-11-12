@@ -1,7 +1,7 @@
 package com.moimzang.domain.chat.entity;
 
 import com.moimzang.domain.chat.enums.MessageRole;
-import com.moimzang.domain.schedule.entity.Schedule;
+import com.moimzang.domain.chat.enums.NavigationType;
 import com.moimzang.global.entity.BaseCreatedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -39,10 +39,15 @@ public class AiMessage extends BaseCreatedEntity {
     @JoinColumn(name = "ai_chat_room_id", nullable = false)
     private AiChatRoom aiChatRoom;
 
-    // 질의 대상 일정
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "target_schedule_id")
-    private Schedule targetSchedule;
+    // 답변 아래 '…로 이동' 버튼이 가리키는 화면(없으면 버튼을 띄우지 않는다)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "navigation_type", length = 20)
+    private NavigationType navigationType;
+
+    // 이동 대상 ID. navigationType에 따라 일정 ID일 수도 회의 ID일 수도 있고,
+    // 기수 단위 화면(자료실·장부)이면 비어 있다
+    @Column(name = "navigation_target_id")
+    private Long navigationTargetId;
 
     // 메시지 역할(사용자 질문/AI 응답)
     @Enumerated(EnumType.STRING)
@@ -70,14 +75,15 @@ public class AiMessage extends BaseCreatedEntity {
                 .build();
     }
 
-    // AI 답변. 결과 카드가 없는 일반 답변이면 targetSchedule·cardType·contentJson이 전부 null이다
-    public static AiMessage ofAssistant(AiChatRoom chatRoom, String content, Schedule targetSchedule,
-                                         String cardType, String contentJson) {
+    // AI 답변. 이동할 화면이나 결과 카드가 없는 일반 답변이면 navigation·cardType·contentJson이 전부 null이다
+    public static AiMessage ofAssistant(AiChatRoom chatRoom, String content, NavigationType navigationType,
+                                         Long navigationTargetId, String cardType, String contentJson) {
         return AiMessage.builder()
                 .aiChatRoom(chatRoom)
                 .role(MessageRole.ASSISTANT)
                 .content(content)
-                .targetSchedule(targetSchedule)
+                .navigationType(navigationType)
+                .navigationTargetId(navigationTargetId)
                 .cardType(cardType)
                 .contentJson(contentJson)
                 .build();

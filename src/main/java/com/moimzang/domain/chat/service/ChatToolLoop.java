@@ -76,6 +76,11 @@ public class ChatToolLoop {
             List<ToolRun> runs = toolRuns.get(toolName);
             return runs != null && runs.size() == 1 ? runs.get(0) : null;
         }
+
+        // 그 도구가 한 번이라도 실행됐는지. 몇 번 불렸든 상관없는 쓰임(가리킬 대상이 없는 화면)에 쓴다
+        public boolean hasRun(String toolName) {
+            return toolRuns.containsKey(toolName);
+        }
     }
 
     public record ToolRun(String argumentsJson, String resultJson) {}

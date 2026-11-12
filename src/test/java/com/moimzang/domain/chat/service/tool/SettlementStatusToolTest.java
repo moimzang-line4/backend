@@ -119,6 +119,30 @@ class SettlementStatusToolTest {
     }
 
     @Test
+    void execute_차수별_청구액과_미납액_소계를_내려준다() throws Exception {
+        ScheduleAttendee minjun = attendee(401L, "강민준", "광고홍보학과", "1140");
+        ScheduleAttendee gildong = attendee(402L, "홍길동", "경영학과", "2250");
+        // 조회 정렬이 (이름, 차수)라 2차가 1차보다 먼저 나오는 순서로 들어올 수 있다
+        given(settlementTargetRepository.findByScheduleForAssistant(eq(10L), eq(null)))
+                .willReturn(List.of(
+                        target(minjun, round(2, 2), 55000, PaymentStatus.PAID),
+                        target(minjun, round(1, 1), 60000, PaymentStatus.PAID),
+                        target(gildong, round(1, 1), 60000, PaymentStatus.UNPAID)));
+
+        JsonNode summaries = execute("{\"scheduleId\":10}").get("roundSummaries");
+
+        // "1차 얼마, 2차 얼마"를 AI가 사람별 row를 더해 만들지 않게 미리 집계해 준다
+        assertThat(summaries).hasSize(2);
+        assertThat(summaries.get(0).get("roundNo").asInt()).isEqualTo(1);
+        assertThat(summaries.get(0).get("targetCount").asInt()).isEqualTo(2);
+        assertThat(summaries.get(0).get("billedAmount").asInt()).isEqualTo(120000);
+        assertThat(summaries.get(0).get("unpaidAmount").asInt()).isEqualTo(60000);
+        assertThat(summaries.get(1).get("roundNo").asInt()).isEqualTo(2);
+        assertThat(summaries.get(1).get("billedAmount").asInt()).isEqualTo(55000);
+        assertThat(summaries.get(1).get("unpaidAmount").asInt()).isZero();
+    }
+
+    @Test
     void execute_scheduleId가_없으면_ChatToolArgumentException을_던진다() {
         assertThatThrownBy(() -> tool.execute(1L, objectMapper.createObjectNode()))
                 .isInstanceOf(ChatToolArgumentException.class)

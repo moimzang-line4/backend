@@ -20,15 +20,19 @@ import tools.jackson.databind.JsonNode;
 @RequiredArgsConstructor
 public class AttendanceStatusTool implements ChatTool {
 
+    public static final String NAME = "get_attendance_status";
+
     private final RoundAttendeeRepository roundAttendeeRepository;
 
     @Override
     public AiTool definition() {
         return new AiTool(
-                "get_attendance_status",
+                NAME,
                 "일정의 출석 현황을 조회해 차수별 출석 인원·미출석 인원과 함께 "
                         + "참가자별 차수 출석 여부 목록을 반환한다. "
                         + "누가 왔는지·누가 빠졌는지·몇 명 왔는지 묻는 질문에 쓴다. "
+                        + "rounds[].targetCount는 그 차수의 출석 대상 인원이고, 실제 참석한 인원은 "
+                        + "checkedInCount다 — '몇 명 참석했어'에는 checkedInCount를 쓴다. "
                         + "scheduleId가 필요하므로 일정 이름만 아는 경우 search_schedules를 먼저 호출한다.",
                 Map.of(
                         "type", "object",
@@ -87,7 +91,7 @@ public class AttendanceStatusTool implements ChatTool {
     private static final class RoundAccumulator {
 
         private final ScheduleRound round;
-        private int totalCount;
+        private int targetCount;
         private int checkedInCount;
 
         private RoundAccumulator(ScheduleRound round) {
@@ -95,15 +99,15 @@ public class AttendanceStatusTool implements ChatTool {
         }
 
         private void add(RoundAttendee record) {
-            totalCount++;
+            targetCount++;
             if (Boolean.TRUE.equals(record.getIsCheckedIn())) {
                 checkedInCount++;
             }
         }
 
         private RoundRow toRow() {
-            return new RoundRow(round.getRoundNo(), round.getLabel(), totalCount, checkedInCount,
-                    totalCount - checkedInCount);
+            return new RoundRow(round.getRoundNo(), round.getLabel(), targetCount, checkedInCount,
+                    targetCount - checkedInCount);
         }
     }
 
@@ -141,9 +145,11 @@ public class AttendanceStatusTool implements ChatTool {
     }
 
     private record Result(Long scheduleId, Integer roundNo, List<RoundRow> rounds,
-                          int memberCount, List<MemberRow> members) {}
+                          int attendeeCount, List<MemberRow> members) {}
 
-    private record RoundRow(Integer roundNo, String label, int totalCount, int checkedInCount,
+    // targetCount는 그 차수의 출석 대상 인원이고 checkedInCount가 실제 참석 인원이다 —
+    // 이름이 비슷하면 "6명 참석, 그중 4명 출석" 같은 모순된 문장이 나온다
+    private record RoundRow(Integer roundNo, String label, int targetCount, int checkedInCount,
                             int notCheckedInCount) {}
 
     private record MemberRow(Long attendeeId, String name, String affiliation, String phoneLast4,

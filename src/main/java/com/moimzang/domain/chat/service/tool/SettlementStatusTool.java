@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,9 @@ public class SettlementStatusTool implements ChatTool {
                 NAME,
                 "일정의 입금 현황을 조회해 미입금 총액·미입금 인원·입금 완료 인원과 함께 "
                         + "참가자별 청구 금액과 입금 상태 목록을 반환한다. "
+                        + "여기서 말하는 청구 금액은 영수증 금액에서 회비 지원금을 뺀 뒤 참가자 수로 나눈 "
+                        + "'부원에게 걷을 돈'이다. 가게에서 실제 결제한 총액은 이 도구가 아니라 "
+                        + "get_schedule_detail에 있다. 차수별 소계는 roundSummaries에 들어 있으니 직접 더하지 않는다. "
                         + "scheduleId가 필요하므로 일정 이름만 아는 경우 search_schedules를 먼저 호출한다.",
                 Map.of(
                         "type", "object",
@@ -55,6 +59,7 @@ public class SettlementStatusTool implements ChatTool {
                 settlementTargetRepository.findByScheduleForAssistant(scheduleId, roundNo);
 
         List<Row> rows = aggregateByAttendee(targets);
+        List<RoundSummary> roundSummaries = aggregateByRound(targets);
 
         // 아직 못 받은 돈. 납부한 차수는 빼고 더해야 '미입금 총액'이 사람 단위 금액의 합과 맞는다
         int totalUnpaidAmount = rows.stream().mapToInt(Row::unpaidAmount).sum();
@@ -70,6 +75,7 @@ public class SettlementStatusTool implements ChatTool {
                 totalUnpaidAmount,
                 totalBilledAmount - totalUnpaidAmount,
                 totalBilledAmount,
+                roundSummaries,
                 rows);
     }
 
@@ -83,6 +89,41 @@ public class SettlementStatusTool implements ChatTool {
                     .add(target);
         }
         return byAttendee.values().stream().map(Accumulator::toRow).toList();
+    }
+
+    // "1차 얼마, 2차 얼마"를 AI가 사람별 row를 더해 만들지 않도록 차수 소계를 미리 내려준다.
+    // 조회 정렬이 (이름, 차수)라 차수 번호순을 보장하려면 TreeMap이 필요하다
+    private List<RoundSummary> aggregateByRound(List<SettlementTarget> targets) {
+        Map<Integer, RoundAccumulator> byRound = new TreeMap<>();
+        for (SettlementTarget target : targets) {
+            Integer roundNo = target.getScheduleRound().getRoundNo();
+            byRound.computeIfAbsent(roundNo, RoundAccumulator::new).add(target);
+        }
+        return byRound.values().stream().map(RoundAccumulator::toSummary).toList();
+    }
+
+    private static final class RoundAccumulator {
+
+        private final Integer roundNo;
+        private int targetCount;
+        private int billedAmount;
+        private int unpaidAmount;
+
+        private RoundAccumulator(Integer roundNo) {
+            this.roundNo = roundNo;
+        }
+
+        private void add(SettlementTarget target) {
+            targetCount++;
+            billedAmount += target.getBilledAmount();
+            if (target.getPaymentStatus() != PaymentStatus.PAID) {
+                unpaidAmount += target.getBilledAmount();
+            }
+        }
+
+        private RoundSummary toSummary() {
+            return new RoundSummary(roundNo, targetCount, billedAmount, unpaidAmount);
+        }
     }
 
     private static final class Accumulator {
@@ -127,7 +168,11 @@ public class SettlementStatusTool implements ChatTool {
     // 이름이 비슷해 헷갈리기 쉬운 값이라 AI가 직접 계산하지 않고 고를 수 있게 분리했다
     private record Result(Long scheduleId, Integer roundNo, int totalCount, int unpaidCount, int paidCount,
                           int totalUnpaidAmount, int totalPaidAmount, int totalBilledAmount,
-                          List<Row> members) {}
+                          List<RoundSummary> roundSummaries, List<Row> members) {}
+
+    // 차수별 청구액·미납액 소계. billedAmount는 그 차수에서 부원들에게 걷기로 한 금액의 합이라
+    // 영수증 금액(get_schedule_detail의 receiptAmount)과 다르다 — 차이가 회비 지원금이다
+    public record RoundSummary(Integer roundNo, int targetCount, int billedAmount, int unpaidAmount) {}
 
     public record Row(Long attendeeId, String name, String affiliation, String phoneLast4,
                       int totalBilledAmount, int unpaidAmount, String paymentStatus, List<RoundRow> rounds) {

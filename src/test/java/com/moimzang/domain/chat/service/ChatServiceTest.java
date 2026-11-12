@@ -14,6 +14,7 @@ import com.moimzang.domain.chat.dto.request.ChatMessageSendRequest;
 import com.moimzang.domain.chat.dto.request.ChatRoomCreateRequest;
 import com.moimzang.domain.chat.dto.response.ChatMessageListResponse;
 import com.moimzang.domain.chat.dto.response.ChatMessageResponse;
+import com.moimzang.domain.chat.dto.response.ChatNavigationResponse;
 import com.moimzang.domain.chat.dto.response.ChatRoomCreateResponse;
 import com.moimzang.domain.chat.dto.response.ChatRoomListResponse;
 import com.moimzang.domain.chat.entity.AiChatRoom;
@@ -224,7 +225,7 @@ class ChatServiceTest {
         assertThat(response.getContent()).isEqualTo("등록된 일정은 3건입니다");
         assertThat(response.getCardType()).isNull();
         assertThat(response.getCard()).isNull();
-        assertThat(response.getTargetScheduleId()).isNull();
+        assertThat(response.getNavigation()).isNull();
     }
 
     @Test
@@ -241,7 +242,7 @@ class ChatServiceTest {
         ChatMessageResponse response = chatService.sendMessage(8L, send("가을공연 미입금자 알려줘"));
 
         assertThat(response.getCardType()).isEqualTo("미입금자 조회");
-        assertThat(response.getTargetScheduleId()).isEqualTo(10L);
+        assertThat(response.getNavigation()).isEqualTo(new ChatNavigationResponse("SETTLEMENT", 10L));
         assertThat(response.getCard().get("totalAmount").asInt()).isEqualTo(47000);
         assertThat(response.getCard().get("items").get(0).get("attendeeId").asLong()).isEqualTo(401L);
     }
@@ -258,8 +259,87 @@ class ChatServiceTest {
 
         assertThat(response.getCardType()).isNull();
         assertThat(response.getCard()).isNull();
-        // 어떤 일정을 물었는지는 남겨 FE가 해당 화면으로 보낼 수 있게 한다
-        assertThat(response.getTargetScheduleId()).isEqualTo(10L);
+        // 카드가 없어도 정산 화면으로 보내는 버튼은 남는다
+        assertThat(response.getNavigation().type()).isEqualTo("SETTLEMENT");
+        assertThat(response.getNavigation().targetId()).isEqualTo(10L);
+    }
+
+    @Test
+    void sendMessage_도구에_따라_이동할_화면을_정한다() {
+        givenTurn(8L, false);
+        givenSavedAnswer(8L, 210L);
+        given(chatToolLoop.run(eq(1L), any()))
+                .willReturn(outcome("get_attendance_status", "{\"scheduleId\":10}"))
+                .willReturn(outcome("get_meeting_detail", "{\"meetingId\":900}"))
+                .willReturn(outcome("search_notes", "{\"scheduleId\":10}"))
+                .willReturn(outcome("get_schedule_detail", "{\"scheduleId\":10}"))
+                .willReturn(outcome("get_budget_summary", "{}"))
+                .willReturn(outcome("search_files", "{}"));
+
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("ATTENDANCE", 10L));
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("MEETING", 900L));
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("NOTE", 10L));
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("SCHEDULE", 10L));
+        // 기수 단위 화면이라 가리킬 대상 ID가 없다
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("BUDGET", null));
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("FILE", null));
+    }
+
+    @Test
+    void sendMessage_일정_검색에서_정산으로_이어지면_정산_화면으로_보낸다() {
+        givenTurn(8L, false);
+        givenSavedAnswer(8L, 211L);
+        given(chatToolLoop.run(eq(1L), any())).willReturn(new ChatToolLoop.Outcome("답변", Map.of(
+                "search_schedules", List.of(new ChatToolLoop.ToolRun("{}", "{}")),
+                "get_settlement_status", List.of(new ChatToolLoop.ToolRun("{\"scheduleId\":10}", "{}")))));
+
+        // 검색 도구는 결과가 여러 건일 수 있어 이동 대상이 되지 않는다
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("SETTLEMENT", 10L));
+    }
+
+    @Test
+    void sendMessage_같은_도구가_여러_번_불리면_이동할_화면을_정하지_않는다() {
+        givenTurn(8L, false);
+        givenSavedAnswer(8L, 212L);
+        given(chatToolLoop.run(eq(1L), any())).willReturn(new ChatToolLoop.Outcome("답변", Map.of(
+                "get_attendance_status", List.of(
+                        new ChatToolLoop.ToolRun("{\"scheduleId\":10}", "{}"),
+                        new ChatToolLoop.ToolRun("{\"scheduleId\":11}", "{}")))));
+
+        // 어느 일정으로 보낼지 정할 수 없다
+        assertThat(navigationOf(8L)).isNull();
+    }
+
+    @Test
+    void sendMessage_자료_검색이_여러_번_불려도_자료실로_보낸다() {
+        givenTurn(8L, false);
+        givenSavedAnswer(8L, 215L);
+        given(chatToolLoop.run(eq(1L), any())).willReturn(new ChatToolLoop.Outcome("답변", Map.of(
+                "search_files", List.of(
+                        new ChatToolLoop.ToolRun("{}", "{}"),
+                        new ChatToolLoop.ToolRun("{\"category\":\"PHOTO\"}", "{}")))));
+
+        // 가리킬 대상이 없는 화면이라 몇 번 불렸든 보낼 곳이 하나다
+        assertThat(navigationOf(8L)).isEqualTo(new ChatNavigationResponse("FILE", null));
+    }
+
+    @Test
+    void sendMessage_일정을_고르지_않은_메모_검색은_이동할_화면이_없다() {
+        givenTurn(8L, false);
+        givenSavedAnswer(8L, 213L);
+        given(chatToolLoop.run(eq(1L), any())).willReturn(outcome("search_notes", "{\"keyword\":\"티켓\"}"));
+
+        // 기수 전체 메모 검색은 특정 일정 화면으로 보낼 근거가 없다
+        assertThat(navigationOf(8L)).isNull();
+    }
+
+    @Test
+    void sendMessage_도구를_쓰지_않은_답변은_이동할_화면이_없다() {
+        givenTurn(8L, false);
+        givenSavedAnswer(8L, 214L);
+        given(chatToolLoop.run(eq(1L), any())).willReturn(new ChatToolLoop.Outcome("답변", Map.of()));
+
+        assertThat(navigationOf(8L)).isNull();
     }
 
     @Test
@@ -271,8 +351,8 @@ class ChatServiceTest {
 
         chatService.sendMessage(8L, send("가을공연 미입금자 알려줘"));
 
-        verify(conversationStore).saveAnswer(eq(8L), eq("답변"), eq(null), eq(null), eq(null),
-                eq("가을공연 미입금 현황"));
+        verify(conversationStore).saveAnswer(eq(8L), eq("답변"), eq(ChatConversationStore.Navigation.none()),
+                eq(null), eq(null), eq("가을공연 미입금 현황"));
     }
 
     @Test
@@ -284,7 +364,8 @@ class ChatServiceTest {
         chatService.sendMessage(8L, send("두 번째 질문"));
 
         verify(titleGenerator, never()).generate(anyString());
-        verify(conversationStore).saveAnswer(eq(8L), eq("답변"), eq(null), eq(null), eq(null), eq(null));
+        verify(conversationStore).saveAnswer(eq(8L), eq("답변"), eq(ChatConversationStore.Navigation.none()),
+                eq(null), eq(null), eq(null));
     }
 
     @Test
@@ -362,6 +443,10 @@ class ChatServiceTest {
                 .isEqualTo(ChatErrorCode.CHAT_400_INVALID_CURSOR);
     }
 
+    private ChatNavigationResponse navigationOf(Long chatRoomId) {
+        return chatService.sendMessage(chatRoomId, send("질문")).getNavigation();
+    }
+
     private ChatMessageSendRequest send(String content) {
         return ChatMessageSendRequest.builder().content(content).build();
     }
@@ -380,6 +465,11 @@ class ChatServiceTest {
     private ChatToolLoop.Outcome settlementOutcome(String argumentsJson, String resultJson) {
         return new ChatToolLoop.Outcome("확인했어요",
                 Map.of("get_settlement_status", List.of(new ChatToolLoop.ToolRun(argumentsJson, resultJson))));
+    }
+
+    private ChatToolLoop.Outcome outcome(String toolName, String argumentsJson) {
+        return new ChatToolLoop.Outcome("답변",
+                Map.of(toolName, List.of(new ChatToolLoop.ToolRun(argumentsJson, "{}"))));
     }
 
     private AiMessage message(Long id, MessageRole role, String content, LocalDateTime createdAt) {

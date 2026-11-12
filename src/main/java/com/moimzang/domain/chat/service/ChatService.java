@@ -7,6 +7,7 @@ import com.moimzang.domain.chat.dto.request.ChatMessageSendRequest;
 import com.moimzang.domain.chat.dto.request.ChatRoomCreateRequest;
 import com.moimzang.domain.chat.dto.response.ChatMessageListResponse;
 import com.moimzang.domain.chat.dto.response.ChatMessageResponse;
+import com.moimzang.domain.chat.dto.response.ChatNavigationResponse;
 import com.moimzang.domain.chat.dto.response.ChatRoomCreateResponse;
 import com.moimzang.domain.chat.dto.response.ChatRoomListResponse;
 import com.moimzang.domain.chat.dto.response.ChatRoomSummaryResponse;
@@ -14,10 +15,17 @@ import com.moimzang.domain.chat.dto.response.UnpaidLookupCard;
 import com.moimzang.domain.chat.entity.AiChatRoom;
 import com.moimzang.domain.chat.entity.AiMessage;
 import com.moimzang.domain.chat.enums.MessageRole;
+import com.moimzang.domain.chat.enums.NavigationType;
 import com.moimzang.domain.chat.exception.ChatErrorCode;
 import com.moimzang.domain.chat.mapper.ChatMapper;
 import com.moimzang.domain.chat.repository.AiChatRoomRepository;
 import com.moimzang.domain.chat.repository.AiMessageRepository;
+import com.moimzang.domain.chat.service.tool.AttendanceStatusTool;
+import com.moimzang.domain.chat.service.tool.BudgetSummaryTool;
+import com.moimzang.domain.chat.service.tool.FileSearchTool;
+import com.moimzang.domain.chat.service.tool.MeetingDetailTool;
+import com.moimzang.domain.chat.service.tool.NoteSearchTool;
+import com.moimzang.domain.chat.service.tool.ScheduleDetailTool;
 import com.moimzang.domain.chat.service.tool.SettlementStatusTool;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
@@ -156,20 +164,21 @@ public class ChatService {
         }
 
         ChatConversationStore.Card card = buildCard(outcome);
+        ChatConversationStore.Navigation navigation = buildNavigation(outcome);
         // 제목 생성 실패는 답변을 막지 않는다 — 생성기가 질문 원문으로 대체해 돌려준다
         String title = context.needsTitle() ? titleGenerator.generate(question) : null;
 
         AiMessage saved = conversationStore.saveAnswer(
-                chatRoomId, outcome.content(), card.schedule(), card.cardType(), card.contentJson(), title);
+                chatRoomId, outcome.content(), navigation, card.cardType(), card.contentJson(), title);
 
-        log.info("[AI 메시지 전송] 전송을 완료했습니다. chatRoomId = {}, messageId = {}, cardType = {}",
-                chatRoomId, saved.getId(), card.cardType());
+        log.info("[AI 메시지 전송] 전송을 완료했습니다. chatRoomId = {}, messageId = {}, cardType = {}, navigation = {}",
+                chatRoomId, saved.getId(), card.cardType(), navigation.type());
 
         return ChatMessageResponse.builder()
                 .messageId(saved.getId())
                 .role(MessageRole.ASSISTANT.name())
                 .content(outcome.content())
-                .targetScheduleId(card.schedule() == null ? null : card.schedule().getId())
+                .navigation(toNavigationResponse(navigation.type(), navigation.targetId()))
                 .cardType(card.cardType())
                 .card(card.card() == null ? null : unpaidLookupCardFactory.toJsonNode(card.card()))
                 .createdAt(saved.getCreatedAt())
@@ -223,6 +232,52 @@ public class ChatService {
                 .build();
     }
 
+    /**
+     * 답변 아래 '…로 이동' 버튼이 가리킬 화면을 정한다.
+     *
+     * 아래 순서대로 훑어 먼저 걸리는 하나를 쓴다 — 일정 검색 → 정산 조회처럼 여러 도구가 연쇄로
+     * 돌기 때문에, 질문의 의도에 가장 가까운(더 구체적인) 도구가 앞에 오도록 늘어놓았다.
+     * 검색 도구(search_schedules·search_meetings)는 결과가 여러 건일 수 있어 대상이 되지 않는다.
+     */
+    private static final List<NavigationRule> NAVIGATION_RULES = List.of(
+            new NavigationRule(SettlementStatusTool.NAME, NavigationType.SETTLEMENT, "scheduleId"),
+            new NavigationRule(AttendanceStatusTool.NAME, NavigationType.ATTENDANCE, "scheduleId"),
+            new NavigationRule(MeetingDetailTool.NAME, NavigationType.MEETING, "meetingId"),
+            new NavigationRule(NoteSearchTool.NAME, NavigationType.NOTE, "scheduleId"),
+            new NavigationRule(ScheduleDetailTool.NAME, NavigationType.SCHEDULE, "scheduleId"),
+            new NavigationRule(BudgetSummaryTool.NAME, NavigationType.BUDGET, null),
+            new NavigationRule(FileSearchTool.NAME, NavigationType.FILE, null));
+
+    private ChatConversationStore.Navigation buildNavigation(ChatToolLoop.Outcome outcome) {
+        for (NavigationRule rule : NAVIGATION_RULES) {
+            // 자료실·장부처럼 가리킬 대상이 없는 화면은 도구가 몇 번 불렸든 보낼 곳이 하나다
+            if (rule.idField() == null) {
+                if (outcome.hasRun(rule.toolName())) {
+                    return new ChatConversationStore.Navigation(rule.type(), null);
+                }
+                continue;
+            }
+
+            // 같은 도구가 서로 다른 인자로 여러 번 불렸으면 어느 일정·회의로 보낼지 정할 수 없다
+            ChatToolLoop.ToolRun run = outcome.singleRun(rule.toolName());
+            if (run == null) {
+                continue;
+            }
+            Long targetId = readLong(run.argumentsJson(), rule.idField());
+            // 대상 ID가 필요한 화면인데 인자에 없으면(예: 일정을 안 고른 메모 검색) 버튼을 띄우지 않는다
+            if (targetId != null) {
+                return new ChatConversationStore.Navigation(rule.type(), targetId);
+            }
+        }
+        return ChatConversationStore.Navigation.none();
+    }
+
+    private ChatNavigationResponse toNavigationResponse(NavigationType type, Long targetId) {
+        return type == null ? null : new ChatNavigationResponse(type.name(), targetId);
+    }
+
+    private record NavigationRule(String toolName, NavigationType type, String idField) {}
+
     // 입금 현황 도구가 실행됐고 미입금자가 있을 때만 카드를 만든다.
     // 카드 포맷이 확정된 건 '미입금자 조회' 하나뿐이라 나머지 도구는 텍스트 답변만 한다
     private ChatConversationStore.Card buildCard(ChatToolLoop.Outcome outcome) {
@@ -231,7 +286,7 @@ public class ChatService {
             return ChatConversationStore.Card.none();
         }
 
-        Long scheduleId = readScheduleId(run.argumentsJson());
+        Long scheduleId = readLong(run.argumentsJson(), "scheduleId");
         if (scheduleId == null) {
             return ChatConversationStore.Card.none();
         }
@@ -243,20 +298,20 @@ public class ChatService {
 
         UnpaidLookupCard card = unpaidLookupCardFactory.create(schedule, run.resultJson());
         if (card == null) {
-            // 전원 납부 완료 등으로 보여줄 대상이 없으면 카드 없이 텍스트로만 답한다.
-            // 어떤 일정을 물었는지는 남겨서 FE가 해당 화면으로 보낼 수 있게 한다
-            return new ChatConversationStore.Card(schedule, null, null, null);
+            // 전원 납부 완료 등으로 보여줄 대상이 없으면 카드 없이 텍스트로만 답한다
+            return ChatConversationStore.Card.none();
         }
         return new ChatConversationStore.Card(schedule, UnpaidLookupCardFactory.CARD_TYPE, card,
                 unpaidLookupCardFactory.toJsonString(card));
     }
 
-    private Long readScheduleId(String argumentsJson) {
+    // 모델이 만든 도구 인자 JSON에서 ID를 꺼낸다
+    private Long readLong(String argumentsJson, String field) {
         try {
-            JsonNode node = objectMapper.readTree(argumentsJson).get("scheduleId");
+            JsonNode node = objectMapper.readTree(argumentsJson).get(field);
             return node == null || node.isNull() ? null : node.asLong();
         } catch (JacksonException e) {
-            log.warn("[AI 메시지 전송] 도구 인자에서 scheduleId를 읽지 못했습니다. arguments = {}", argumentsJson);
+            log.warn("[AI 메시지 전송] 도구 인자에서 {}를 읽지 못했습니다. arguments = {}", field, argumentsJson);
             return null;
         }
     }
@@ -266,7 +321,7 @@ public class ChatService {
                 .messageId(message.getId())
                 .role(message.getRole().name())
                 .content(message.getContent())
-                .targetScheduleId(message.getTargetSchedule() == null ? null : message.getTargetSchedule().getId())
+                .navigation(toNavigationResponse(message.getNavigationType(), message.getNavigationTargetId()))
                 .cardType(message.getCardType())
                 .card(readCard(message.getContentJson()))
                 .createdAt(message.getCreatedAt())

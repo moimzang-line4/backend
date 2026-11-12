@@ -72,7 +72,7 @@ class ScheduleDetailToolTest {
 
         assertThat(round.get("roundNo").asInt()).isEqualTo(1);
         assertThat(round.get("storeName").asText()).isEqualTo("삼겹살집");
-        assertThat(round.get("totalAmount").asInt()).isEqualTo(320000);
+        assertThat(round.get("receiptAmount").asInt()).isEqualTo(320000);
         assertThat(round.get("clubSubsidyAmount").asInt()).isEqualTo(100000);
         assertThat(round.get("bankName").asText()).isEqualTo("국민은행");
         assertThat(round.get("accountNumber").asText()).isEqualTo("123456-78-901234");
@@ -80,6 +80,36 @@ class ScheduleDetailToolTest {
         // 영수증 이미지는 답변 문장에 쓸 수 없는 값이라 URL 대신 등록 여부만 내려준다
         assertThat(round.get("hasReceiptImage").asBoolean()).isTrue();
         assertThat(round.has("imageUrl")).isFalse();
+    }
+
+    @Test
+    void execute_차수_영수증과_지원금의_합계를_내려준다() throws Exception {
+        givenSchedule();
+        given(scheduleRoundRepository.findOrderedRounds(10L))
+                .willReturn(List.of(
+                        round(1, "1차", "삼겹살집", 320000, 100000),
+                        round(2, "2차", "코인노래방", 135000, 0)));
+
+        JsonNode result = execute("{\"scheduleId\":10}");
+
+        // 차수 금액을 AI가 직접 더하면 틀린다 — 합계는 백엔드가 확정해 내려준다
+        assertThat(result.get("totalReceiptAmount").asInt()).isEqualTo(455000);
+        assertThat(result.get("totalSubsidyAmount").asInt()).isEqualTo(100000);
+    }
+
+    @Test
+    void execute_영수증을_아직_안_올린_차수는_금액을_0으로_친다() throws Exception {
+        givenSchedule();
+        ScheduleRound noReceipt = BeanUtils.instantiateClass(ScheduleRound.class);
+        ReflectionTestUtils.setField(noReceipt, "roundNo", 2);
+        given(scheduleRoundRepository.findOrderedRounds(10L))
+                .willReturn(List.of(round(1, "1차", "삼겹살집", 320000, 100000), noReceipt));
+
+        JsonNode result = execute("{\"scheduleId\":10}");
+
+        // totalAmount가 nullable이라 그대로 더하면 NPE가 난다
+        assertThat(result.get("totalReceiptAmount").asInt()).isEqualTo(320000);
+        assertThat(result.get("rounds").get(1).get("receiptAmount").isNull()).isTrue();
     }
 
     @Test

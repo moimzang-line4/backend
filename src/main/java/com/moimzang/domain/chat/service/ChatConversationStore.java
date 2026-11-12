@@ -4,6 +4,7 @@ import com.moimzang.domain.chat.dto.response.UnpaidLookupCard;
 import com.moimzang.domain.chat.entity.AiChatRoom;
 import com.moimzang.domain.chat.entity.AiMessage;
 import com.moimzang.domain.chat.enums.MessageRole;
+import com.moimzang.domain.chat.enums.NavigationType;
 import com.moimzang.domain.chat.exception.ChatErrorCode;
 import com.moimzang.domain.chat.repository.AiChatRoomRepository;
 import com.moimzang.domain.chat.repository.AiMessageRepository;
@@ -65,9 +66,9 @@ public class ChatConversationStore {
         return new ConversationContext(chatRoom.getGroupTerm().getId(), needsTitle, messages);
     }
 
-    // AI 답변과 카드를 저장하고, 목록 정렬에 쓰는 활동 시각을 갱신한다
+    // AI 답변과 이동 대상·카드를 저장하고, 목록 정렬에 쓰는 활동 시각을 갱신한다
     @Transactional
-    public AiMessage saveAnswer(Long chatRoomId, String content, Schedule targetSchedule,
+    public AiMessage saveAnswer(Long chatRoomId, String content, Navigation navigation,
                                  String cardType, String contentJson, String title) {
         AiChatRoom chatRoom = aiChatRoomRepository.findById(chatRoomId)
                 .orElseThrow(() -> new CustomException(ChatErrorCode.CHAT_404_NOT_FOUND));
@@ -76,8 +77,8 @@ public class ChatConversationStore {
             chatRoom.applyTitle(title);
         }
 
-        AiMessage saved = aiMessageRepository.save(
-                AiMessage.ofAssistant(chatRoom, content, targetSchedule, cardType, contentJson));
+        AiMessage saved = aiMessageRepository.save(AiMessage.ofAssistant(
+                chatRoom, content, navigation.type(), navigation.targetId(), cardType, contentJson));
 
         aiChatRoomRepository.touchUpdatedAt(chatRoomId, LocalDateTime.now());
 
@@ -91,6 +92,14 @@ public class ChatConversationStore {
 
         public static Card none() {
             return new Card(null, null, null, null);
+        }
+    }
+
+    // 이동 버튼이 가리킬 화면. type이 null이면 버튼을 띄우지 않는다
+    public record Navigation(NavigationType type, Long targetId) {
+
+        public static Navigation none() {
+            return new Navigation(null, null);
         }
     }
 }

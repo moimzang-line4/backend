@@ -22,8 +22,8 @@ public class ChatMessageResponse {
     @Schema(description = "응답 텍스트", example = "가을공연 미입금자를 확인했어요.")
     private final String content;
 
-    @Schema(description = "대상 일정 ID. 일정과 무관한 답변이면 null", example = "10")
-    private final Long targetScheduleId;
+    @Schema(description = "답변 아래 '…로 이동' 버튼이 가리킬 화면. 이동할 곳이 없으면 null")
+    private final ChatNavigationResponse navigation;
 
     @Schema(description = "결과 카드 유형. 카드가 없으면 null", example = "미입금자 조회")
     private final String cardType;
