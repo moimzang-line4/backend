@@ -60,4 +60,26 @@ public class AiMessage extends BaseCreatedEntity {
     // 결과 카드 내용 스냅샷(JSON)
     @Column(name = "content_json", columnDefinition = "JSON")
     private String contentJson;
+
+    // 사용자가 보낸 질문
+    public static AiMessage ofUser(AiChatRoom chatRoom, String content) {
+        return AiMessage.builder()
+                .aiChatRoom(chatRoom)
+                .role(MessageRole.USER)
+                .content(content)
+                .build();
+    }
+
+    // AI 답변. 결과 카드가 없는 일반 답변이면 targetSchedule·cardType·contentJson이 전부 null이다
+    public static AiMessage ofAssistant(AiChatRoom chatRoom, String content, Schedule targetSchedule,
+                                         String cardType, String contentJson) {
+        return AiMessage.builder()
+                .aiChatRoom(chatRoom)
+                .role(MessageRole.ASSISTANT)
+                .content(content)
+                .targetSchedule(targetSchedule)
+                .cardType(cardType)
+                .contentJson(contentJson)
+                .build();
+    }
 }
