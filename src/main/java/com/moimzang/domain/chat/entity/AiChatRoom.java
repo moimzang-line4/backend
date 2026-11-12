@@ -39,4 +39,12 @@ public class AiChatRoom extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_term_id", nullable = false)
     private GroupTerm groupTerm;
+
+    // title은 선택이라 비어 있을 수 있다 — 첫 질문을 보낼 때 그 질문 텍스트로 채운다
+    public static AiChatRoom create(GroupTerm groupTerm, String title) {
+        return AiChatRoom.builder()
+                .groupTerm(groupTerm)
+                .title(title)
+                .build();
+    }
 }
