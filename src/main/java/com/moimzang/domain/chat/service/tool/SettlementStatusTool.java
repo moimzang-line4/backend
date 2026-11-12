@@ -1,7 +1,7 @@
 package com.moimzang.domain.chat.service.tool;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.settlement.entity.SettlementTarget;
 import com.moimzang.domain.settlement.enums.PaymentStatus;
@@ -56,8 +56,9 @@ public class SettlementStatusTool implements ChatTool {
 
         List<Row> rows = aggregateByAttendee(targets);
 
-        int totalUnpaidAmount = rows.stream().filter(Row::isUnpaid).mapToInt(Row::totalBilledAmount).sum();
-        int totalPaidAmount = rows.stream().filter(r -> !r.isUnpaid()).mapToInt(Row::totalBilledAmount).sum();
+        // 아직 못 받은 돈. 납부한 차수는 빼고 더해야 '미입금 총액'이 사람 단위 금액의 합과 맞는다
+        int totalUnpaidAmount = rows.stream().mapToInt(Row::unpaidAmount).sum();
+        int totalBilledAmount = rows.stream().mapToInt(Row::totalBilledAmount).sum();
         long unpaidCount = rows.stream().filter(Row::isUnpaid).count();
 
         return new Result(
@@ -67,7 +68,8 @@ public class SettlementStatusTool implements ChatTool {
                 (int) unpaidCount,
                 rows.size() - (int) unpaidCount,
                 totalUnpaidAmount,
-                totalPaidAmount,
+                totalBilledAmount - totalUnpaidAmount,
+                totalBilledAmount,
                 rows);
     }
 
@@ -88,6 +90,7 @@ public class SettlementStatusTool implements ChatTool {
         private final ScheduleAttendee attendee;
         private final List<RoundRow> rounds = new ArrayList<>();
         private int totalAmount;
+        private int unpaidAmount;
         private boolean allPaid = true;
 
         private Accumulator(ScheduleAttendee attendee) {
@@ -97,6 +100,9 @@ public class SettlementStatusTool implements ChatTool {
         private void add(SettlementTarget target) {
             boolean paid = target.getPaymentStatus() == PaymentStatus.PAID;
             totalAmount += target.getBilledAmount();
+            if (!paid) {
+                unpaidAmount += target.getBilledAmount();
+            }
             allPaid &= paid;
             rounds.add(new RoundRow(
                     target.getScheduleRound().getRoundNo(),
@@ -111,16 +117,20 @@ public class SettlementStatusTool implements ChatTool {
                     attendee.getAffiliation(),
                     attendee.getPhoneLast4(),
                     totalAmount,
+                    unpaidAmount,
                     allPaid ? PaymentStatus.PAID.name() : PaymentStatus.UNPAID.name(),
                     rounds);
         }
     }
 
+    // totalUnpaidAmount(아직 못 받은 돈)와 totalBilledAmount(전체 청구액)를 둘 다 내려준다 —
+    // 이름이 비슷해 헷갈리기 쉬운 값이라 AI가 직접 계산하지 않고 고를 수 있게 분리했다
     private record Result(Long scheduleId, Integer roundNo, int totalCount, int unpaidCount, int paidCount,
-                          int totalUnpaidAmount, int totalPaidAmount, List<Row> members) {}
+                          int totalUnpaidAmount, int totalPaidAmount, int totalBilledAmount,
+                          List<Row> members) {}
 
     public record Row(Long attendeeId, String name, String affiliation, String phoneLast4,
-                      int totalBilledAmount, String paymentStatus, List<RoundRow> rounds) {
+                      int totalBilledAmount, int unpaidAmount, String paymentStatus, List<RoundRow> rounds) {
 
         // paymentStatus와 중복이라 AI에게 보낼 JSON에는 싣지 않는다
         @JsonIgnore

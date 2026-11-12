@@ -2,7 +2,7 @@ package com.moimzang.domain.chat.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.moimzang.domain.chat.dto.response.UnpaidLookupCard;
 import com.moimzang.domain.chat.service.tool.SettlementStatusTool;
 import com.moimzang.domain.schedule.entity.Schedule;
@@ -60,7 +60,7 @@ class UnpaidLookupCardFactoryTest {
         assertThat(factory.create(schedule("가을공연"), "이건 JSON이 아니다")).isNull();
     }
 
-    // totalUnpaidAmount는 카드 총액이 도구 집계값을 그대로 쓰는지 보려고 의도적으로 94000 고정
+    // 카드 총액이 도구 집계값을 그대로 쓰는지 보려고 94000으로 고정한다
     private String toolResultJson(SettlementStatusTool.Row... rows) throws Exception {
         return objectMapper.writeValueAsString(
                 new java.util.LinkedHashMap<>(java.util.Map.of(
@@ -70,7 +70,9 @@ class UnpaidLookupCardFactoryTest {
 
     private SettlementStatusTool.Row row(Long id, String name, String affiliation, String phoneLast4,
                                           int amount, PaymentStatus status) {
-        return new SettlementStatusTool.Row(id, name, affiliation, phoneLast4, amount, status.name(), List.of());
+        int unpaid = status == PaymentStatus.UNPAID ? amount : 0;
+        return new SettlementStatusTool.Row(id, name, affiliation, phoneLast4, amount, unpaid,
+                status.name(), List.of());
     }
 
     private Schedule schedule(String title) {

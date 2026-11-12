@@ -1,9 +1,9 @@
 package com.moimzang.domain.chat.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.moimzang.domain.chat.dto.response.UnpaidLookupCard;
 import com.moimzang.domain.chat.service.tool.SettlementStatusTool;
 import com.moimzang.domain.schedule.entity.Schedule;
@@ -36,9 +36,10 @@ public class UnpaidLookupCardFactory {
 
         List<UnpaidLookupCard.Item> items = result.members().stream()
                 .filter(SettlementStatusTool.Row::isUnpaid)
+                // 이미 낸 차수를 빼고 '아직 안 낸 금액'만 담는다 — 그래야 항목 합이 카드 총액과 맞는다
                 .map(row -> new UnpaidLookupCard.Item(
                         row.attendeeId(), row.name(), row.affiliation(), row.phoneLast4(),
-                        row.totalBilledAmount()))
+                        row.unpaidAmount()))
                 .toList();
 
         if (items.isEmpty()) {
@@ -59,7 +60,7 @@ public class UnpaidLookupCardFactory {
     public String toJsonString(UnpaidLookupCard card) {
         try {
             return objectMapper.writeValueAsString(card);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("미입금자 카드를 JSON으로 직렬화하지 못했습니다.", e);
         }
     }
@@ -69,7 +70,7 @@ public class UnpaidLookupCardFactory {
         try {
             SettlementResult result = objectMapper.readValue(json, SettlementResult.class);
             return result.members() == null ? null : result;
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("[AI 비서] 입금 현황 결과를 카드로 변환하지 못했습니다.", e);
             return null;
         }

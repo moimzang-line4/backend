@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
 import com.moimzang.domain.settlement.entity.SettlementTarget;
@@ -44,6 +44,7 @@ class SettlementStatusToolTest {
 
         assertThat(result.get("totalCount").asInt()).isEqualTo(1);
         assertThat(result.get("members").get(0).get("totalBilledAmount").asInt()).isEqualTo(47000);
+        assertThat(result.get("members").get(0).get("unpaidAmount").asInt()).isEqualTo(47000);
         assertThat(result.get("totalUnpaidAmount").asInt()).isEqualTo(47000);
     }
 
@@ -66,9 +67,13 @@ class SettlementStatusToolTest {
         assertThat(members.get(1).get("paymentStatus").asText()).isEqualTo("UNPAID");
         assertThat(result.get("paidCount").asInt()).isEqualTo(1);
         assertThat(result.get("unpaidCount").asInt()).isEqualTo(1);
-        // 미납자의 금액은 납부한 차수까지 포함해 합산된다
-        assertThat(result.get("totalUnpaidAmount").asInt()).isEqualTo(47000);
-        assertThat(result.get("totalPaidAmount").asInt()).isEqualTo(47000);
+        // 홍길동은 1차를 이미 냈으므로 아직 안 낸 금액은 2차분 27000만이다
+        assertThat(members.get(1).get("totalBilledAmount").asInt()).isEqualTo(47000);
+        assertThat(members.get(1).get("unpaidAmount").asInt()).isEqualTo(27000);
+        // 미입금 총액은 미납 차수만 더한 값이라 대상자별 unpaidAmount의 합과 일치한다
+        assertThat(result.get("totalUnpaidAmount").asInt()).isEqualTo(27000);
+        assertThat(result.get("totalPaidAmount").asInt()).isEqualTo(67000);
+        assertThat(result.get("totalBilledAmount").asInt()).isEqualTo(94000);
     }
 
     @Test
