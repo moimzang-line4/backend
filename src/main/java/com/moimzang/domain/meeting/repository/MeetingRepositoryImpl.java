@@ -9,6 +9,7 @@ import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
 
@@ -29,6 +30,14 @@ public class MeetingRepositoryImpl implements MeetingRepositoryCustom {
                 .orderBy(meeting.meetingDate.desc(), meeting.id.desc())
                 .limit(limit)
                 .fetch();
+    }
+
+    @Override
+    public Optional<Meeting> findForAssistant(Long groupTermId, Long meetingId) {
+        return Optional.ofNullable(queryFactory.selectFrom(meeting)
+                .leftJoin(meeting.meetingCategory, meetingCategory).fetchJoin()
+                .where(meeting.id.eq(meetingId), meeting.groupTerm.id.eq(groupTermId))
+                .fetchOne());
     }
 
     // 기수·상태·카테고리·키워드 조건을 모은다. status/categoryId/keyword 없는 필터는 null로 넘기면
