@@ -1,7 +1,10 @@
 package com.moimzang.global.ai.gemini;
 
+import com.moimzang.global.ai.AiChatMessage;
+import com.moimzang.global.ai.AiChatResult;
 import com.moimzang.global.ai.AiClient;
 import com.moimzang.global.ai.AiClientException;
+import com.moimzang.global.ai.AiTool;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
@@ -59,6 +62,15 @@ public class GeminiClient implements AiClient {
         }
 
         return extractText(response);
+    }
+
+    // Gemini도 함수 호출(functionDeclarations)을 지원하지만 구현하지 않는다 —
+    // app.ai.provider가 openai로 고정 운영 중이라, 쓰지 않는 벤더에 도구 호출 스키마 변환까지
+    // 맞추는 건 검증할 수 없는 코드만 늘린다. Gemini로 전환할 일이 생기면 그때 구현한다
+    @Override
+    public AiChatResult chat(List<AiChatMessage> messages, List<AiTool> tools) {
+        throw new UnsupportedOperationException(
+                "Gemini는 도구 호출을 지원하지 않습니다. app.ai.provider=openai로 설정하세요.");
     }
 
     private String extractText(GenerateContentResponse response) {
