@@ -274,3 +274,15 @@ OpenAI는 Chat Completions API(`POST {baseUrl}/v1/chat/completions`)를 쓰고, 
 대신 "전환 가능한 구조로 구현하고 설정값으로 결정"하는 것으로 결론 지었다. 단 영수증 인식
 (API-036)·AI 채팅(API-078)이 같은 `AiClient`를 재사용할지는 그 도메인 구현 시점에 별도로
 정한다.
+
+## 27. API-029(차수 출석 현황 조회) 구현 시점에 정한 세부 사항
+api-spec에 명시되지 않은 3가지를 구현 시점에 확정했다(사용자 결정, 2026-11-13).
+
+- **keyword "초성 검색"은 이번 범위에서 보류한다**: `schedule_attendee.name`에 대한
+  `containsIgnoreCase`(이름 포함검색)만 구현한다. 코드베이스에 초성 추출 유틸이 전혀 없고
+  api-spec 전체에서 초성 언급이 있는 유일한 API라, 초성 매칭 자체는 별도 이슈로 미룬다.
+- **`progress.rate`는 정수 퍼센트(0~100, 반올림)**: meeting 도메인의 `progress.percentage`
+  (#20)와 같은 패턴이다.
+- **attendees의 cursor 정렬 기준은 `round_attendee.createdAt` 오름차순, 동일 시 id 오름차순**
+  (그 차수에 합류한 순서). `schedule_attendee.createdAt`(원래 참가자 등록 시점)이 아니다 —
+  차수별 출석 현황이라는 API 성격상 "이 차수에 참가자가 추가된 순서"가 자연스럽다고 판단했다.
