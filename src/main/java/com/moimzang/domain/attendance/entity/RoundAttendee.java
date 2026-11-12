@@ -58,4 +58,15 @@ public class RoundAttendee extends BaseEntity {
                 .isCheckedIn(false)
                 .build();
     }
+
+    // 출석 상태를 지정값으로 바꾼다. 이미 같은 상태면 멱등하게 아무 것도 바꾸지 않고(최초
+    // checkedInAt 유지), 실제로 상태가 바뀔 때만 checkedInAt을 갱신한다(체크인 시 현재 시각,
+    // 되돌리기 시 null)
+    public void updateCheckedIn(boolean isCheckedIn) {
+        if (this.isCheckedIn == isCheckedIn) {
+            return;
+        }
+        this.isCheckedIn = isCheckedIn;
+        this.checkedInAt = isCheckedIn ? LocalDateTime.now() : null;
+    }
 }

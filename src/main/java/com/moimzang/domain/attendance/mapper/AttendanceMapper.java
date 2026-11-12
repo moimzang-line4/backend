@@ -1,6 +1,8 @@
 package com.moimzang.domain.attendance.mapper;
 
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
+import com.moimzang.domain.attendance.dto.response.RoundAttendanceProgressResponse;
+import com.moimzang.domain.attendance.dto.response.RoundAttendeeCheckInResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendeeResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundCreateResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundSummaryResponse;
@@ -36,4 +38,11 @@ public interface AttendanceMapper {
     @Mapping(target = "affiliation", source = "attendee.affiliation")
     @Mapping(target = "phoneLast4", source = "attendee.phoneLast4")
     OnSiteAttendeeAddResponse toOnSiteAttendeeAddResponse(ScheduleAttendee attendee, Boolean isCheckedIn);
+
+    // 출석 처리·되돌리기(API-031) 응답으로 변환한다. progress는 Service가 재계산해 넘기는 값이다
+    @Mapping(target = "attendeeId", source = "roundAttendee.scheduleAttendee.id")
+    @Mapping(target = "name", source = "roundAttendee.scheduleAttendee.name")
+    @Mapping(target = "isCheckedIn", source = "roundAttendee.isCheckedIn")
+    @Mapping(target = "checkedInAt", source = "roundAttendee.checkedInAt")
+    RoundAttendeeCheckInResponse toCheckInResponse(RoundAttendee roundAttendee, RoundAttendanceProgressResponse progress);
 }

@@ -1,9 +1,11 @@
 package com.moimzang.domain.attendance.service;
 
+import com.moimzang.domain.attendance.dto.request.AttendeeCheckInRequest;
 import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceProgressResponse;
+import com.moimzang.domain.attendance.dto.response.RoundAttendeeCheckInResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendeeResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundCreateResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundListResponse;
@@ -137,15 +139,7 @@ public class AttendanceService {
                 .toList();
         String nextCursor = hasNext ? buildCursor(page.get(page.size() - 1)) : null;
 
-        long totalCount = roundAttendeeRepository.countByScheduleRoundId(roundId);
-        long checkedCount = roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(roundId, true);
-        int rate = totalCount == 0 ? 0 : (int) Math.round(checkedCount * 100.0 / totalCount);
-
-        RoundAttendanceProgressResponse progress = RoundAttendanceProgressResponse.builder()
-                .checkedCount(checkedCount)
-                .totalCount(totalCount)
-                .rate(rate)
-                .build();
+        RoundAttendanceProgressResponse progress = calculateProgress(roundId);
 
         log.info("[차수 출석 현황 조회] 조회를 완료했습니다. roundId = {}, count = {}, hasNext = {}", roundId, attendees.size(), hasNext);
         return RoundAttendanceListResponse.builder()
@@ -153,6 +147,19 @@ public class AttendanceService {
                 .progress(progress)
                 .attendees(attendees)
                 .nextCursor(nextCursor)
+                .build();
+    }
+
+    // 그 차수 전체 참가자 기준 출석 진행률(필터·검색어와 무관하게 매번 다시 계산한다)
+    private RoundAttendanceProgressResponse calculateProgress(Long roundId) {
+        long totalCount = roundAttendeeRepository.countByScheduleRoundId(roundId);
+        long checkedCount = roundAttendeeRepository.countByScheduleRoundIdAndIsCheckedIn(roundId, true);
+        int rate = totalCount == 0 ? 0 : (int) Math.round(checkedCount * 100.0 / totalCount);
+
+        return RoundAttendanceProgressResponse.builder()
+                .checkedCount(checkedCount)
+                .totalCount(totalCount)
+                .rate(rate)
                 .build();
     }
 
@@ -186,6 +193,27 @@ public class AttendanceService {
 
         log.info("[현장 인원 추가] 추가를 완료했습니다. roundId = {}, attendeeId = {}", roundId, attendee.getId());
         return attendanceMapper.toOnSiteAttendeeAddResponse(attendee, false);
+    }
+
+    // 그 차수 참가자의 출석 상태를 처리·되돌린다. 이미 같은 상태면 멱등하게 아무 것도 바꾸지
+    // 않는다(Entity.updateCheckedIn 참고)
+    @Transactional
+    public RoundAttendeeCheckInResponse checkInAttendee(Long roundId, Long attendeeId, AttendeeCheckInRequest request) {
+        log.info("[출석 처리] 처리를 시작합니다. roundId = {}, attendeeId = {}, isCheckedIn = {}",
+                roundId, attendeeId, request.getIsCheckedIn());
+
+        RoundAttendee roundAttendee = roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(roundId, attendeeId)
+                .orElseThrow(() -> {
+                    log.warn("[출석 처리] 그 차수에 없는 참가자입니다. roundId = {}, attendeeId = {}", roundId, attendeeId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        roundAttendee.updateCheckedIn(request.getIsCheckedIn());
+        RoundAttendanceProgressResponse progress = calculateProgress(roundId);
+
+        log.info("[출석 처리] 처리를 완료했습니다. roundId = {}, attendeeId = {}, isCheckedIn = {}",
+                roundId, attendeeId, roundAttendee.getIsCheckedIn());
+        return attendanceMapper.toCheckInResponse(roundAttendee, progress);
     }
 
     // 그 차수에서 참가자를 제외한다(이 차수의 출석 기록만 삭제, 다른 차수·참가자 원본은 유지)
