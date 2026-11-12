@@ -90,4 +90,15 @@ public class ScheduleRound extends BaseEntity {
     public boolean hasReceipt() {
         return totalAmount != null;
     }
+
+    // 영수증을 등록·수정한다(upsert) — imageUrl은 Service가 imageKey 유무에 따라 결정한
+    // 최종 값(생략 시 기존 값 유지)을 넘긴다
+    public void registerReceipt(String storeName, LocalDateTime transactedAt, Integer totalAmount,
+                                 Integer clubSubsidyAmount, String imageUrl) {
+        this.storeName = storeName;
+        this.transactedAt = transactedAt;
+        this.totalAmount = totalAmount;
+        this.clubSubsidyAmount = clubSubsidyAmount;
+        this.imageUrl = imageUrl;
+    }
 }

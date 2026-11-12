@@ -58,4 +58,9 @@ public class SettlementTarget extends BaseEntity {
     // 입금 완료일시
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
+
+    // 영수증 금액 변경 시 1인 청구액을 다시 계산한 값으로 갱신한다
+    public void updateBilledAmount(int billedAmount) {
+        this.billedAmount = billedAmount;
+    }
 }
