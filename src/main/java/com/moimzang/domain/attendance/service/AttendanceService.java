@@ -1,5 +1,7 @@
 package com.moimzang.domain.attendance.service;
 
+import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
+import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceProgressResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendeeResponse;
@@ -9,6 +11,7 @@ import com.moimzang.domain.attendance.dto.response.ScheduleRoundSummaryResponse;
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
 import com.moimzang.domain.attendance.enums.AttendanceStatusFilter;
+import com.moimzang.domain.attendance.exception.AttendanceErrorCode;
 import com.moimzang.domain.attendance.mapper.AttendanceMapper;
 import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
@@ -156,5 +159,47 @@ public class AttendanceService {
     private String buildCursor(RoundAttendee last) {
         String sortValue = String.valueOf(last.getCreatedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
         return CursorCodec.encode(sortValue, last.getId());
+    }
+
+    // 그 차수에 현장 참가자를 미출석 상태로 추가한다. 같은 일정에 이름이 같은 참가자가 있으면
+    // 거부하고, allowSameName=true면 새 참가자로 추가한다(이름은 trim해서 비교·저장)
+    @Transactional
+    public OnSiteAttendeeAddResponse addOnSiteAttendee(Long roundId, OnSiteAttendeeAddRequest request) {
+        log.info("[현장 인원 추가] 추가를 시작합니다. roundId = {}, allowSameName = {}", roundId, request.isAllowSameName());
+
+        ScheduleRound round = scheduleRoundRepository.findById(roundId)
+                .orElseThrow(() -> {
+                    log.warn("[현장 인원 추가] 존재하지 않는 차수입니다. roundId = {}", roundId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        String name = request.getName().trim();
+        Long scheduleId = round.getSchedule().getId();
+        if (!request.isAllowSameName() && scheduleAttendeeRepository.existsByScheduleIdAndName(scheduleId, name)) {
+            log.warn("[현장 인원 추가] 같은 이름의 참가자가 이미 있습니다. scheduleId = {}, name = {}", scheduleId, name);
+            throw new CustomException(AttendanceErrorCode.ATTENDANCE_409_DUPLICATE_NAME);
+        }
+
+        ScheduleAttendee attendee = scheduleAttendeeRepository.save(
+                ScheduleAttendee.createOnSite(round.getSchedule(), name, request.getAffiliation(), request.getPhoneLast4()));
+        roundAttendeeRepository.save(RoundAttendee.create(round, attendee));
+
+        log.info("[현장 인원 추가] 추가를 완료했습니다. roundId = {}, attendeeId = {}", roundId, attendee.getId());
+        return attendanceMapper.toOnSiteAttendeeAddResponse(attendee, false);
+    }
+
+    // 그 차수에서 참가자를 제외한다(이 차수의 출석 기록만 삭제, 다른 차수·참가자 원본은 유지)
+    @Transactional
+    public void removeAttendee(Long roundId, Long attendeeId) {
+        log.info("[참가자 제외] 제외를 시작합니다. roundId = {}, attendeeId = {}", roundId, attendeeId);
+
+        RoundAttendee roundAttendee = roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(roundId, attendeeId)
+                .orElseThrow(() -> {
+                    log.warn("[참가자 제외] 그 차수에 없는 참가자입니다. roundId = {}, attendeeId = {}", roundId, attendeeId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        roundAttendeeRepository.delete(roundAttendee);
+        log.info("[참가자 제외] 제외를 완료했습니다. roundId = {}, attendeeId = {}", roundId, attendeeId);
     }
 }

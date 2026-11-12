@@ -1,5 +1,7 @@
 package com.moimzang.domain.attendance.controller;
 
+import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
+import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundCreateResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundListResponse;
@@ -12,6 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "출석", description = "차수·출석 관리 API")
@@ -51,4 +54,30 @@ public interface AttendanceApi {
             @Parameter(description = "검색어(이름 포함검색)", example = "김모임") String keyword,
             @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지") String cursor,
             @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
+
+    @Operation(summary = "현장 인원 추가", description = "그 차수에 현장 참가자를 미출석 상태로 추가한다. 같은 일정에 이름이 "
+            + "같은 참가자가 있으면 409로 거부하고, allowSameName=true로 재요청하면 새 참가자로 추가한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "추가 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(검증 실패)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "ATTENDANCE_409_DUPLICATE_NAME",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<OnSiteAttendeeAddResponse>> addOnSiteAttendee(
+            @Parameter(description = "차수 ID", example = "1") Long roundId,
+            @Valid OnSiteAttendeeAddRequest request);
+
+    @Operation(summary = "참가자 제외", description = "그 차수에서 참가자를 제외한다(이 차수의 출석 기록만 삭제, "
+            + "다른 차수의 출석 기록·참가자 원본은 유지).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "제외 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> removeAttendee(
+            @Parameter(description = "차수 ID", example = "1") Long roundId,
+            @Parameter(description = "참가자 ID(schedule_attendee.id)", example = "1") Long attendeeId);
 }

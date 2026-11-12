@@ -61,4 +61,15 @@ public class ScheduleAttendee extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "source", nullable = false, length = 20)
     private AttendeeSource source;
+
+    // 현장에서 직접 추가하는 참가자를 만든다(부원 원본과 무관해 member는 null)
+    public static ScheduleAttendee createOnSite(Schedule schedule, String name, String affiliation, String phoneLast4) {
+        return ScheduleAttendee.builder()
+                .schedule(schedule)
+                .name(name)
+                .affiliation(affiliation)
+                .phoneLast4(phoneLast4)
+                .source(AttendeeSource.ON_SITE)
+                .build();
+    }
 }

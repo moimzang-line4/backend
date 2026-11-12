@@ -8,4 +8,7 @@ public interface ScheduleAttendeeRepository extends JpaRepository<ScheduleAttend
 
     // 새 차수 생성 시 기존 참가자 전원을 미출석으로 포함시키기 위한 조회
     List<ScheduleAttendee> findByScheduleId(Long scheduleId);
+
+    // 현장 인원 추가(API-030) 동명이인 체크 — 같은 일정 전체 기준
+    boolean existsByScheduleIdAndName(Long scheduleId, String name);
 }

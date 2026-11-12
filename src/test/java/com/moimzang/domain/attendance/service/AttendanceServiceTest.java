@@ -12,10 +12,13 @@ import static org.mockito.Mockito.verify;
 import com.moimzang.domain.attendance.entity.RoundAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
+import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
+import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundCreateResponse;
 import com.moimzang.domain.attendance.dto.response.ScheduleRoundListResponse;
 import com.moimzang.domain.attendance.enums.AttendanceStatusFilter;
+import com.moimzang.domain.attendance.exception.AttendanceErrorCode;
 import com.moimzang.domain.attendance.mapper.AttendanceMapper;
 import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
@@ -318,5 +321,130 @@ class AttendanceServiceTest {
         assertThat(response.getProgress().getCheckedCount()).isEqualTo(0L);
         assertThat(response.getProgress().getRate()).isEqualTo(0);
         assertThat(response.getAttendees()).isEmpty();
+    }
+
+    @Test
+    void addOnSiteAttendee_정상_추가하고_이_차수에만_연결한다() {
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getId()).willReturn(10L);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        OnSiteAttendeeAddRequest request = OnSiteAttendeeAddRequest.builder()
+                .name("김모임").affiliation("컴퓨터공학과").phoneLast4("1234").allowSameName(false)
+                .build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(scheduleAttendeeRepository.existsByScheduleIdAndName(10L, "김모임")).willReturn(false);
+        given(scheduleAttendeeRepository.save(any(ScheduleAttendee.class))).willAnswer(invocation -> {
+            ScheduleAttendee saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 200L);
+            return saved;
+        });
+
+        OnSiteAttendeeAddResponse response = attendanceService.addOnSiteAttendee(1L, request);
+
+        assertThat(response.getAttendeeId()).isEqualTo(200L);
+        assertThat(response.getName()).isEqualTo("김모임");
+        assertThat(response.getAffiliation()).isEqualTo("컴퓨터공학과");
+        assertThat(response.getPhoneLast4()).isEqualTo("1234");
+        assertThat(response.getIsCheckedIn()).isFalse();
+
+        ArgumentCaptor<RoundAttendee> captor = ArgumentCaptor.forClass(RoundAttendee.class);
+        verify(roundAttendeeRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getScheduleRound().getId()).isEqualTo(1L);
+        assertThat(captor.getValue().getIsCheckedIn()).isFalse();
+    }
+
+    @Test
+    void addOnSiteAttendee_이름을_trim해서_비교하고_저장한다() {
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getId()).willReturn(10L);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        OnSiteAttendeeAddRequest request = OnSiteAttendeeAddRequest.builder()
+                .name("  김모임  ").affiliation("컴퓨터공학과").phoneLast4("1234").allowSameName(false)
+                .build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(scheduleAttendeeRepository.existsByScheduleIdAndName(10L, "김모임")).willReturn(false);
+        given(scheduleAttendeeRepository.save(any(ScheduleAttendee.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        OnSiteAttendeeAddResponse response = attendanceService.addOnSiteAttendee(1L, request);
+
+        assertThat(response.getName()).isEqualTo("김모임");
+        verify(scheduleAttendeeRepository).existsByScheduleIdAndName(10L, "김모임");
+    }
+
+    @Test
+    void addOnSiteAttendee_같은_일정에_이름이_같으면_ATTENDANCE_409_DUPLICATE_NAME을_던진다() {
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getId()).willReturn(10L);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        OnSiteAttendeeAddRequest request = OnSiteAttendeeAddRequest.builder()
+                .name("김모임").affiliation("컴퓨터공학과").phoneLast4("1234").allowSameName(false)
+                .build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(scheduleAttendeeRepository.existsByScheduleIdAndName(10L, "김모임")).willReturn(true);
+
+        assertThatThrownBy(() -> attendanceService.addOnSiteAttendee(1L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(AttendanceErrorCode.ATTENDANCE_409_DUPLICATE_NAME);
+        verify(scheduleAttendeeRepository, never()).save(any());
+    }
+
+    @Test
+    void addOnSiteAttendee_allowSameName이면_중복체크를_건너뛰고_추가한다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        OnSiteAttendeeAddRequest request = OnSiteAttendeeAddRequest.builder()
+                .name("김모임").affiliation("컴퓨터공학과").phoneLast4("1234").allowSameName(true)
+                .build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(scheduleAttendeeRepository.save(any(ScheduleAttendee.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        attendanceService.addOnSiteAttendee(1L, request);
+
+        verify(scheduleAttendeeRepository, never()).existsByScheduleIdAndName(any(), any());
+        verify(scheduleAttendeeRepository).save(any());
+    }
+
+    @Test
+    void addOnSiteAttendee_차수가_없으면_COMMON_404를_던진다() {
+        OnSiteAttendeeAddRequest request = OnSiteAttendeeAddRequest.builder()
+                .name("김모임").affiliation("컴퓨터공학과").phoneLast4("1234").build();
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> attendanceService.addOnSiteAttendee(1L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void removeAttendee_정상_그_차수의_round_attendee만_삭제한다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        ScheduleAttendee attendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        RoundAttendee roundAttendee = roundAttendeeWithId(1L, round, attendee, LocalDateTime.now());
+
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(roundAttendee));
+
+        attendanceService.removeAttendee(1L, 200L);
+
+        verify(roundAttendeeRepository).delete(roundAttendee);
+        verify(scheduleAttendeeRepository, never()).delete(any());
+    }
+
+    @Test
+    void removeAttendee_그_차수에_없으면_COMMON_404를_던진다() {
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> attendanceService.removeAttendee(1L, 200L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
     }
 }
