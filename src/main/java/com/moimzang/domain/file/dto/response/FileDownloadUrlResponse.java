@@ -1,6 +1,5 @@
 package com.moimzang.domain.file.dto.response;
 
-import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,5 +11,4 @@ import lombok.Getter;
 public class FileDownloadUrlResponse {
 
     private final String url;
-    private final LocalDateTime expiresAt;
 }

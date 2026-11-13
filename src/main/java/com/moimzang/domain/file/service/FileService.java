@@ -211,11 +211,9 @@ public class FileService {
                 });
 
         // URL 조립 — 우리 서버의 콘텐츠 서빙 엔드포인트를 가리킨다. mode를 쿼리로 그대로 넘겨서
-        // 실제 다운로드 시점에 Content-Disposition(attachment/inline)을 거기서 결정하게 한다.
-        // presigned URL은 범위 밖이라 expiresAt은 실제로 강제하지 않는 형식상 값이다
+        // 실제 다운로드 시점에 Content-Disposition(attachment/inline)을 거기서 결정하게 한다
         FileDownloadUrlResponse response = FileDownloadUrlResponse.builder()
                 .url("/api/files/%d/content?mode=%s".formatted(file.getId(), mode))
-                .expiresAt(LocalDateTime.now().plusHours(24))
                 .build();
 
         log.info("[다운로드 URL 발급] 발급을 완료했습니다. fileId = {}", fileId);

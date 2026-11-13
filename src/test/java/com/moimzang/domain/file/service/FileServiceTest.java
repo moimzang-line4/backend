@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.moimzang.domain.file.dto.response.FileDownloadUrlResponse;
 import com.moimzang.domain.file.dto.response.FileListResponse;
 import com.moimzang.domain.file.dto.response.FileUploadResponse;
 import com.moimzang.domain.file.dto.response.FileZipEntry;
@@ -263,6 +264,17 @@ class FileServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(FileErrorCode.FILE_404_NOT_FOUND);
+    }
+
+    @Test
+    void getDownloadUrl_응답은_content_엔드포인트_url만_담는다() {
+        File file = mock(File.class);
+        given(file.getId()).willReturn(1L);
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.of(file));
+
+        FileDownloadUrlResponse response = fileService.getDownloadUrl(1L, FileDownloadMode.PREVIEW);
+
+        assertThat(response.getUrl()).isEqualTo("/api/files/1/content?mode=PREVIEW");
     }
 
     @Test
