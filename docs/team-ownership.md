@@ -54,7 +54,8 @@ controller/service/mapper가 각자 패키지 안에 있음), 도메인 패키�
   **API-013·015·016** 구현(연결 후보 규칙은 decisions #44에서 확정, 후보 목록 조회는 C가
   API-083으로 제공한다). `meeting.schedule_id` 컬럼과 Flyway `V4`는 C가 이미 넣었다.
   **API-014는 명세에서 삭제됐다** — 자동 매칭 화면이 없어서다(decisions #45). 안건 연결은
-  모달에서 직접 고르는 경로 하나뿐이다
+  모달에서 직접 고르는 경로 하나뿐이다. API-015 응답에는 `meetingStatus`가 들어가야 한다 —
+  종료된 회의의 안건은 일정 상세에서 읽기 전용이라 화면이 그 값으로 입력란을 잠근다(decisions #46)
 
 ### B — `attendance`, `settlement`, `budget`
 

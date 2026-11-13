@@ -423,7 +423,8 @@ cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 
 **Logics**: 후보는 **어느 일정에도 속하지 않은 안건**이다 — `meeting.schedule_id IS NULL`이고
 `schedule_agenda_link`에 행이 없는 안건만 내려준다(decisions #44). 조건이 특정 일정과 무관하므로
-`scheduleId`를 받지 않는다.
+`scheduleId`를 받지 않는다. 회의 상태는 거르지 않는다 — 종료된 회의의 안건도 후보에 포함된다
+(연결한 뒤 읽기 전용으로 보이는 것은 API-015가 내려주는 `meetingStatus`로 판단한다, decisions #46).
 
 **Query**: keyword(선택, 안건 내용 검색), cursor(선택), size(선택, 기본 20)
 
@@ -473,8 +474,14 @@ NAME은 title. 둘 다 id를 tiebreaker로 쓴다.
 인증: 불필요. 연결은 안건 단위 — 이 응답은 "회의록 & 안건" 섹션의 **안건 카드**만 담는다.
 같은 섹션의 회의록 카드(그 일정에 속한 회의록)는 API-052에 `scheduleId`를 줘서 받는다(decisions #44).
 
-**Response data**: links[].linkId/meetingId/meetingTitle/meetingDate/agendaId/agendaOrderNo/agendaContent/
-agendaStatus/discussionNote/decision/hasDecision
+**Logics**: 종료된 회의(meetingStatus=COMPLETED)의 안건도 연결할 수 있다. 다만 그 안건의
+논의 내용·결정 사항은 **읽기 전용**이다 — 회의가 끝나면 안건 수정(API-057)이
+MEETING_409_ALREADY_ENDED로 거부되기 때문이다(decisions #46). 화면이 입력란을 잠글 수 있도록
+`meetingStatus`를 함께 내려준다. 안건 상태(agendaStatus)로는 판단할 수 없다 — 종료된 회의에도
+PENDING·IN_PROGRESS인 안건이 남아 있을 수 있다.
+
+**Response data**: links[].linkId/meetingId/meetingTitle/meetingDate/meetingStatus(IN_PROGRESS|COMPLETED)/
+agendaId/agendaOrderNo/agendaContent/agendaStatus/discussionNote/decision/hasDecision
 
 **에러**: COMMON_404
 
