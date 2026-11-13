@@ -203,8 +203,8 @@ public class FileService {
     public FileDownloadUrlResponse getDownloadUrl(Long fileId, FileDownloadMode mode) {
         log.info("[다운로드 URL 발급] 발급을 시작합니다. fileId = {}, mode = {}", fileId, mode);
 
-        // 대상 파일 조회
-        File file = fileRepository.findById(fileId)
+        // 대상 파일 조회 — 소프트 삭제된 파일은 URL을 알고 있어도 열 수 없게 막는다
+        File file = fileRepository.findActiveById(fileId)
                 .orElseThrow(() -> {
                     log.warn("[다운로드 URL 발급] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
@@ -225,7 +225,8 @@ public class FileService {
     public FileContentTarget getFileContent(Long fileId) {
         log.info("[파일 콘텐츠 서빙] 대상 조회를 시작합니다. fileId = {}", fileId);
 
-        File file = fileRepository.findById(fileId)
+        // 소프트 삭제된 파일은 URL을 알고 있어도 열 수 없게 막는다
+        File file = fileRepository.findActiveById(fileId)
                 .orElseThrow(() -> {
                     log.warn("[파일 콘텐츠 서빙] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
@@ -261,6 +262,13 @@ public class FileService {
                     log.warn("[파일 삭제] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
+
+        // 이미 삭제된 파일에 다시 들어온 요청은 성공으로 흘린다 — 중복 클릭이나 재시도가 실패로
+        // 보이면 안 되고, deleted_at을 덮어쓰면 처음 삭제한 시점이 어긋난다
+        if (file.getDeletedAt() != null) {
+            log.info("[파일 삭제] 이미 삭제된 파일입니다. fileId = {}", fileId);
+            return;
+        }
         file.softDelete();
 
         log.info("[파일 삭제] 삭제를 완료했습니다. fileId = {}", fileId);

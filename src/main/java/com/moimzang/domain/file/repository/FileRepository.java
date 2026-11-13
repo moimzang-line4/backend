@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface FileRepository extends JpaRepository<File, Long>, FileRepositoryCustom {
 
+    // 기수에서 해당 분류의 살아있는 파일 1건을 찾는다(장부 교체 판단용)
     @Query("""
             select f from File f
             where f.groupTerm.id = :groupTermId
@@ -19,4 +20,12 @@ public interface FileRepository extends JpaRepository<File, Long>, FileRepositor
             @Param("groupTermId") Long groupTermId,
             @Param("category") FileCategory category
     );
+
+    // 삭제되지 않은 파일을 ID로 찾는다
+    @Query("""
+            select f from File f
+            where f.id = :fileId
+              and f.deletedAt is null
+            """)
+    Optional<File> findActiveById(@Param("fileId") Long fileId);
 }
