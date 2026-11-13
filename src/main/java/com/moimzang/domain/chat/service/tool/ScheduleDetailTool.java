@@ -52,6 +52,9 @@ public class ScheduleDetailTool implements ChatTool {
                 NAME,
                 "일정 하나의 상세 정보를 조회해 차수별 영수증(가게·금액·회비 지원금)과 입금 안내 계좌, "
                         + "참가자 명단, 이 일정에서 만든 회의록, 연결된 회의 안건, 첨부 자료를 반환한다. "
+                        + "이 일정에 속한 회의록은 scheduleMeetings에 담긴 것이 전부다 — "
+                        + "제목이 비슷하다는 이유로 search_meetings에서 찾은 다른 회의록을 "
+                        + "이 일정의 회의록인 것처럼 섞어 말하지 않는다. "
                         + "영수증 금액(receiptAmount, totalReceiptAmount)은 가게에서 실제 결제한 총액이다 — "
                         + "'얼마 나왔어', '얼마 썼어'처럼 결제한 금액을 물으면 이 도구를 쓴다. "
                         + "부원에게 걷을 청구 금액은 여기가 아니라 get_settlement_status에 있다. "

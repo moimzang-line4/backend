@@ -31,7 +31,10 @@ public class MeetingSearchTool implements ChatTool {
                         + "상태·참석자·안건 진행률을 반환한다. 회의에서 무엇을 논의했는지 알려면 "
                         + "이 도구로 회의 ID를 먼저 얻은 뒤 get_meeting_detail을 호출해야 한다. "
                         + "검색 결과가 0건이면 availableTitles에 등록된 회의 제목이 함께 오므로, "
-                        + "그중 사용자가 말한 회의와 같은 것이 있으면 그 제목으로 다시 검색한다.",
+                        + "그중 사용자가 말한 회의와 같은 것이 있으면 그 제목으로 다시 검색한다. "
+                        + "여기서 찾은 회의는 제목·참석자·요약이 검색어와 겹칠 뿐이고 특정 일정에 "
+                        + "속한다는 뜻이 아니다 — 어떤 일정에 속한 회의록인지는 "
+                        + "get_schedule_detail의 scheduleMeetings로만 판단한다.",
                 Map.of(
                         "type", "object",
                         "properties", Map.of(
