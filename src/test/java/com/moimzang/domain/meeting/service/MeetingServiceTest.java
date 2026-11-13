@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
@@ -23,6 +24,7 @@ import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingLinkableAgendaListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryGenerateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryUpdateResponse;
@@ -37,8 +39,12 @@ import com.moimzang.domain.meeting.repository.MeetingRepository;
 import com.moimzang.domain.meeting.entity.MeetingCategory;
 import com.moimzang.domain.meeting.exception.MeetingErrorCode;
 import com.moimzang.domain.meeting.repository.MeetingCategoryRepository;
+import com.moimzang.domain.schedule.entity.Schedule;
+import com.moimzang.domain.schedule.repository.ScheduleAgendaLinkRepository;
+import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.ai.AiClient;
 import com.moimzang.global.ai.AiClientException;
+import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDate;
 import java.util.List;
@@ -49,6 +55,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -70,6 +77,12 @@ class MeetingServiceTest {
     @Mock
     private MeetingCategoryRepository meetingCategoryRepository;
 
+    @Mock
+    private ScheduleRepository scheduleRepository;
+
+    @Mock
+    private ScheduleAgendaLinkRepository scheduleAgendaLinkRepository;
+
     // 외부 연동이라 mock한다
     @Mock
     private AiClient aiClient;
@@ -85,7 +98,8 @@ class MeetingServiceTest {
     @BeforeEach
     void setUp() {
         meetingService = new MeetingService(meetingRepository, meetingAgendaRepository, groupTermRepository,
-                meetingCategoryRepository, meetingMapper, aiClient, summaryPromptBuilder);
+                meetingCategoryRepository, scheduleRepository, scheduleAgendaLinkRepository,
+                meetingMapper, aiClient, summaryPromptBuilder);
     }
 
     @Test
@@ -101,7 +115,7 @@ class MeetingServiceTest {
                 .build();
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(meetingCategoryRepository.findById(1L)).willReturn(Optional.of(category));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
         given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
             Meeting saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 100L);
@@ -138,7 +152,7 @@ class MeetingServiceTest {
     }
 
     @Test
-    void createMeeting_카테고리가_없으면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
+    void createMeeting_다른_기수의_카테고리거나_없는_카테고리면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCreateRequest request = MeetingCreateRequest.builder()
                 .title("회의")
@@ -147,12 +161,100 @@ class MeetingServiceTest {
                 .agendas(List.of("안건1"))
                 .build();
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(meetingCategoryRepository.findById(999L)).willReturn(Optional.empty());
+        given(meetingCategoryRepository.findByIdAndGroupTermId(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
+    }
+
+    @Test
+    void createMeeting_scheduleId를_보내면_그_일정에_속한_회의로_생성한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Schedule schedule = mock(Schedule.class);
+        MeetingCreateRequest request = MeetingCreateRequest.builder()
+                .title("가을 정기공연 운영진 회의")
+                .meetingDate(LocalDate.of(2026, 11, 7))
+                .categoryId(1L)
+                .scheduleId(5L)
+                .agendas(List.of("관객 참여 이벤트"))
+                .build();
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
+        given(scheduleRepository.findByIdAndGroupTermId(5L, 1L)).willReturn(Optional.of(schedule));
+        given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
+            Meeting saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 100L);
+            return saved;
+        });
+        given(meetingAgendaRepository.save(any(MeetingAgenda.class))).willAnswer(invocation -> {
+            MeetingAgenda saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 1L);
+            return saved;
+        });
+
+        meetingService.createMeeting(1L, request);
+
+        ArgumentCaptor<Meeting> captor = ArgumentCaptor.forClass(Meeting.class);
+        Mockito.verify(meetingRepository).save(captor.capture());
+        assertThat(captor.getValue().getSchedule()).isSameAs(schedule);
+    }
+
+    @Test
+    void createMeeting_scheduleId가_없으면_일정과_무관한_회의로_생성한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        MeetingCreateRequest request = MeetingCreateRequest.builder()
+                .title("홍보팀 회의")
+                .meetingDate(LocalDate.of(2026, 11, 7))
+                .categoryId(1L)
+                .agendas(List.of("홍보 일정"))
+                .build();
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
+        given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
+            Meeting saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 100L);
+            return saved;
+        });
+        given(meetingAgendaRepository.save(any(MeetingAgenda.class))).willAnswer(invocation -> {
+            MeetingAgenda saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 1L);
+            return saved;
+        });
+
+        meetingService.createMeeting(1L, request);
+
+        ArgumentCaptor<Meeting> captor = ArgumentCaptor.forClass(Meeting.class);
+        Mockito.verify(meetingRepository).save(captor.capture());
+        assertThat(captor.getValue().getSchedule()).isNull();
+        Mockito.verify(scheduleRepository, Mockito.never()).findByIdAndGroupTermId(any(), any());
+    }
+
+    @Test
+    void createMeeting_다른_기수의_일정이거나_없는_일정이면_MEETING_404_SCHEDULE_NOT_FOUND를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        MeetingCreateRequest request = MeetingCreateRequest.builder()
+                .title("가을 정기공연 운영진 회의")
+                .meetingDate(LocalDate.of(2026, 11, 7))
+                .categoryId(1L)
+                .scheduleId(999L)
+                .agendas(List.of("관객 참여 이벤트"))
+                .build();
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
+        given(scheduleRepository.findByIdAndGroupTermId(999L, 1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_SCHEDULE_NOT_FOUND);
     }
 
     @Test
@@ -162,15 +264,15 @@ class MeetingServiceTest {
         given(category.getName()).willReturn("운영진 회의");
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
 
-        Meeting meeting = Meeting.create(groupTerm, category, "가을 정기공연 운영진 회의",
+        Meeting meeting = Meeting.create(groupTerm, null, category, "가을 정기공연 운영진 회의",
                 LocalDate.of(2026, 11, 7), "김가은, 홍보팀", "가을 공연 준비 논의");
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
-        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(Integer.class)))
+        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
                 .willReturn(List.of(meeting));
         given(meetingAgendaRepository.countByMeetingIds(List.of(10L))).willReturn(Map.of(10L, 3L));
 
-        MeetingListResponse response = meetingService.listMeetings(1L, null, null, null, null, null);
+        MeetingListResponse response = meetingService.listMeetings(1L, null, null, null, null, null, null);
 
         assertThat(response.getMeetings()).hasSize(1);
         assertThat(response.getMeetings().get(0).getMeetingId()).isEqualTo(10L);
@@ -183,7 +285,7 @@ class MeetingServiceTest {
     void listMeetings_기수가_없으면_MEETING_404_GROUP_TERM_NOT_FOUND를_던진다() {
         given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> meetingService.listMeetings(1L, null, null, null, null, null))
+        assertThatThrownBy(() -> meetingService.listMeetings(1L, null, null, null, null, null, null))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
@@ -194,7 +296,7 @@ class MeetingServiceTest {
         GroupTerm groupTerm = mock(GroupTerm.class);
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
 
-        assertThatThrownBy(() -> meetingService.listMeetings(1L, null, null, null, "잘못된cursor", null))
+        assertThatThrownBy(() -> meetingService.listMeetings(1L, null, null, null, null, "잘못된cursor", null))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(MeetingErrorCode.MEETING_400_INVALID_CURSOR);
@@ -207,18 +309,18 @@ class MeetingServiceTest {
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
 
         // size=1(limit=1)인데 limit+1건이 조회되면 마지막 1건은 다음 페이지 존재를 알리는 용도다
-        Meeting newer = Meeting.create(groupTerm, category, "최근 회의",
+        Meeting newer = Meeting.create(groupTerm, null, category, "최근 회의",
                 LocalDate.of(2026, 11, 7), null, null);
         ReflectionTestUtils.setField(newer, "id", 20L);
-        Meeting older = Meeting.create(groupTerm, category, "이전 회의",
+        Meeting older = Meeting.create(groupTerm, null, category, "이전 회의",
                 LocalDate.of(2026, 10, 1), null, null);
         ReflectionTestUtils.setField(older, "id", 10L);
 
-        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(Integer.class)))
+        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
                 .willReturn(List.of(newer, older));
         given(meetingAgendaRepository.countByMeetingIds(List.of(20L))).willReturn(Map.of());
 
-        MeetingListResponse response = meetingService.listMeetings(1L, null, null, null, null, 1);
+        MeetingListResponse response = meetingService.listMeetings(1L, null, null, null, null, null, 1);
 
         assertThat(response.getMeetings()).hasSize(1);
         assertThat(response.getMeetings().get(0).getMeetingId()).isEqualTo(20L);
@@ -229,10 +331,10 @@ class MeetingServiceTest {
     void listMeetings_결과가_없으면_빈_목록과_null_nextCursor를_반환한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(Integer.class)))
+        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
                 .willReturn(List.of());
 
-        MeetingListResponse response = meetingService.listMeetings(1L, MeetingStatus.COMPLETED, null, null, null, null);
+        MeetingListResponse response = meetingService.listMeetings(1L, MeetingStatus.COMPLETED, null, null, null, null, null);
 
         assertThat(response.getMeetings()).isEmpty();
         assertThat(response.getNextCursor()).isNull();
@@ -244,17 +346,118 @@ class MeetingServiceTest {
         MeetingCategory category = mock(MeetingCategory.class);
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
 
-        Meeting meeting = Meeting.create(groupTerm, category, "안건 없는 회의",
+        Meeting meeting = Meeting.create(groupTerm, null, category, "안건 없는 회의",
                 LocalDate.of(2026, 11, 7), null, null);
         ReflectionTestUtils.setField(meeting, "id", 30L);
 
-        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(Integer.class)))
+        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
                 .willReturn(List.of(meeting));
         given(meetingAgendaRepository.countByMeetingIds(List.of(30L))).willReturn(Map.of());
 
-        MeetingListResponse response = meetingService.listMeetings(1L, null, null, null, null, null);
+        MeetingListResponse response = meetingService.listMeetings(1L, null, null, null, null, null, null);
 
         assertThat(response.getMeetings().get(0).getAgendaCount()).isEqualTo(0L);
+    }
+
+    @Test
+    void listMeetings_scheduleId를_주면_그_일정_조건으로_조회한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
+                .willReturn(List.of());
+
+        meetingService.listMeetings(1L, null, null, null, 5L, null, null);
+
+        Mockito.verify(meetingRepository)
+                .search(eq(1L), isNull(), isNull(), isNull(), eq(5L), isNull(), isNull(), any(Integer.class));
+    }
+
+    @Test
+    void listLinkableAgendas_첫_페이지면_전체_후보_수를_함께_반환한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+
+        Meeting meeting = Meeting.create(groupTerm, null, category, "가을 정기공연 운영진 회의",
+                LocalDate.of(2026, 11, 7), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        MeetingAgenda agenda = MeetingAgenda.create(meeting, "관객 참여 이벤트", 0);
+        ReflectionTestUtils.setField(agenda, "id", 3L);
+
+        given(meetingAgendaRepository.searchLinkable(eq(1L), isNull(), isNull(), isNull(), any(Integer.class)))
+                .willReturn(List.of(agenda));
+        given(meetingAgendaRepository.countLinkable(1L, null)).willReturn(11L);
+
+        MeetingLinkableAgendaListResponse response = meetingService.listLinkableAgendas(1L, null, null, null);
+
+        assertThat(response.getTotalCount()).isEqualTo(11L);
+        assertThat(response.getNextCursor()).isNull();
+        assertThat(response.getAgendas()).hasSize(1);
+        assertThat(response.getAgendas().get(0).getAgendaId()).isEqualTo(3L);
+        assertThat(response.getAgendas().get(0).getMeetingId()).isEqualTo(10L);
+        assertThat(response.getAgendas().get(0).getMeetingTitle()).isEqualTo("가을 정기공연 운영진 회의");
+        assertThat(response.getAgendas().get(0).isHasDecision()).isFalse();
+    }
+
+    @Test
+    void listLinkableAgendas_다음_페이지가_있으면_마지막_항목으로_nextCursor를_만든다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+
+        Meeting meeting = Meeting.create(groupTerm, null, category, "회의", LocalDate.of(2026, 11, 7), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        MeetingAgenda first = MeetingAgenda.create(meeting, "안건1", 0);
+        ReflectionTestUtils.setField(first, "id", 3L);
+        MeetingAgenda second = MeetingAgenda.create(meeting, "안건2", 1);
+        ReflectionTestUtils.setField(second, "id", 4L);
+
+        // size + 1건을 받아 다음 페이지 존재를 판단한다
+        given(meetingAgendaRepository.searchLinkable(eq(1L), isNull(), isNull(), isNull(), eq(2)))
+                .willReturn(List.of(first, second));
+
+        MeetingLinkableAgendaListResponse response = meetingService.listLinkableAgendas(1L, null, null, 1);
+
+        assertThat(response.getAgendas()).hasSize(1);
+        // cursor는 (회의 ID, 안건 ID) 복합 키다 — 다음 페이지는 같은 회의의 안건2부터 이어진다
+        assertThat(response.getNextCursor()).isEqualTo(CursorCodec.encode("10", 3L));
+    }
+
+    @Test
+    void listLinkableAgendas_cursor를_주면_회의_ID와_안건_ID로_디코딩해_조회한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingAgendaRepository.searchLinkable(eq(1L), isNull(), eq(10L), eq(3L), any(Integer.class)))
+                .willReturn(List.of());
+
+        MeetingLinkableAgendaListResponse response =
+                meetingService.listLinkableAgendas(1L, null, CursorCodec.encode("10", 3L), null);
+
+        assertThat(response.getAgendas()).isEmpty();
+        // 첫 페이지가 아니면 count 쿼리를 날리지 않는다
+        assertThat(response.getTotalCount()).isNull();
+        Mockito.verify(meetingAgendaRepository, Mockito.never()).countLinkable(any(), any());
+    }
+
+    @Test
+    void listLinkableAgendas_cursor_형식이_올바르지_않으면_MEETING_400_INVALID_CURSOR를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+
+        assertThatThrownBy(() -> meetingService.listLinkableAgendas(1L, null, "잘못된cursor", null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_400_INVALID_CURSOR);
+    }
+
+    @Test
+    void listLinkableAgendas_기수가_없으면_MEETING_404_GROUP_TERM_NOT_FOUND를_던진다() {
+        given(groupTermRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.listLinkableAgendas(999L, null, null, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
     }
 
     @Test
@@ -262,7 +465,7 @@ class MeetingServiceTest {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
         given(category.getId()).willReturn(1L);
-        Meeting meeting = Meeting.create(groupTerm, category, "가을 정기공연 운영진 회의",
+        Meeting meeting = Meeting.create(groupTerm, null, category, "가을 정기공연 운영진 회의",
                 LocalDate.of(2026, 11, 7), "김가은, 홍보팀", "가을 공연 준비 논의");
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
@@ -287,7 +490,7 @@ class MeetingServiceTest {
     void getMeetingDetail_안건이_없으면_진행률_0퍼센트를_반환한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "안건 없는 회의", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "안건 없는 회의", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(meetingAgendaRepository.findOrderedAgendas(10L)).willReturn(List.of());
@@ -313,7 +516,7 @@ class MeetingServiceTest {
     void updateMeeting_정상_요청이면_보낸_필드만_반영한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "원래 제목",
+        Meeting meeting = Meeting.create(groupTerm, null, category, "원래 제목",
                 LocalDate.of(2026, 11, 7), "원래 참석자", "원래 요약");
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
@@ -344,7 +547,7 @@ class MeetingServiceTest {
     void updateMeeting_이미_종료된_회의면_MEETING_409_ALREADY_ENDED를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
@@ -356,13 +559,15 @@ class MeetingServiceTest {
     }
 
     @Test
-    void updateMeeting_카테고리가_없으면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
+    void updateMeeting_다른_기수의_카테고리거나_없는_카테고리면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
-        given(meetingCategoryRepository.findById(999L)).willReturn(Optional.empty());
+        // 경로에 기수가 없어 수정 대상 회의의 기수로 카테고리를 찾는다
+        given(groupTerm.getId()).willReturn(1L);
+        given(meetingCategoryRepository.findByIdAndGroupTermId(999L, 1L)).willReturn(Optional.empty());
 
         MeetingUpdateRequest request = MeetingUpdateRequest.builder().categoryId(999L).build();
 
@@ -376,13 +581,15 @@ class MeetingServiceTest {
     void deleteMeeting_정상_요청이면_안건을_먼저_지우고_회의를_지운다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
 
         meetingService.deleteMeeting(10L);
 
-        InOrder inOrder = Mockito.inOrder(meetingAgendaRepository, meetingRepository);
+        // 연결이 남아있으면 FK가 안건 삭제를 막으므로 링크 → 안건 → 회의 순서여야 한다
+        InOrder inOrder = Mockito.inOrder(scheduleAgendaLinkRepository, meetingAgendaRepository, meetingRepository);
+        inOrder.verify(scheduleAgendaLinkRepository).deleteAllByMeetingId(10L);
         inOrder.verify(meetingAgendaRepository).deleteAllByMeetingId(10L);
         inOrder.verify(meetingRepository).delete(meeting);
     }
@@ -455,7 +662,7 @@ class MeetingServiceTest {
     void addAgenda_정상_요청이면_마지막_orderNo_다음으로_추가한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
 
@@ -478,7 +685,7 @@ class MeetingServiceTest {
     void addAgenda_기존_안건이_없으면_orderNo_0으로_추가한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(meetingAgendaRepository.findLastAgendas(eq(10L), any())).willReturn(List.of());
@@ -505,7 +712,7 @@ class MeetingServiceTest {
     void addAgenda_이미_종료된_회의면_MEETING_409_ALREADY_ENDED를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
@@ -521,7 +728,7 @@ class MeetingServiceTest {
     void updateAgendaContent_다음_안건이면_status를_COMPLETED로_저장하고_진행률을_갱신한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
@@ -547,7 +754,7 @@ class MeetingServiceTest {
     void updateAgendaContent_중단하기면_status_없이_내용만_저장한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
@@ -569,7 +776,7 @@ class MeetingServiceTest {
     void updateAgendaContent_content만_보내면_내용만_바뀌고_나머지는_유지된다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "원래 내용", 0);
@@ -601,7 +808,7 @@ class MeetingServiceTest {
     void updateAgendaContent_회의가_종료됐으면_MEETING_409_ALREADY_ENDED를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
 
@@ -619,7 +826,7 @@ class MeetingServiceTest {
     void updateAgendaContent_완료된_안건을_다른_상태로_되돌리려_하면_AGENDA_409_ALREADY_COMPLETED를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
@@ -641,7 +848,7 @@ class MeetingServiceTest {
     void updateAgendaContent_완료된_안건이어도_status_없이_내용만_고치는건_허용한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
@@ -664,7 +871,7 @@ class MeetingServiceTest {
     void updateAgendaContent_완료된_안건에_status_COMPLETED를_다시_보내도_허용한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
@@ -686,7 +893,7 @@ class MeetingServiceTest {
     void deleteAgenda_정상_요청이면_삭제한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
@@ -696,7 +903,10 @@ class MeetingServiceTest {
 
         meetingService.deleteAgenda(3L);
 
-        Mockito.verify(meetingAgendaRepository).delete(agenda);
+        // 일정에 연결된 안건이면 그 연결을 먼저 끊어야 FK에 걸리지 않는다
+        InOrder inOrder = Mockito.inOrder(scheduleAgendaLinkRepository, meetingAgendaRepository);
+        inOrder.verify(scheduleAgendaLinkRepository).deleteAllByMeetingAgendaId(3L);
+        inOrder.verify(meetingAgendaRepository).delete(agenda);
     }
 
     @Test
@@ -713,7 +923,7 @@ class MeetingServiceTest {
     void deleteAgenda_회의가_종료됐으면_MEETING_409_ALREADY_ENDED를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
 
@@ -731,7 +941,7 @@ class MeetingServiceTest {
     void deleteAgenda_안건이_1개뿐이면_AGENDA_409_AT_LEAST_ONE_REQUIRED를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
 
         MeetingAgenda agenda = MeetingAgenda.create(meeting, "안건1", 0);
@@ -749,7 +959,7 @@ class MeetingServiceTest {
     void endMeeting_정상_요청이면_일부만_완료돼도_종료한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(meetingAgendaRepository.countByMeetingIdAndStatus(10L, AgendaStatus.COMPLETED)).willReturn(1L);
@@ -779,7 +989,7 @@ class MeetingServiceTest {
     void endMeeting_이미_종료된_회의면_MEETING_409_ALREADY_ENDED를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
@@ -794,7 +1004,7 @@ class MeetingServiceTest {
     void generateSummary_정상_요청이면_AI_요약을_저장하고_반환한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "가을 정기공연 운영진 회의", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "가을 정기공연 운영진 회의", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
 
@@ -826,7 +1036,7 @@ class MeetingServiceTest {
     void generateSummary_AI_호출이_실패하면_MEETING_502_SUMMARY_FAILED를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
         given(meetingAgendaRepository.findOrderedAgendas(10L))
@@ -844,7 +1054,7 @@ class MeetingServiceTest {
     void updateSummary_정상_요청이면_사용자가_고친_내용을_그대로_저장한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
-        Meeting meeting = Meeting.create(groupTerm, category, "제목", LocalDate.now(), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         meeting.applySummary("AI가 생성한 원본 요약");
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));

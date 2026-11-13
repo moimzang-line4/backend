@@ -21,14 +21,24 @@ public class MeetingRepositoryImpl implements MeetingRepositoryCustom {
     // 회의 목록을 조건과 cursor로 조회한다. 카테고리명을 함께 내려줘야 해서 meetingCategory를 fetch join한다
     @Override
     public List<Meeting> search(Long groupTermId, MeetingStatus status, Long categoryId, String keyword,
-                                 LocalDate cursorMeetingDate, Long cursorId, int limit) {
+                                 Long scheduleId, LocalDate cursorMeetingDate, Long cursorId, int limit) {
 
         return queryFactory.selectFrom(meeting)
                 .leftJoin(meeting.meetingCategory, meetingCategory).fetchJoin()
-                .where(baseConditions(groupTermId, status, categoryId, keyword))
+                .where(baseConditions(groupTermId, status, categoryId, keyword, scheduleId))
                 .where(cursorCondition(cursorMeetingDate, cursorId))
                 .orderBy(meeting.meetingDate.desc(), meeting.id.desc())
                 .limit(limit)
+                .fetch();
+    }
+
+    // 일정 상세 화면의 회의록 카드와 같은 집합이다. 카테고리명을 함께 쓰므로 fetch join한다
+    @Override
+    public List<Meeting> findByScheduleForAssistant(Long scheduleId) {
+        return queryFactory.selectFrom(meeting)
+                .leftJoin(meeting.meetingCategory, meetingCategory).fetchJoin()
+                .where(meeting.schedule.id.eq(scheduleId))
+                .orderBy(meeting.meetingDate.desc(), meeting.id.desc())
                 .fetch();
     }
 
@@ -42,13 +52,20 @@ public class MeetingRepositoryImpl implements MeetingRepositoryCustom {
 
     // 기수·상태·카테고리·키워드 조건을 모은다. status/categoryId/keyword 없는 필터는 null로 넘기면
     // QueryDSL이 조건을 자동으로 뺀다
-    private BooleanExpression[] baseConditions(Long groupTermId, MeetingStatus status, Long categoryId, String keyword) {
+    private BooleanExpression[] baseConditions(Long groupTermId, MeetingStatus status, Long categoryId,
+                                               String keyword, Long scheduleId) {
         return new BooleanExpression[]{
                 meeting.groupTerm.id.eq(groupTermId),
                 statusEq(status),
                 categoryIdEq(categoryId),
-                keywordContains(keyword)
+                keywordContains(keyword),
+                scheduleIdEq(scheduleId)
         };
+    }
+
+    // 소속 일정 필터 조건을 만든다. 값이 없으면 조건을 걸지 않아 일정 소속 회의록까지 전부 포함한다
+    private BooleanExpression scheduleIdEq(Long scheduleId) {
+        return scheduleId == null ? null : meeting.schedule.id.eq(scheduleId);
     }
 
     // status 필터 조건을 만든다. 값이 없으면 조건을 걸지 않는다

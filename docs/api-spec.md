@@ -1,6 +1,6 @@
 # API 명세 — 모임장
 
-ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 80개. 구현이 시작되면 springdoc이
+ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 82개. 구현이 시작되면 springdoc이
 생성하는 OpenAPI가 정본이 되고, 이 문서는 API ID·화면 매핑·설계 근거를 남기는 역할로 남는다.
 
 ## 1. 개요
@@ -44,8 +44,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 80�
 | API-010 | POST | /api/terms/{termId}/categories | 카테고리 추가 | schedule_category | 불필요 |
 | API-011 | GET | /api/terms/{termId}/categories | 카테고리 목록 조회 | schedule_category | 불필요 |
 | API-012 | GET | /api/terms/{termId}/operation-spaces | 운영 공간 목록 조회 | schedule, meeting | 불필요 |
-| API-013 | POST | /api/schedules/{scheduleId}/agenda-links | 안건 연결(수동) | schedule_agenda_link | 불필요 |
-| API-014 | POST | /api/schedules/{scheduleId}/agenda-links/auto | 연동할 회의록 찾기(자동) | schedule_agenda_link | 불필요 |
+| API-013 | POST | /api/schedules/{scheduleId}/agenda-links | 안건 연결 | schedule_agenda_link | 불필요 |
 | API-015 | GET | /api/schedules/{scheduleId}/agenda-links | 연결된 회의록 조회 | schedule_agenda_link | 불필요 |
 | API-016 | DELETE | /api/schedules/{scheduleId}/agenda-links/{linkId} | 회의록 연결 해제 | schedule_agenda_link | 불필요 |
 | API-017 | POST | /api/terms/{termId}/member-lists | 명단방 생성 | member_list | 불필요 |
@@ -95,6 +94,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 80�
 | API-061 | PATCH | /api/meetings/{meetingId}/summary | 회의록 저장(요약 수정) | meeting | 불필요 |
 | API-081 | POST | /api/terms/{termId}/meeting-categories | 회의 카테고리 생성 | meeting_category | 불필요 |
 | API-082 | GET | /api/terms/{termId}/meeting-categories | 회의 카테고리 목록 조회 | meeting_category | 불필요 |
+| API-083 | GET | /api/terms/{termId}/agendas/linkable | 연결 가능한 안건 목록 조회 | meeting_agenda, schedule_agenda_link | 불필요 |
 | API-062 | GET | /api/files/policy | 파일 업로드 정책 조회 | — | 불필요 |
 | API-063 | POST | /api/terms/{termId}/files | 파일 업로드 | file | 불필요 |
 | API-064 | GET | /api/terms/{termId}/files | 파일 목록 조회 | file | 불필요 |
@@ -131,8 +131,8 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 80�
 | settlement_target | API-037, API-042 | 없음 | API-038(명단 저장 시 일괄 생성) | API-040 | API-041 |
 | operation_note | API-047 | 없음(목록 카드가 상세 역할) | API-046 | API-048, API-050 | API-049 |
 | meeting | API-052 | API-053 | API-051 | API-054, API-059(종료), API-061(요약 저장) | API-055 |
-| meeting_agenda | API-053 응답에 포함 | 없음 | API-056, API-051(생성 시 함께) | API-057 | API-058 |
-| schedule_agenda_link | API-015 | 없음 | API-013, API-014 | 없음 | API-016 |
+| meeting_agenda | API-053 응답에 포함, API-083(연결 후보) | 없음 | API-056, API-051(생성 시 함께) | API-057 | API-058 |
+| schedule_agenda_link | API-015 | 없음 | API-013 | 없음 | API-016, API-055·API-058 cascade |
 | file | API-064 | 없음(목록 카드가 상세 역할) | API-063 | 없음(파일은 재업로드만) | API-066, API-067(복구) |
 | ai_chat_room | API-077 | 없음(메시지 목록이 상세 역할) | API-076 | 없음 | 없음(화면에 삭제 기능 없음) |
 | ai_message | API-079 | 없음 | API-078 | 없음(수정 불필요한 대화 로그) | 없음 |
@@ -151,8 +151,9 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | 운영 공간 목록 | API-012 |
 | 운영 공간 만들기 바텀시트 | API-004(일정 생성) / API-051(회의 생성) 분기 |
 | 일정 수정 / 일정 삭제 | API-007, API-008 |
-| 연결된 회의록 상세 | API-015, API-016 |
-| 관련 안건 선택 | API-013, API-014 |
+| 일정 상세 · 회의록 & 안건 섹션 | API-052(scheduleId, 회의록 카드), API-015(안건 카드), API-016 |
+| 일정 상세 · 회의록 작성하기 | API-051(scheduleId 포함) |
+| 안건 연결하기 모달 | API-083(후보 목록), API-013 |
 | 부원 홈(명단 카드 목록) | API-018 |
 | 명단방 생성 | API-017 |
 | 링크 관리 | API-019 |
@@ -222,13 +223,14 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | NOTE_400_NOT_TODO_TYPE | 400 | 할 일 유형이 아닙니다. | API-050 |
 
-### 회의 / 안건 (MeetingErrorCode, AgendaErrorCode) — API-051~061, 056~058
+### 회의 / 안건 (MeetingErrorCode, AgendaErrorCode) — API-051~061, 056~058, 081~083
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
 | MEETING_409_ALREADY_ENDED | 409 | 이미 종료된 회의입니다. | API-054, API-056, API-057, API-058, API-059 |
 | MEETING_502_SUMMARY_FAILED | 502 | AI 요약에 실패했습니다. 다시 시도해 주세요. | API-060 |
 | MEETING_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 회의 카테고리입니다. | API-051 |
-| MEETING_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-051, API-052, API-081, API-082 |
+| MEETING_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-051, API-052, API-081, API-082, API-083 |
+| MEETING_404_SCHEDULE_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-051 |
 | MEETING_404_NOT_FOUND | 404 | 존재하지 않는 회의입니다. | API-053, API-054, API-055, API-056, API-059 |
 | AGENDA_404_NOT_FOUND | 404 | 존재하지 않는 안건입니다. | API-057, API-058 |
 | AGENDA_409_AT_LEAST_ONE_REQUIRED | 409 | 안건이 1개만 남아 삭제할 수 없습니다. | API-058 |
@@ -378,7 +380,11 @@ cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 인증: 불필요.
 
 **Logics**: 운영 메모, 차수, 참가자·출석, 영수증 정보, 정산 대상, 그 일정에서 올린 자료(file.schedule_id),
-일정-안건 연결을 함께 삭제한다. 원본 회의록·부원 원본 명단은 유지한다. 이 일정에서 자동 생성된
+일정-안건 연결, **그 일정에 속한 회의록(meeting.schedule_id)과 그 회의의 안건·요약**을 함께 삭제한다
+(decisions #44 — 일정 소속 회의록의 안건은 다른 일정에 연결될 수 없어 삭제가 번지지 않는다).
+일정-안건 연결(`schedule_agenda_link`)은 **연결만 끊는다** — 그 안건과 안건이 속한 회의록은 원래대로
+남는다. 이 일정에서 만든 회의록이 아니기 때문이다. 일정과 무관한 회의록(meeting.schedule_id IS NULL)과
+부원 원본 명단도 유지한다. 이 일정에서 자동 생성된
 `ledger_entry`(영수증 지출·완납 수입·추가 동아리 지원금 행)는 삭제하지 않고 보존하며,
 `schedule_round_id` 참조만 NULL로 전환한다(decisions #4와 동일 원칙).
 
@@ -414,6 +420,26 @@ cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 인증: 불필요. 회의 만들기·수정의 카테고리 선택 바텀시트에서 쓰는 목록.
 **Response data**: categories[].categoryId/name. **에러**: MEETING_404_GROUP_TERM_NOT_FOUND
 
+#### API-083 · GET /api/terms/{termId}/agendas/linkable · 연결 가능한 안건 목록 조회
+인증: 불필요. 일정 상세 → "안건 연결하기" 모달의 후보 목록. 선택한 안건을 실제로 연결하는 건 API-013.
+
+**Logics**: 후보는 **어느 일정에도 속하지 않은 안건**이다 — `meeting.schedule_id IS NULL`이고
+`schedule_agenda_link`에 행이 없는 안건만 내려준다(decisions #44). 조건이 특정 일정과 무관하므로
+`scheduleId`를 받지 않는다. 회의 상태는 거르지 않는다 — 종료된 회의의 안건도 후보에 포함된다
+(연결한 뒤 읽기 전용으로 보이는 것은 API-015가 내려주는 `meetingStatus`로 판단한다, decisions #46).
+
+**Query**: keyword(선택, 안건 내용 검색), cursor(선택), size(선택, 기본 20)
+
+**Response data**: agendas[].agendaId/meetingId/meetingTitle/meetingDate/orderNo/
+content/status(PENDING|IN_PROGRESS|COMPLETED)/discussionNote/decision/hasDecision, nextCursor,
+totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-064와 같은 패턴.
+모달 상단의 "안건 N개" 표시용)
+
+cursor 페이지네이션(정렬 기준: 회의 ID 내림차순 + 안건 ID 오름차순 — 최근 회의가 먼저 오고 한 회의
+안에서는 "안건1 → 안건2" 순서가 유지된다).
+
+**에러**: COMMON_400(잘못된 cursor), MEETING_404_GROUP_TERM_NOT_FOUND
+
 ### 운영 공간
 
 #### API-012 · GET /api/terms/{termId}/operation-spaces · 운영 공간 목록 조회
@@ -433,28 +459,31 @@ NAME은 title. 둘 다 id를 tiebreaker로 쓴다.
 
 ---
 
-#### API-013 · POST /api/schedules/{scheduleId}/agenda-links · 안건 연결(수동)
-인증: 불필요. **Request**: agendaIds(number[]). **Response data**: links[].linkId/agendaId
-**에러**: COMMON_400(안건 미선택), COMMON_404, SPACE_409_AGENDA_ALREADY_LINKED(이미 연결된 안건)
+#### API-013 · POST /api/schedules/{scheduleId}/agenda-links · 안건 연결
+인증: 불필요. 회의록이 아니라 **안건 하나하나**를 연결한다. 선택 목록은 API-083으로 받는다.
 
----
+**Logics**: 연결할 수 있는 안건은 **어느 일정에도 속하지 않은 안건**뿐이다 —
+`meeting.schedule_id IS NULL`이고 `schedule_agenda_link`에 행이 없어야 한다(decisions #44).
+일정 상세에서 만든 회의록의 안건은 이미 그 일정에 속하므로 후보에서 빠진다.
 
-#### API-014 · POST /api/schedules/{scheduleId}/agenda-links/auto · 연동할 회의록 찾기(자동)
-인증: 불필요. 안건의 내용·논의 내용·결정 사항을 분석해 이 일정과 관련된 기존 안건만 자동 연결한다.
-대상이 없으면 `linkedCount: 0`.
-
-**Response data**: linkedCount, links[].linkId/agendaId. **에러**: COMMON_404
-
-> **미확정**: 자동 매칭 알고리즘의 구체적 기준(날짜·카테고리·키워드 유사도 등 가중치)은
-> 구현 시점에 정한다.
+**Request**: agendaIds(number[]). **Response data**: links[].linkId/agendaId
+**에러**: COMMON_400(안건 미선택), COMMON_404, SPACE_409_AGENDA_ALREADY_LINKED(이미 연결됐거나
+다른 일정에 속한 회의록의 안건)
 
 ---
 
 #### API-015 · GET /api/schedules/{scheduleId}/agenda-links · 연결된 회의록 조회
-인증: 불필요. 연결은 안건 단위.
+인증: 불필요. 연결은 안건 단위 — 이 응답은 "회의록 & 안건" 섹션의 **안건 카드**만 담는다.
+같은 섹션의 회의록 카드(그 일정에 속한 회의록)는 API-052에 `scheduleId`를 줘서 받는다(decisions #44).
 
-**Response data**: links[].linkId/meetingId/meetingTitle/meetingDate/agendaId/agendaOrderNo/agendaContent/
-agendaStatus/discussionNote/decision/hasDecision
+**Logics**: 종료된 회의(meetingStatus=COMPLETED)의 안건도 연결할 수 있다. 다만 그 안건의
+논의 내용·결정 사항은 **읽기 전용**이다 — 회의가 끝나면 안건 수정(API-057)이
+MEETING_409_ALREADY_ENDED로 거부되기 때문이다(decisions #46). 화면이 입력란을 잠글 수 있도록
+`meetingStatus`를 함께 내려준다. 안건 상태(agendaStatus)로는 판단할 수 없다 — 종료된 회의에도
+PENDING·IN_PROGRESS인 안건이 남아 있을 수 있다.
+
+**Response data**: links[].linkId/meetingId/meetingTitle/meetingDate/meetingStatus(IN_PROGRESS|COMPLETED)/
+agendaId/agendaOrderNo/agendaContent/agendaStatus/discussionNote/decision/hasDecision
 
 **에러**: COMMON_404
 
@@ -769,22 +798,33 @@ cursor 페이지네이션(정렬 기준: createdAt).
 #### API-051 · POST /api/terms/{termId}/meetings · 회의 만들기
 인증: 불필요. **Request**: title, meetingDate, categoryId(`meeting_category`, 일정 카테고리와
 별도 운영 — decisions #21), attendees(자유 텍스트, 선택), listSummary(목록 한 줄 설명, 선택),
-agendas(string[], 안건 내용 목록)
+agendas(string[], 안건 내용 목록), scheduleId(선택)
+
+**Logics**: `scheduleId`는 화면 경로를 가른다 — 운영 공간에서 만든 회의록은 보내지 않고(일정과 무관),
+일정 상세의 "회의록 작성하기"로 만든 회의록은 그 일정 ID를 보낸다. 보낸 경우 그 회의의 안건 전체가
+일정에 속하고, 안건 연결(API-013) 후보에서도 빠진다(decisions #44). 소속은 생성 시점에 확정되며
+이후 바꿀 수 없다.
 
 **Response data**: meetingId, agendaIds
-**에러**: COMMON_400, MEETING_404_GROUP_TERM_NOT_FOUND(기수 없음), MEETING_404_CATEGORY_NOT_FOUND(카테고리 없음)
+**에러**: COMMON_400, MEETING_404_GROUP_TERM_NOT_FOUND(기수 없음), MEETING_404_CATEGORY_NOT_FOUND(카테고리 없음),
+MEETING_404_SCHEDULE_NOT_FOUND(일정 없음)
 
 ---
 
 #### API-052 · GET /api/terms/{termId}/meetings · 회의 목록 조회
 인증: 불필요.
 
-**Query**: status(진행중|완료, 선택), categoryId(선택), keyword(선택), cursor(선택), size(선택, 기본 20)
+**Query**: status(진행중|완료, 선택), categoryId(선택), keyword(선택), scheduleId(선택),
+cursor(선택), size(선택, 기본 20)
 
 **Response data**: meetings[].meetingId/title/meetingDate/categoryName/
 listSummary/status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt, nextCursor
 
 cursor 페이지네이션(정렬 기준: meetingDate 내림차순 — 최근 회의가 먼저).
+
+**Logics**: `scheduleId`를 주면 그 일정에 속한 회의록만 내려준다 — 일정 상세의 "회의록 & 안건"
+섹션에서 회의록 카드를 그릴 때 쓴다(같은 섹션의 개별 연결 안건은 API-015). 주지 않으면 일정 소속
+여부와 무관하게 전부 포함한다(decisions #44).
 
 **에러**: COMMON_400(잘못된 cursor)
 
@@ -808,6 +848,7 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 #### API-054 · PATCH /api/meetings/{meetingId} · 회의 정보 수정
 인증: 불필요. 제목·날짜·카테고리·참석자만 수정(안건은 API-056/057/058로 별도 처리). 보낸 필드만 수정.
+일정 소속(`scheduleId`)은 받지 않는다 — 생성 시점에 확정하고 옮기지 않는다(decisions #44).
 
 **Request**: title, meetingDate, categoryId, attendees, listSummary
 **Response data**: meetingId
@@ -817,6 +858,7 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 
 #### API-055 · DELETE /api/meetings/{meetingId} · 회의 삭제
 인증: 불필요. 회의 상태(IN_PROGRESS/COMPLETED)와 무관하게 삭제를 허용한다(decisions #15).
+안건과 그 안건의 일정-안건 연결(`schedule_agenda_link`)도 함께 지운다. 안건 삭제(API-058)도 같다.
 **에러**: MEETING_404_NOT_FOUND
 
 ---
@@ -1086,7 +1128,7 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 
 ## 7. 미확정(TBD) 항목 모음
 
-아래 19개 항목 중 **아직 정하지 않은 것은 11개**(1·3·4·5·6·12·14·15·16·18·19번)다. 나머지는
+아래 19개 항목 중 **아직 정하지 않은 것은 10개**(1·3·4·5·6·12·15·16·18·19번)다. 나머지는
 해소돼 각 항목에 결정 번호를 적어 뒀다. 번호는 한 번 붙이면 바꾸지 않는다 — 다른 문서·이슈가
 이 번호를 가리키기 때문에, 해소된 항목도 지우지 않고 "해소됨"으로 남긴다.
 구현 착수 전 미해소 항목에 들어가면 안 된다(§6에서 각 엔드포인트 자리에도 표시):
@@ -1110,7 +1152,8 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 13. ~~API-078 미입금자 조회 외 카드 포맷~~ — **해소됨(2026-11-13)**: 카드는 미입금자 조회
     하나만 만들고, 나머지 의도(공지 작성·일정 조회 등)는 카드 없이 텍스트로만 답한다.
     PRD·Figma에서 포맷이 확정된 카드가 미입금자 조회뿐이기 때문이다(decisions #33).
-14. API-014 자동 매칭 알고리즘 상세 기준
+14. ~~API-014 자동 매칭 알고리즘 상세 기준~~ — **해소됨(2026-11-14)**: API-014 자체를 명세에서
+    삭제해 정할 기준이 없어졌다. 자동으로 안건을 연결해 주는 화면이 처음부터 없었다(decisions #45).
 15. API-007 일정 수정 시 운영 공간 토글(`hasOperationSpace`) 변경 허용 여부 — 보류(decisions #12)
 16. API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지
 17. ~~AI 연동 벤더/모델 — 영수증 인식(API-036), 회의 요약(API-060), AI 채팅 응답(API-078)~~ —

@@ -20,6 +20,9 @@ import com.moimzang.domain.file.repository.FileRepository;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
 import com.moimzang.domain.meeting.enums.AgendaStatus;
+import com.moimzang.domain.meeting.enums.MeetingStatus;
+import com.moimzang.domain.meeting.repository.MeetingAgendaRepository;
+import com.moimzang.domain.meeting.repository.MeetingRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.entity.ScheduleAgendaLink;
 import com.moimzang.domain.schedule.repository.ScheduleAgendaLinkRepository;
@@ -27,6 +30,7 @@ import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
@@ -55,6 +59,12 @@ class ScheduleDetailToolTest {
 
     @Mock
     private ScheduleAgendaLinkRepository scheduleAgendaLinkRepository;
+
+    @Mock
+    private MeetingRepository meetingRepository;
+
+    @Mock
+    private MeetingAgendaRepository meetingAgendaRepository;
 
     @Mock
     private FileRepository fileRepository;
@@ -158,6 +168,7 @@ class ScheduleDetailToolTest {
 
         assertThat(result.get("rounds")).isEmpty();
         assertThat(result.get("attendees")).isEmpty();
+        assertThat(result.get("scheduleMeetings")).isEmpty();
         assertThat(result.get("linkedAgendas")).isEmpty();
         assertThat(result.get("files")).isEmpty();
         assertThat(result.get("title").asText()).isEqualTo("가을 정기공연");
@@ -178,6 +189,34 @@ class ScheduleDetailToolTest {
         assertThatThrownBy(() -> tool.execute(1L, objectMapper.createObjectNode()))
                 .isInstanceOf(ChatToolArgumentException.class)
                 .hasMessageContaining("필수");
+    }
+
+    @Test
+    void execute_일정에서_만든_회의록과_개별_연결_안건을_구분해_내려준다() throws Exception {
+        givenSchedule();
+        given(meetingRepository.findByScheduleForAssistant(10L))
+                .willReturn(List.of(scheduleMeeting(800L, "가을 정기공연 운영진 회의")));
+        given(meetingAgendaRepository.countByMeetingIds(List.of(800L))).willReturn(Map.of(800L, 3L));
+        given(scheduleAgendaLinkRepository.findByScheduleForAssistant(10L))
+                .willReturn(List.of(agendaLink(900L, "3차 정기회의", 901L, "공연 운영 담당 배정")));
+
+        JsonNode result = execute("{\"scheduleId\":10}");
+
+        JsonNode meeting = result.get("scheduleMeetings").get(0);
+        assertThat(meeting.get("meetingId").asLong()).isEqualTo(800L);
+        assertThat(meeting.get("title").asText()).isEqualTo("가을 정기공연 운영진 회의");
+        assertThat(meeting.get("agendaCount").asLong()).isEqualTo(3L);
+        // 일정 소속 회의록과 개별로 연결한 안건은 서로 다른 목록이다
+        assertThat(result.get("linkedAgendas").get(0).get("meetingTitle").asText()).isEqualTo("3차 정기회의");
+    }
+
+    private Meeting scheduleMeeting(Long meetingId, String title) {
+        Meeting meeting = BeanUtils.instantiateClass(Meeting.class);
+        ReflectionTestUtils.setField(meeting, "id", meetingId);
+        ReflectionTestUtils.setField(meeting, "title", title);
+        ReflectionTestUtils.setField(meeting, "meetingDate", LocalDate.of(2026, 11, 7));
+        ReflectionTestUtils.setField(meeting, "status", MeetingStatus.IN_PROGRESS);
+        return meeting;
     }
 
     private void givenSchedule() {

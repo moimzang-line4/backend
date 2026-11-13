@@ -13,6 +13,7 @@ import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingLinkableAgendaListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryGenerateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryUpdateResponse;
@@ -49,7 +50,7 @@ public class MeetingController implements MeetingApi {
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 
-    // 기수의 회의 목록을 상태·카테고리·검색어로 필터링해 cursor 페이지네이션으로 조회한다
+    // 기수의 회의 목록을 상태·카테고리·검색어·소속 일정으로 필터링해 cursor 페이지네이션으로 조회한다
     @Override
     @GetMapping("/api/terms/{termId}/meetings")
     public ResponseEntity<BaseResponse<MeetingListResponse>> listMeetings(
@@ -57,10 +58,12 @@ public class MeetingController implements MeetingApi {
             @RequestParam(required = false) MeetingStatus status,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long scheduleId,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer size
     ) {
-        MeetingListResponse response = meetingService.listMeetings(termId, status, categoryId, keyword, cursor, size);
+        MeetingListResponse response =
+                meetingService.listMeetings(termId, status, categoryId, keyword, scheduleId, cursor, size);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 
@@ -129,6 +132,20 @@ public class MeetingController implements MeetingApi {
             @Valid @RequestBody MeetingAgendaUpdateRequest request
     ) {
         MeetingAgendaUpdateResponse response = meetingService.updateAgendaContent(agendaId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 일정에 연결할 수 있는 안건 목록을 조회한다("안건 연결하기" 모달의 후보 목록)
+    @Override
+    @GetMapping("/api/terms/{termId}/agendas/linkable")
+    public ResponseEntity<BaseResponse<MeetingLinkableAgendaListResponse>> listLinkableAgendas(
+            @PathVariable Long termId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer size
+    ) {
+        MeetingLinkableAgendaListResponse response =
+                meetingService.listLinkableAgendas(termId, keyword, cursor, size);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 

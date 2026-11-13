@@ -20,9 +20,9 @@
 | settlement_target | 정산 대상 | 차수별 개인 청구액·입금 상태 |
 | operation_note | 운영 메모 | 일정에 속한 메모/할일/결정사항/아이디어 |
 | meeting_category | 회의 카테고리 | 기수별 회의 분류(일정 카테고리와 별도 운영) |
-| meeting | 회의 | 회의(회의록) 본체 |
+| meeting | 회의 | 회의(회의록) 본체. `schedule_id`로 특정 일정에 속할 수 있다 |
 | meeting_agenda | 안건 | 회의에 속한 안건 |
-| schedule_agenda_link | 일정-안건 연결 | 일정과 안건의 N:M 연결(운영 공간에서 회의록 연결) |
+| schedule_agenda_link | 일정-안건 연결 | 일정과 안건의 N:M 연결(일정에 속하지 않은 회의록의 안건만 개별 연결) |
 | file | 자료 | 기수별 자료실 파일(일정 첨부 겸용) |
 | ai_chat_room | AI 채팅방 | 기수 단위 AI 비서 대화방(여러 개 허용) |
 | ai_message | AI 메시지 | AI 채팅방 내 메시지(결과 카드 포함) |
@@ -196,6 +196,7 @@
 |---|---|---|---|---|---|---|
 | id | BIGINT | ✅ | | ✅ | long | |
 | group_term_id | BIGINT | | → group_term.id | ✅ | long | |
+| schedule_id | BIGINT | | → schedule.id | ❌ | Long | NULL=일정과 무관한 회의록(운영 공간에서 생성), NOT NULL=그 일정에 속한 회의록(일정 상세에서 생성, 일정 삭제 시 함께 삭제). 소속은 생성 시점에 확정하고 이후 바꾸지 않는다(`docs/decisions.md` #44) |
 | meeting_category_id | BIGINT | | → meeting_category.id | ✅ | long | 일정 카테고리와 분리 운영(`docs/decisions.md` #21) |
 | title | VARCHAR(100) | | | ✅ | String | |
 | meeting_date | DATE | | | ✅ | LocalDate | |
@@ -306,6 +307,7 @@
 | operation_note.schedule_id | → schedule.id | ❌ | 일정 1 : N 메모 |
 | meeting_category.group_term_id | → group_term.id | ❌ | 기수 1 : N 회의카테고리 |
 | meeting.group_term_id | → group_term.id | ❌ | 기수 1 : N 회의 |
+| meeting.schedule_id | → schedule.id | ✅ | 일정 1 : N 회의(NULL=일정과 무관한 회의록) |
 | meeting.meeting_category_id | → meeting_category.id | ❌ | 카테고리 1 : N 회의 |
 | meeting_agenda.meeting_id | → meeting.id | ❌ | 회의 1 : N 안건 |
 | schedule_agenda_link.schedule_id | → schedule.id | ❌ | 일정 1 : N 연결 |

@@ -49,6 +49,18 @@ controller/service/mapper가 각자 패키지 안에 있음), 도메인 패키�
 네 도메인 모두 아직 껍데기다(엔티티·레포지토리·틀만 있음). 등록된 이슈는 없다.
 `schedule`은 운영 공간 집계(API-012~016)까지 담당한다(decisions #13).
 
+- 회의록-안건-일정 연결 구조가 확정됐다(decisions #44). `schedule` 쪽에 남은 작업은 두 가지다:
+  **API-008 일정 삭제** 시 그 일정에 속한 회의록(`meeting.schedule_id`)과 안건을 함께 지우는 처리,
+  **API-013·015·016** 구현(연결 후보 규칙은 decisions #44에서 확정, 후보 목록 조회는 C가
+  API-083으로 제공한다). `meeting.schedule_id` 컬럼과 Flyway `V4`는 C가 이미 넣었다.
+  **일정 삭제는 API 한 번으로 끝나야 한다** — 사용자가 회의록을 먼저 지우는 2단계 조작이 아니다.
+  다만 그 API 안에서는 지우는 순서가 정해져 있다: 일정-안건 연결 → 일정 소속 회의록의 안건 →
+  회의록 → 일정. `fk_meeting_schedule`가 RESTRICT라 자식을 남긴 채 일정 행부터 지우면
+  `ERROR 1451`이 난다(실측 확인).
+  **API-014는 명세에서 삭제됐다** — 자동 매칭 화면이 없어서다(decisions #45). 안건 연결은
+  모달에서 직접 고르는 경로 하나뿐이다. API-015 응답에는 `meetingStatus`가 들어가야 한다 —
+  종료된 회의의 안건은 일정 상세에서 읽기 전용이라 화면이 그 값으로 입력란을 잠근다(decisions #46)
+
 ### B — `attendance`, `settlement`, `budget`
 
 - 정산 API 5건 미구현 — #57(명단 조회·저장·불러오기), #58(입금 확인·삭제·현황),
@@ -62,6 +74,9 @@ controller/service/mapper가 각자 패키지 안에 있음), 도메인 패키�
 ### C — `meeting`, `file`, `chat`
 
 세 도메인 모두 구현 완료이고, `file`은 결함 수정까지 끝났다(decisions #42·#43).
+회의록-안건-일정 연결(decisions #44~#46)도 `meeting` 쪽은 끝났다 — `meeting.schedule_id`(Flyway `V4`),
+API-051의 `scheduleId`, API-052의 `scheduleId` 필터, 연결 후보 조회 API-083, 회의·안건 삭제 시
+`schedule_agenda_link` 선삭제까지.
 
 - #76 로컬 정적 경로 `/uploads/**`가 소프트 삭제된 파일까지 200으로 서빙한다 —
   `/api/files/{id}/content`에서 막은 삭제 차단이 이 경로로 우회된다. **B 담당과 합의가 필요하다**:

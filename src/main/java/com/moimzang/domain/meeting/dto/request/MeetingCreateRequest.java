@@ -32,6 +32,11 @@ public class MeetingCreateRequest {
     @NotNull
     private Long categoryId;
 
+    @Schema(description = "소속 일정 ID(선택). 일정 상세의 '회의록 작성하기'로 만들 때만 보낸다 — "
+            + "보내면 이 회의의 안건 전체가 그 일정에 속하고 안건 연결 후보에서 빠진다",
+            example = "1")
+    private Long scheduleId;
+
     @Schema(description = "참석자(자유 텍스트, 선택)", example = "김가은, 홍보팀")
     @Size(max = 500)
     private String attendees;

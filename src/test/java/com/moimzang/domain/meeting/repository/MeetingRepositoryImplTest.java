@@ -7,9 +7,11 @@ import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingCategory;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
+import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.global.config.JpaAuditingConfig;
 import com.moimzang.global.config.QuerydslConfig;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,7 +61,7 @@ class MeetingRepositoryImplTest {
         Meeting recent = persistMeeting("3차 회의", LocalDate.of(2026, 11, 7), null, null);
         Meeting middle = persistMeeting("2차 회의", LocalDate.of(2026, 10, 20), null, null);
 
-        List<Meeting> result = meetingRepository.search(groupTerm.getId(), null, null, null, null, null, 10);
+        List<Meeting> result = meetingRepository.search(groupTerm.getId(), null, null, null, null, null, null, 10);
 
         assertThat(result).extracting(Meeting::getId)
                 .containsExactly(recent.getId(), middle.getId(), old.getId());
@@ -73,7 +75,7 @@ class MeetingRepositoryImplTest {
         em.persistAndFlush(completed);
 
         List<Meeting> result = meetingRepository.search(
-                groupTerm.getId(), MeetingStatus.COMPLETED, null, null, null, null, 10);
+                groupTerm.getId(), MeetingStatus.COMPLETED, null, null, null, null, null, 10);
 
         assertThat(result).extracting(Meeting::getId).containsExactly(completed.getId());
         assertThat(result).extracting(Meeting::getId).doesNotContain(inProgress.getId());
@@ -83,11 +85,11 @@ class MeetingRepositoryImplTest {
     void search_categoryId로_필터링하면_해당_카테고리의_회의만_반환한다() {
         MeetingCategory otherCategory = persistCategory(groupTerm, "홍보팀 회의");
         Meeting target = persistMeeting("운영진 회의", LocalDate.of(2026, 11, 7), null, null);
-        Meeting other = Meeting.create(groupTerm, otherCategory, "홍보팀 회의", LocalDate.of(2026, 11, 6), null, null);
+        Meeting other = Meeting.create(groupTerm, null, otherCategory, "홍보팀 회의", LocalDate.of(2026, 11, 6), null, null);
         em.persistAndFlush(other);
 
         List<Meeting> result = meetingRepository.search(
-                groupTerm.getId(), null, category.getId(), null, null, null, 10);
+                groupTerm.getId(), null, category.getId(), null, null, null, null, 10);
 
         assertThat(result).extracting(Meeting::getId).containsExactly(target.getId());
     }
@@ -100,7 +102,7 @@ class MeetingRepositoryImplTest {
         Meeting notMatched = persistMeeting("무관한 회의", LocalDate.of(2026, 11, 4), "행사 준비", "홍보팀");
 
         List<Meeting> result = meetingRepository.search(
-                groupTerm.getId(), null, null, "운영진", null, null, 10);
+                groupTerm.getId(), null, null, "운영진", null, null, null, 10);
 
         assertThat(result).extracting(Meeting::getId)
                 .containsExactlyInAnyOrder(byTitle.getId(), byListSummary.getId(), byAttendees.getId())
@@ -115,7 +117,7 @@ class MeetingRepositoryImplTest {
         Meeting third = persistMeeting("3번째", sameDate, null, null);
 
         List<Meeting> result = meetingRepository.search(
-                groupTerm.getId(), null, null, null, sameDate, second.getId(), 10);
+                groupTerm.getId(), null, null, null, null, sameDate, second.getId(), 10);
 
         // (date, id) 내림차순이므로 cursor(second) 다음은 id가 더 작은 first만 남는다
         assertThat(result).extracting(Meeting::getId).containsExactly(first.getId());
@@ -127,9 +129,47 @@ class MeetingRepositoryImplTest {
         Meeting older = persistMeeting("이전 회의", LocalDate.of(2026, 11, 6), null, null);
 
         List<Meeting> result = meetingRepository.search(
-                groupTerm.getId(), null, null, null, newer.getMeetingDate(), newer.getId(), 10);
+                groupTerm.getId(), null, null, null, null, newer.getMeetingDate(), newer.getId(), 10);
 
         assertThat(result).extracting(Meeting::getId).containsExactly(older.getId());
+    }
+
+    @Test
+    void search_scheduleId를_주면_그_일정에_속한_회의만_반환한다() {
+        Schedule schedule = persistSchedule("가을 정기공연");
+        Meeting owned = persistMeeting("일정에서 만든 회의", LocalDate.of(2026, 11, 7), null, null, schedule);
+        persistMeeting("일정과 무관한 회의", LocalDate.of(2026, 11, 8), null, null);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, null, null, schedule.getId(), null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(owned.getId());
+    }
+
+    @Test
+    void search_scheduleId가_없으면_일정_소속_회의도_함께_반환한다() {
+        Schedule schedule = persistSchedule("가을 정기공연");
+        Meeting owned = persistMeeting("일정에서 만든 회의", LocalDate.of(2026, 11, 7), null, null, schedule);
+        Meeting free = persistMeeting("일정과 무관한 회의", LocalDate.of(2026, 11, 8), null, null);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, null, null, null, null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(free.getId(), owned.getId());
+    }
+
+    @Test
+    void findByScheduleForAssistant_그_일정에_속한_회의만_최근_순서로_반환한다() {
+        Schedule schedule = persistSchedule("가을 정기공연");
+        Schedule other = persistSchedule("MT");
+        Meeting older = persistMeeting("1차 회의", LocalDate.of(2026, 10, 1), null, null, schedule);
+        Meeting newer = persistMeeting("2차 회의", LocalDate.of(2026, 11, 7), null, null, schedule);
+        persistMeeting("MT 회의", LocalDate.of(2026, 11, 8), null, null, other);
+        persistMeeting("일정과 무관한 회의", LocalDate.of(2026, 11, 9), null, null);
+
+        List<Meeting> result = meetingRepository.findByScheduleForAssistant(schedule.getId());
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(newer.getId(), older.getId());
     }
 
     private ClubGroup persistClubGroup(String name) {
@@ -153,7 +193,24 @@ class MeetingRepositoryImplTest {
     }
 
     private Meeting persistMeeting(String title, LocalDate date, String listSummary, String attendees) {
-        Meeting meeting = Meeting.create(groupTerm, category, title, date, attendees, listSummary);
+        return persistMeeting(title, date, listSummary, attendees, null);
+    }
+
+    private Meeting persistMeeting(String title, LocalDate date, String listSummary, String attendees,
+                                   Schedule schedule) {
+        Meeting meeting = Meeting.create(groupTerm, schedule, category, title, date, attendees, listSummary);
         return em.persistAndFlush(meeting);
+    }
+
+    private Schedule persistSchedule(String title) {
+        Schedule schedule = BeanUtils.instantiateClass(Schedule.class);
+        ReflectionTestUtils.setField(schedule, "groupTerm", groupTerm);
+        ReflectionTestUtils.setField(schedule, "title", title);
+        ReflectionTestUtils.setField(schedule, "color", "RED");
+        ReflectionTestUtils.setField(schedule, "isAllDay", false);
+        ReflectionTestUtils.setField(schedule, "startAt", LocalDateTime.of(2026, 11, 20, 18, 0));
+        ReflectionTestUtils.setField(schedule, "endAt", LocalDateTime.of(2026, 11, 20, 22, 0));
+        ReflectionTestUtils.setField(schedule, "hasOperationSpace", true);
+        return em.persistAndFlush(schedule);
     }
 }
