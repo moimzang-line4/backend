@@ -873,8 +873,8 @@ status 없이 내용(content/discussionNote/decision)만 고치는 건 완료된
 #### API-062 · GET /api/files/policy · 파일 업로드 정책 조회
 인증: 불필요. **Response data**: allowedExtensions[], maxSizeBytes
 
-> **미확정**: 실제 허용 확장자·최대 용량 수치는 구현 시점에 정한다(현재 예시값: pdf/docx/xlsx/pptx/
-> hwp/jpg/png, 20MB).
+수치는 `FileUploadPolicy` 상수가 정본이고 이 API가 그대로 내려준다 — 최대 20MB, 문서(pdf/doc/docx/
+ppt/pptx/xls/xlsx/txt/hwp/hwpx)·이미지(jpg/jpeg/png/gif/webp)·zip(decisions #16).
 
 ---
 
@@ -885,8 +885,17 @@ scheduleId가 있으면 일정 자료로 연결되고 문서함에도 자동 노
 **Request**: file(multipart/form-data), name, category(ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE),
 scheduleId(선택)
 
+자료명은 255자까지다(`file.name` 컬럼 길이).
+
 **Response data**: fileId, name
-**에러**: FILE_400_REQUIRED_FIELD_MISSING(필수 누락), FILE_400_EXTENSION_NOT_ALLOWED, FILE_404_GROUP_TERM_NOT_FOUND(기수 없음), FILE_404_SCHEDULE_NOT_FOUND(일정 없음), FILE_413_SIZE_EXCEEDED(413), FILE_400_SCHEDULE_TERM_MISMATCH(scheduleId가 다른 기수 소속)
+**에러**: FILE_400_REQUIRED_FIELD_MISSING(필수 누락), FILE_400_NAME_TOO_LONG(자료명 256자 이상),
+FILE_400_EXTENSION_NOT_ALLOWED, FILE_404_GROUP_TERM_NOT_FOUND(기수 없음),
+FILE_404_SCHEDULE_NOT_FOUND(일정 없음), FILE_400_SCHEDULE_TERM_MISMATCH(scheduleId가 다른 기수 소속),
+COMMON_400(file 파트 누락), COMMON_413(용량 초과)
+
+용량 초과가 `FILE_413_SIZE_EXCEEDED`가 아니라 `COMMON_413`인 이유는, 서버의 multipart 상한이
+`FileUploadPolicy`의 상한과 같아서 서비스 검증 전에 요청 파싱 단계에서 끊기기 때문이다.
+`FILE_413_SIZE_EXCEEDED`는 서비스를 직접 호출하는 경로를 위한 방어로만 남아 있다(decisions #43).
 
 ---
 
@@ -936,9 +945,13 @@ cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 
 이미 삭제된 파일에 다시 호출해도 200이다(멱등). `deleted_at`은 처음 삭제한 시점을 유지한다.
 
 #### API-067 · POST /api/files/{fileId}/restore · 파일 삭제 되돌리기
-인증: 불필요. **Response data**: fileId. **에러**: FILE_404_NOT_FOUND
+인증: 불필요. **Response data**: fileId.
+**에러**: FILE_404_NOT_FOUND, FILE_409_LEDGER_ALREADY_EXISTS(장부를 복구하려는데 그 기수에 활성
+장부가 이미 있음)
 
-> **미확정**: 되돌리기 가능 기간, 실제 스토리지 파일의 영구 삭제 시점은 구현 시점에 정한다.
+되돌리기 기간 제한은 없고 스토리지 파일을 영구 삭제하는 배치도 두지 않는다(decisions #16).
+이미 복구된 파일에 다시 호출해도 200이다. 단 장부(LEDGER_FILE)는 기수당 1개만 유지해야 하므로,
+교체로 밀려난 장부를 되살리려면 현재 활성 장부를 먼저 삭제해야 한다(decisions #43).
 
 ---
 
