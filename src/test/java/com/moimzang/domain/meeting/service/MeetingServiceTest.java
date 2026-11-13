@@ -184,7 +184,7 @@ class MeetingServiceTest {
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(meetingCategoryRepository.findById(1L)).willReturn(Optional.of(category));
-        given(scheduleRepository.findById(5L)).willReturn(Optional.of(schedule));
+        given(scheduleRepository.findByIdAndGroupTermId(5L, 1L)).willReturn(Optional.of(schedule));
         given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
             Meeting saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 100L);
@@ -232,11 +232,11 @@ class MeetingServiceTest {
         ArgumentCaptor<Meeting> captor = ArgumentCaptor.forClass(Meeting.class);
         Mockito.verify(meetingRepository).save(captor.capture());
         assertThat(captor.getValue().getSchedule()).isNull();
-        Mockito.verify(scheduleRepository, Mockito.never()).findById(any());
+        Mockito.verify(scheduleRepository, Mockito.never()).findByIdAndGroupTermId(any(), any());
     }
 
     @Test
-    void createMeeting_일정이_없으면_MEETING_404_SCHEDULE_NOT_FOUND를_던진다() {
+    void createMeeting_다른_기수의_일정이거나_없는_일정이면_MEETING_404_SCHEDULE_NOT_FOUND를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
         MeetingCreateRequest request = MeetingCreateRequest.builder()
@@ -249,7 +249,7 @@ class MeetingServiceTest {
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(meetingCategoryRepository.findById(1L)).willReturn(Optional.of(category));
-        given(scheduleRepository.findById(999L)).willReturn(Optional.empty());
+        given(scheduleRepository.findByIdAndGroupTermId(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
                 .isInstanceOf(CustomException.class)

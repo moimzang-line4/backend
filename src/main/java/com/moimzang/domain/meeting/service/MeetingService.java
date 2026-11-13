@@ -89,7 +89,7 @@ public class MeetingService {
 
         // scheduleId가 오면 일정 상세의 "회의록 작성하기"로 만든 회의다 — 이 회의의 안건 전체가
         // 그 일정에 속하고 안건 연결 후보에서 빠진다. 운영 공간에서 만들면 값이 없어 일정과 무관하다
-        Schedule schedule = resolveSchedule(request.getScheduleId());
+        Schedule schedule = resolveSchedule(termId, request.getScheduleId());
 
         Meeting meeting = meetingRepository.save(Meeting.create(
                 groupTerm, schedule, category, request.getTitle(), request.getMeetingDate(),
@@ -113,14 +113,15 @@ public class MeetingService {
                 .build();
     }
 
-    // 소속 일정을 조회한다. 일정과 무관한 회의록이면 scheduleId가 없어 null을 돌려준다
-    private Schedule resolveSchedule(Long scheduleId) {
+    // 소속 일정을 조회한다. 일정과 무관한 회의록이면 scheduleId가 없어 null을 돌려준다.
+    // 기수 조건을 함께 걸어 다른 기수의 일정에 회의록이 붙는 걸 막는다
+    private Schedule resolveSchedule(Long termId, Long scheduleId) {
         if (scheduleId == null) {
             return null;
         }
-        return scheduleRepository.findById(scheduleId)
+        return scheduleRepository.findByIdAndGroupTermId(scheduleId, termId)
                 .orElseThrow(() -> {
-                    log.warn("[회의 생성] 존재하지 않는 일정입니다. scheduleId = {}", scheduleId);
+                    log.warn("[회의 생성] 이 기수에 없는 일정입니다. termId = {}, scheduleId = {}", termId, scheduleId);
                     return new CustomException(MeetingErrorCode.MEETING_404_SCHEDULE_NOT_FOUND);
                 });
     }
