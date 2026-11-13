@@ -42,7 +42,7 @@ class MeetingSearchToolTest {
 
     @Test
     void execute_회의_정보와_안건_진행률을_함께_내려준다() throws Exception {
-        given(meetingRepository.search(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), anyInt()))
+        given(meetingRepository.search(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(List.of(meeting(900L, "3차 정기회의", LocalDate.of(2026, 11, 10))));
         given(meetingAgendaRepository.countByMeetingIds(List.of(900L))).willReturn(Map.of(900L, 4L));
         given(meetingAgendaRepository.countCompletedByMeetingIds(List.of(900L))).willReturn(Map.of(900L, 3L));
@@ -63,7 +63,7 @@ class MeetingSearchToolTest {
 
     @Test
     void execute_안건이_하나도_없는_회의는_진행률이_0이다() throws Exception {
-        given(meetingRepository.search(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), anyInt()))
+        given(meetingRepository.search(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(List.of(meeting(900L, "4차 정기회의", LocalDate.of(2026, 11, 12))));
 
         JsonNode row = execute("{}").get("meetings").get(0);
@@ -75,9 +75,9 @@ class MeetingSearchToolTest {
 
     @Test
     void execute_검색_결과가_0건이면_등록된_회의_제목을_함께_돌려준다() throws Exception {
-        given(meetingRepository.search(eq(1L), isNull(), isNull(), eq("운영회의"), isNull(), isNull(), anyInt()))
+        given(meetingRepository.search(eq(1L), isNull(), isNull(), eq("운영회의"), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(List.of());
-        given(meetingRepository.search(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), anyInt()))
+        given(meetingRepository.search(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(List.of(meeting(900L, "3차 정기회의", LocalDate.of(2026, 11, 10))));
 
         JsonNode result = execute("{\"keyword\":\"운영회의\"}");
@@ -89,7 +89,7 @@ class MeetingSearchToolTest {
 
     @Test
     void execute_검색_결과가_있으면_availableTitles를_싣지_않는다() throws Exception {
-        given(meetingRepository.search(eq(1L), isNull(), isNull(), eq("정기"), isNull(), isNull(), anyInt()))
+        given(meetingRepository.search(eq(1L), isNull(), isNull(), eq("정기"), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(List.of(meeting(900L, "3차 정기회의", LocalDate.of(2026, 11, 10))));
 
         JsonNode result = execute("{\"keyword\":\"정기\"}");
@@ -102,7 +102,7 @@ class MeetingSearchToolTest {
         List<Meeting> many = IntStream.rangeClosed(1, 51)
                 .mapToObj(i -> meeting((long) i, i + "차 회의", LocalDate.of(2026, 11, 10)))
                 .toList();
-        given(meetingRepository.search(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), anyInt()))
+        given(meetingRepository.search(eq(1L), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), anyInt()))
                 .willReturn(many);
         given(meetingAgendaRepository.countByMeetingIds(any())).willReturn(Map.of());
         given(meetingAgendaRepository.countCompletedByMeetingIds(any())).willReturn(Map.of());

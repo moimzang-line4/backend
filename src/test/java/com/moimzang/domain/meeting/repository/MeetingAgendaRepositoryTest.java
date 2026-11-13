@@ -134,7 +134,7 @@ class MeetingAgendaRepositoryTest {
     }
 
     private Meeting persistMeeting(String title) {
-        Meeting meeting = Meeting.create(groupTerm, category, title, LocalDate.of(2026, 11, 7), null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, title, LocalDate.of(2026, 11, 7), null, null);
         return em.persistAndFlush(meeting);
     }
 }

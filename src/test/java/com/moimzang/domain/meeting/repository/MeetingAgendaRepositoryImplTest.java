@@ -7,9 +7,12 @@ import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
 import com.moimzang.domain.meeting.entity.MeetingCategory;
+import com.moimzang.domain.schedule.entity.Schedule;
+import com.moimzang.domain.schedule.entity.ScheduleAgendaLink;
 import com.moimzang.global.config.JpaAuditingConfig;
 import com.moimzang.global.config.QuerydslConfig;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -103,8 +106,120 @@ class MeetingAgendaRepositoryImplTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    void searchLinkable_어느_일정에도_속하지_않은_안건만_반환한다() {
+        Schedule schedule = persistSchedule("가을 정기공연");
+
+        Meeting free = persistMeeting("일정과 무관한 회의");
+        MeetingAgenda candidate = em.persistAndFlush(MeetingAgenda.create(free, "관객 참여 이벤트", 0));
+        MeetingAgenda alreadyLinked = em.persistAndFlush(MeetingAgenda.create(free, "이미 연결된 안건", 1));
+        persistLink(schedule, alreadyLinked);
+
+        // 일정 상세에서 만든 회의록 — 안건 전체가 이미 그 일정에 속해 후보가 아니다
+        Meeting owned = persistMeeting("일정에서 만든 회의", schedule);
+        em.persistAndFlush(MeetingAgenda.create(owned, "일정 소속 안건", 0));
+
+        List<MeetingAgenda> result =
+                meetingAgendaRepository.searchLinkable(groupTerm.getId(), null, null, null, 10);
+
+        assertThat(result).extracting(MeetingAgenda::getId).containsExactly(candidate.getId());
+    }
+
+    @Test
+    void searchLinkable_keyword는_안건_내용으로_검색한다() {
+        Meeting meeting = persistMeeting("회의");
+        em.persistAndFlush(MeetingAgenda.create(meeting, "관객 참여 이벤트", 0));
+        MeetingAgenda target = em.persistAndFlush(MeetingAgenda.create(meeting, "공연 홍보 계획", 1));
+
+        List<MeetingAgenda> result =
+                meetingAgendaRepository.searchLinkable(groupTerm.getId(), "홍보", null, null, 10);
+
+        assertThat(result).extracting(MeetingAgenda::getId).containsExactly(target.getId());
+    }
+
+    @Test
+    void searchLinkable_최근_회의부터_같은_회의_안에서는_안건_순서대로_반환한다() {
+        Meeting older = persistMeeting("이전 회의");
+        MeetingAgenda olderFirst = em.persistAndFlush(MeetingAgenda.create(older, "이전 안건1", 0));
+        Meeting newer = persistMeeting("최근 회의");
+        MeetingAgenda newerFirst = em.persistAndFlush(MeetingAgenda.create(newer, "최근 안건1", 0));
+        MeetingAgenda newerSecond = em.persistAndFlush(MeetingAgenda.create(newer, "최근 안건2", 1));
+
+        List<MeetingAgenda> result =
+                meetingAgendaRepository.searchLinkable(groupTerm.getId(), null, null, null, 10);
+
+        assertThat(result).extracting(MeetingAgenda::getId)
+                .containsExactly(newerFirst.getId(), newerSecond.getId(), olderFirst.getId());
+    }
+
+    @Test
+    void searchLinkable_cursor_다음_항목부터_이어서_반환한다() {
+        Meeting older = persistMeeting("이전 회의");
+        MeetingAgenda olderFirst = em.persistAndFlush(MeetingAgenda.create(older, "이전 안건1", 0));
+        Meeting newer = persistMeeting("최근 회의");
+        MeetingAgenda newerFirst = em.persistAndFlush(MeetingAgenda.create(newer, "최근 안건1", 0));
+        MeetingAgenda newerSecond = em.persistAndFlush(MeetingAgenda.create(newer, "최근 안건2", 1));
+
+        // 첫 페이지가 최근 회의의 안건1까지 내려갔다고 보고 그 다음부터 이어 받는다
+        List<MeetingAgenda> result = meetingAgendaRepository.searchLinkable(
+                groupTerm.getId(), null, newer.getId(), newerFirst.getId(), 10);
+
+        assertThat(result).extracting(MeetingAgenda::getId)
+                .containsExactly(newerSecond.getId(), olderFirst.getId());
+    }
+
+    @Test
+    void searchLinkable_다른_기수의_안건은_반환하지_않는다() {
+        Meeting meeting = persistMeeting("회의");
+        em.persistAndFlush(MeetingAgenda.create(meeting, "관객 참여 이벤트", 0));
+
+        List<MeetingAgenda> result =
+                meetingAgendaRepository.searchLinkable(groupTerm.getId() + 1, null, null, null, 10);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void countLinkable_후보_조건을_그대로_적용한_전체_개수를_반환한다() {
+        Schedule schedule = persistSchedule("가을 정기공연");
+
+        Meeting free = persistMeeting("일정과 무관한 회의");
+        em.persistAndFlush(MeetingAgenda.create(free, "관객 참여 이벤트", 0));
+        persistLink(schedule, em.persistAndFlush(MeetingAgenda.create(free, "이미 연결된 안건", 1)));
+
+        Meeting owned = persistMeeting("일정에서 만든 회의", schedule);
+        em.persistAndFlush(MeetingAgenda.create(owned, "일정 소속 안건", 0));
+
+        long result = meetingAgendaRepository.countLinkable(groupTerm.getId(), null);
+
+        assertThat(result).isEqualTo(1L);
+    }
+
     private Meeting persistMeeting(String title) {
-        Meeting meeting = Meeting.create(groupTerm, category, title, LocalDate.of(2026, 11, 7), null, null);
+        return persistMeeting(title, null);
+    }
+
+    private Meeting persistMeeting(String title, Schedule schedule) {
+        Meeting meeting = Meeting.create(groupTerm, schedule, category, title, LocalDate.of(2026, 11, 7), null, null);
         return em.persistAndFlush(meeting);
+    }
+
+    private Schedule persistSchedule(String title) {
+        Schedule schedule = BeanUtils.instantiateClass(Schedule.class);
+        ReflectionTestUtils.setField(schedule, "groupTerm", groupTerm);
+        ReflectionTestUtils.setField(schedule, "title", title);
+        ReflectionTestUtils.setField(schedule, "color", "RED");
+        ReflectionTestUtils.setField(schedule, "isAllDay", false);
+        ReflectionTestUtils.setField(schedule, "startAt", LocalDateTime.of(2026, 11, 20, 18, 0));
+        ReflectionTestUtils.setField(schedule, "endAt", LocalDateTime.of(2026, 11, 20, 22, 0));
+        ReflectionTestUtils.setField(schedule, "hasOperationSpace", true);
+        return em.persistAndFlush(schedule);
+    }
+
+    private ScheduleAgendaLink persistLink(Schedule schedule, MeetingAgenda agenda) {
+        ScheduleAgendaLink link = BeanUtils.instantiateClass(ScheduleAgendaLink.class);
+        ReflectionTestUtils.setField(link, "schedule", schedule);
+        ReflectionTestUtils.setField(link, "meetingAgenda", agenda);
+        return em.persistAndFlush(link);
     }
 }

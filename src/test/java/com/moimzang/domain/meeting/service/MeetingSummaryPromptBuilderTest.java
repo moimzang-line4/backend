@@ -75,6 +75,6 @@ class MeetingSummaryPromptBuilderTest {
     private Meeting meeting(String title) {
         GroupTerm groupTerm = Mockito.mock(GroupTerm.class);
         MeetingCategory category = Mockito.mock(MeetingCategory.class);
-        return Meeting.create(groupTerm, category, title, LocalDate.now(), null, null);
+        return Meeting.create(groupTerm, null, category, title, LocalDate.now(), null, null);
     }
 }
