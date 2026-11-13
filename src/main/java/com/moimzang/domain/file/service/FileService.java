@@ -43,6 +43,7 @@ import java.util.zip.ZipOutputStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -203,19 +204,17 @@ public class FileService {
     public FileDownloadUrlResponse getDownloadUrl(Long fileId, FileDownloadMode mode) {
         log.info("[다운로드 URL 발급] 발급을 시작합니다. fileId = {}, mode = {}", fileId, mode);
 
-        // 대상 파일 조회
-        File file = fileRepository.findById(fileId)
+        // 대상 파일 조회 — 소프트 삭제된 파일은 URL을 알고 있어도 열 수 없게 막는다
+        File file = fileRepository.findActiveById(fileId)
                 .orElseThrow(() -> {
                     log.warn("[다운로드 URL 발급] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
 
         // URL 조립 — 우리 서버의 콘텐츠 서빙 엔드포인트를 가리킨다. mode를 쿼리로 그대로 넘겨서
-        // 실제 다운로드 시점에 Content-Disposition(attachment/inline)을 거기서 결정하게 한다.
-        // presigned URL은 범위 밖이라 expiresAt은 실제로 강제하지 않는 형식상 값이다
+        // 실제 다운로드 시점에 Content-Disposition(attachment/inline)을 거기서 결정하게 한다
         FileDownloadUrlResponse response = FileDownloadUrlResponse.builder()
                 .url("/api/files/%d/content?mode=%s".formatted(file.getId(), mode))
-                .expiresAt(LocalDateTime.now().plusHours(24))
                 .build();
 
         log.info("[다운로드 URL 발급] 발급을 완료했습니다. fileId = {}", fileId);
@@ -225,7 +224,8 @@ public class FileService {
     public FileContentTarget getFileContent(Long fileId) {
         log.info("[파일 콘텐츠 서빙] 대상 조회를 시작합니다. fileId = {}", fileId);
 
-        File file = fileRepository.findById(fileId)
+        // 소프트 삭제된 파일은 URL을 알고 있어도 열 수 없게 막는다
+        File file = fileRepository.findActiveById(fileId)
                 .orElseThrow(() -> {
                     log.warn("[파일 콘텐츠 서빙] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
@@ -239,6 +239,9 @@ public class FileService {
                 .build();
     }
 
+    // 바이트 전송은 파일 크기에 따라 오래 걸리는데 DB를 쓰지 않으므로, 클래스 레벨 트랜잭션에서 빼낸다
+    // — 조회는 getFileContent가 이미 끝내 놨다
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void writeFileContentTo(FileContentTarget target, OutputStream out) throws IOException {
         log.info("[파일 콘텐츠 서빙] 전송을 시작합니다. storageKey = {}", target.getStorageKey());
 
@@ -261,6 +264,13 @@ public class FileService {
                     log.warn("[파일 삭제] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
+
+        // 이미 삭제된 파일에 다시 들어온 요청은 성공으로 흘린다 — 중복 클릭이나 재시도가 실패로
+        // 보이면 안 되고, deleted_at을 덮어쓰면 처음 삭제한 시점이 어긋난다
+        if (file.getDeletedAt() != null) {
+            log.info("[파일 삭제] 이미 삭제된 파일입니다. fileId = {}", fileId);
+            return;
+        }
         file.softDelete();
 
         log.info("[파일 삭제] 삭제를 완료했습니다. fileId = {}", fileId);
@@ -309,6 +319,8 @@ public class FileService {
                 .build();
     }
 
+    // 압축·전송 구간도 DB를 쓰지 않는다 — 대상 목록은 getZipTargets가 이미 조회해 DTO로 넘겨준다
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void writeZipTo(FileZipTarget target, OutputStream out) throws IOException {
         int fileCount = target.getEntries().size();
         log.info("[문서함 전체 다운로드] 압축을 시작합니다. fileCount = {}", fileCount);

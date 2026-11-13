@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.moimzang.domain.file.dto.response.FileDownloadUrlResponse;
 import com.moimzang.domain.file.dto.response.FileListResponse;
 import com.moimzang.domain.file.dto.response.FileUploadResponse;
 import com.moimzang.domain.file.dto.response.FileZipEntry;
@@ -18,6 +19,7 @@ import com.moimzang.domain.file.dto.response.FileZipTarget;
 import com.moimzang.domain.file.entity.File;
 import com.moimzang.domain.file.enums.FileCategory;
 import com.moimzang.domain.file.enums.FileCategoryFilter;
+import com.moimzang.domain.file.enums.FileDownloadMode;
 import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.domain.file.exception.FileErrorCode;
 import com.moimzang.domain.file.mapper.FileMapper;
@@ -245,13 +247,66 @@ class FileServiceTest {
     }
 
     @Test
-    void getFileContent_파일이_없으면_FILE_404_NOT_FOUND를_던진다() {
-        given(fileRepository.findById(1L)).willReturn(Optional.empty());
+    void getFileContent_파일이_없거나_삭제됐으면_FILE_404_NOT_FOUND를_던진다() {
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> fileService.getFileContent(1L))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(FileErrorCode.FILE_404_NOT_FOUND);
+    }
+
+    @Test
+    void getDownloadUrl_파일이_없거나_삭제됐으면_FILE_404_NOT_FOUND를_던진다() {
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> fileService.getDownloadUrl(1L, FileDownloadMode.PREVIEW))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_404_NOT_FOUND);
+    }
+
+    @Test
+    void getDownloadUrl_응답은_content_엔드포인트_url만_담는다() {
+        File file = mock(File.class);
+        given(file.getId()).willReturn(1L);
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.of(file));
+
+        FileDownloadUrlResponse response = fileService.getDownloadUrl(1L, FileDownloadMode.PREVIEW);
+
+        assertThat(response.getUrl()).isEqualTo("/api/files/1/content?mode=PREVIEW");
+    }
+
+    @Test
+    void deleteFile_파일이_없으면_FILE_404_NOT_FOUND를_던진다() {
+        given(fileRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> fileService.deleteFile(1L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_404_NOT_FOUND);
+    }
+
+    @Test
+    void deleteFile_살아있는_파일이면_deleted_at을_찍는다() {
+        File file = newFile();
+        given(fileRepository.findById(1L)).willReturn(Optional.of(file));
+
+        fileService.deleteFile(1L);
+
+        assertThat(file.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    void deleteFile_이미_삭제된_파일이면_성공하고_삭제_시각을_유지한다() {
+        LocalDateTime deletedAt = LocalDateTime.of(2026, 11, 13, 10, 0);
+        File file = newFile();
+        ReflectionTestUtils.setField(file, "deletedAt", deletedAt);
+        given(fileRepository.findById(1L)).willReturn(Optional.of(file));
+
+        fileService.deleteFile(1L);
+
+        assertThat(file.getDeletedAt()).isEqualTo(deletedAt);
     }
 
     @Test
@@ -263,5 +318,10 @@ class FileServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(FileErrorCode.FILE_400_INVALID_CURSOR);
+    }
+
+    private File newFile() {
+        return File.upload(mock(GroupTerm.class), null, "공연장 계약서", "pdf", 1024L,
+                FileCategory.ACTIVITY_DOC, "files/2026/11/contract.pdf");
     }
 }
