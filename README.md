@@ -10,9 +10,10 @@
 | [CLAUDE.md](./CLAUDE.md) | Claude Code 전용 보충 문서 — AGENTS.md를 가리키고, 적용되는 Claude 스킬 목록만 짧게 얹음 |
 | [HARNESS.md](./HARNESS.md) | AI 코딩 에이전트가 스스로 빌드·테스트해 변경 사항을 검증하는 방법과 제약 |
 | [docs/prd.md](./docs/prd.md) | 제품 요구사항 정의서 — 도메인별 핵심 기능과 전역 정책(정산·삭제·회의 등) |
-| [docs/erd.md](./docs/erd.md) | 데이터 모델 정본 — 18개 테이블 전체 컬럼·FK·enum 도메인 |
-| [docs/api-spec.md](./docs/api-spec.md) | API 명세서 — 79개 엔드포인트의 ID·요청/응답·에러코드·화면 매핑 |
+| [docs/erd.md](./docs/erd.md) | 데이터 모델 정본 — 19개 테이블 전체 컬럼·FK·enum 도메인 |
+| [docs/api-spec.md](./docs/api-spec.md) | API 명세서 — 82개 엔드포인트의 ID·요청/응답·에러코드·화면 매핑 |
 | [docs/decisions.md](./docs/decisions.md) | 설계 결정 로그 — ERD·API 설계 중 합의한 결정과 그 근거를 시간순으로 기록 |
+| [docs/team-ownership.md](./docs/team-ownership.md) | 도메인 담당 배정과 작업 경계 규칙, 담당별 진행 상황·남은 작업 |
 
 ## 기술 스택
 Spring Boot(Java 21) · MySQL 8 · JPA(Hibernate) · QueryDSL · Flyway · MapStruct · springdoc-openapi

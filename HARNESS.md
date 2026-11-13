@@ -28,6 +28,12 @@ AI 코딩 에이전트(Claude Code, Cursor, Windsurf 등)가 **스스로 빌드�
 **통과 기준**: `./gradlew build`가 0으로 종료하고(컴파일 + 테스트 전부 통과), 새로 추가/수정한
 기능에 대응하는 테스트가 실제로 존재한다. 테스트 없이 "구현 완료"로 보고하지 않는다.
 
+**알려진 선행 실패(2026-11-14 기준)**: `RoundAttendeeRepositoryImplTest.search_정렬은_createdAt_
+오름차순이고_cursor는_그_지점_이후부터_반환한다`가 플래키하게 실패한다(`created_at`이 `DATETIME`
+이라 소수점 초가 날아가는데 cursor로 넘기는 값은 나노초를 갖는다). `develop`에서도 재현되므로
+자기 변경 탓으로 오해하지 말고, 이 테스트만 실패했다면 그대로 보고한다. 이것 하나 때문에
+`./gradlew build`는 현재 실패로 끝난다 — 변경 범위의 테스트는 `--tests` 로 따로 돌려 확인한다.
+
 ## 테스트 DB
 
 Testcontainers로 MySQL을 띄운다(`spring-boot-testcontainers` + `org.testcontainers:mysql`).
@@ -69,10 +75,21 @@ Flyway가 `ddl-auto: validate`와 충돌 없이 마이그레이션을 끝내고 
 `NoClassDefFoundError`가 나면 대개 QueryDSL jakarta classifier 누락 또는 springdoc 버전 불일치다
 — `project-init` 스킬의 "좌표는 외우지 말고 확인한다" 절차대로 BOM과 실제 해석 결과를 대조한다.
 
-## 아직 비어 있는 것
+## 현재 구현 상태 (2026-11-14 기준)
 
-- 10개 도메인(group/schedule/memberlist/attendance/settlement/note/meeting/file/budget/chat)
-  모두 엔티티·레포지토리·Controller/Api/Service/Mapper/ErrorCode 껍데기까지만 있고, 실제
-  비즈니스 로직·DTO는 아직 없다
-- 테스트 코드 — 아직 한 줄도 없다. 첫 도메인에 로직을 구현할 때 테스트도 함께 작성해 이후
-  도메인의 패턴이 되게 한다
+10개 도메인 전부 엔티티·레포지토리·Controller/Api/Service/Mapper/ErrorCode 틀은 갖추고 있고,
+비즈니스 로직 진행도는 다르다. 담당자별 배정과 남은 작업은 `docs/team-ownership.md`를 본다.
+
+| 도메인 | 상태 |
+|---|---|
+| `meeting`, `file`, `chat` | 구현 완료(DTO·Service·테스트 있음). `file`은 결함 수정까지 끝남(decisions #42·#43) |
+| `attendance`, `settlement` | 진행 중 — 차수·출석·영수증까지 구현됨, 정산(API-037~045)은 미구현 |
+| `group`, `schedule`, `memberlist`, `note`, `budget` | 아직 껍데기 — DTO·Service 로직 없음 |
+
+새 도메인을 건드리기 전에 그 패키지에 `dto/request`·`dto/response`와 Service 구현이 있는지
+먼저 확인한다(없으면 그 시점에 추가한다).
+
+테스트는 구현된 도메인마다 존재한다 — Service 단위 테스트(Mockito)가 기본이고, QueryDSL
+커스텀 쿼리나 JPQL은 `@DataJpaTest` + Testcontainers 슬라이스 테스트로 따로 검증한다.
+컨트롤러 슬라이스 테스트(`@WebMvcTest`)는 아직 없다. 전역 예외 핸들러처럼 HTTP 경로에서만
+드러나는 변경은 `./gradlew bootRun` 후 실제 요청으로 확인한다.
