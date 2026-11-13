@@ -79,6 +79,12 @@ public class FileService {
             throw new CustomException(FileErrorCode.FILE_400_REQUIRED_FIELD_MISSING);
         }
 
+        // 이름 길이 검증 — 컬럼 길이를 넘기면 저장 단계에서 깨지므로 여기서 끊는다
+        if (name.length() > FileUploadPolicy.MAX_NAME_LENGTH) {
+            log.warn("[파일 업로드] 자료명이 너무 깁니다. termId = {}, nameLength = {}", termId, name.length());
+            throw new CustomException(FileErrorCode.FILE_400_NAME_TOO_LONG);
+        }
+
         // 확장자 검증 — 허용 목록(FileUploadPolicy)에 없으면 거부
         String extension = extractExtension(file.getOriginalFilename());
         if (!FileUploadPolicy.isAllowed(extension)) {

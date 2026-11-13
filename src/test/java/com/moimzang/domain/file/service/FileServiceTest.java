@@ -90,6 +90,18 @@ class FileServiceTest {
     }
 
     @Test
+    void upload_자료명이_상한을_넘으면_FILE_400_NAME_TOO_LONG를_던진다() {
+        MultipartFile multipartFile = new MockMultipartFile("file", "계약서.pdf", "application/pdf", "content".getBytes());
+        String tooLong = "가".repeat(FileUploadPolicy.MAX_NAME_LENGTH + 1);
+
+        assertThatThrownBy(() ->
+                fileService.upload(1L, multipartFile, tooLong, FileCategory.ACTIVITY_DOC, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_400_NAME_TOO_LONG);
+    }
+
+    @Test
     void upload_허용하지_않는_확장자면_FILE_400_EXTENSION_NOT_ALLOWED를_던진다() {
         MultipartFile multipartFile = new MockMultipartFile("file", "virus.exe", "application/octet-stream", "content".getBytes());
 
