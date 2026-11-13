@@ -43,6 +43,7 @@ import java.util.zip.ZipOutputStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -238,6 +239,9 @@ public class FileService {
                 .build();
     }
 
+    // 바이트 전송은 파일 크기에 따라 오래 걸리는데 DB를 쓰지 않으므로, 클래스 레벨 트랜잭션에서 빼낸다
+    // — 조회는 getFileContent가 이미 끝내 놨다
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void writeFileContentTo(FileContentTarget target, OutputStream out) throws IOException {
         log.info("[파일 콘텐츠 서빙] 전송을 시작합니다. storageKey = {}", target.getStorageKey());
 
@@ -315,6 +319,8 @@ public class FileService {
                 .build();
     }
 
+    // 압축·전송 구간도 DB를 쓰지 않는다 — 대상 목록은 getZipTargets가 이미 조회해 DTO로 넘겨준다
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void writeZipTo(FileZipTarget target, OutputStream out) throws IOException {
         int fileCount = target.getEntries().size();
         log.info("[문서함 전체 다운로드] 압축을 시작합니다. fileCount = {}", fileCount);
