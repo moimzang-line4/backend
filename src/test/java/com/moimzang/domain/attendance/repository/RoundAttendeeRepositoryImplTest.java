@@ -106,9 +106,14 @@ class RoundAttendeeRepositoryImplTest {
         assertThat(all).extracting(RoundAttendee::getId)
                 .containsExactly(first.getId(), second.getId(), third.getId());
 
+        // 인메모리 createdAt은 나노초를 갖지만 DATETIME 컬럼은 초 단위로 반올림해 저장한다
+        // 실제 API처럼 DB에 저장된 값을 cursor로 쓰도록 영속성 컨텍스트를 비우고 다시 읽는다
+        em.clear();
+        LocalDateTime cursorCreatedAt = em.find(RoundAttendee.class, first.getId()).getCreatedAt();
+
         // cursor는 (createdAt, id) 복합 비교다 — createdAt이 같은 초에 묶여도 id로 다음 페이지가 갈린다
         List<RoundAttendee> next = roundAttendeeRepository.search(
-                round.getId(), null, null, first.getCreatedAt(), first.getId(), 10);
+                round.getId(), null, null, cursorCreatedAt, first.getId(), 10);
 
         assertThat(next).extracting(RoundAttendee::getId)
                 .containsExactly(second.getId(), third.getId());
