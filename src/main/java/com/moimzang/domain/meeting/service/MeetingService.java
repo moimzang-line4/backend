@@ -80,10 +80,13 @@ public class MeetingService {
                 });
 
         // 회의 카테고리는 일정 카테고리와 별도 테이블(meeting_category)로 운영한다
-        // 회의 카테고리 생성은 별도 api
-        MeetingCategory category = meetingCategoryRepository.findById(request.getCategoryId())
+        // 회의 카테고리 생성은 별도 api.
+        // 기수 조건을 함께 걸어 다른 기수의 카테고리가 붙는 걸 막는다
+        MeetingCategory category = meetingCategoryRepository
+                .findByIdAndGroupTermId(request.getCategoryId(), termId)
                 .orElseThrow(() -> {
-                    log.warn("[회의 생성] 존재하지 않는 카테고리입니다. categoryId = {}", request.getCategoryId());
+                    log.warn("[회의 생성] 이 기수에 없는 카테고리입니다. termId = {}, categoryId = {}",
+                            termId, request.getCategoryId());
                     return new CustomException(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
                 });
 
@@ -286,11 +289,15 @@ public class MeetingService {
             throw new CustomException(MeetingErrorCode.MEETING_409_ALREADY_ENDED);
         }
 
+        // 경로에 기수가 없으므로 수정 대상 회의가 속한 기수를 기준으로 카테고리를 찾는다
         MeetingCategory category = null;
         if (request.getCategoryId() != null) {
-            category = meetingCategoryRepository.findById(request.getCategoryId())
+            Long groupTermId = meeting.getGroupTerm().getId();
+            category = meetingCategoryRepository
+                    .findByIdAndGroupTermId(request.getCategoryId(), groupTermId)
                     .orElseThrow(() -> {
-                        log.warn("[회의 정보 수정] 존재하지 않는 카테고리입니다. categoryId = {}", request.getCategoryId());
+                        log.warn("[회의 정보 수정] 이 기수에 없는 카테고리입니다. termId = {}, categoryId = {}",
+                                groupTermId, request.getCategoryId());
                         return new CustomException(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
                     });
         }

@@ -115,7 +115,7 @@ class MeetingServiceTest {
                 .build();
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(meetingCategoryRepository.findById(1L)).willReturn(Optional.of(category));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
         given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
             Meeting saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 100L);
@@ -152,7 +152,7 @@ class MeetingServiceTest {
     }
 
     @Test
-    void createMeeting_카테고리가_없으면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
+    void createMeeting_다른_기수의_카테고리거나_없는_카테고리면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCreateRequest request = MeetingCreateRequest.builder()
                 .title("회의")
@@ -161,7 +161,7 @@ class MeetingServiceTest {
                 .agendas(List.of("안건1"))
                 .build();
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(meetingCategoryRepository.findById(999L)).willReturn(Optional.empty());
+        given(meetingCategoryRepository.findByIdAndGroupTermId(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
                 .isInstanceOf(CustomException.class)
@@ -183,7 +183,7 @@ class MeetingServiceTest {
                 .build();
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(meetingCategoryRepository.findById(1L)).willReturn(Optional.of(category));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
         given(scheduleRepository.findByIdAndGroupTermId(5L, 1L)).willReturn(Optional.of(schedule));
         given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
             Meeting saved = invocation.getArgument(0);
@@ -215,7 +215,7 @@ class MeetingServiceTest {
                 .build();
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(meetingCategoryRepository.findById(1L)).willReturn(Optional.of(category));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
         given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> {
             Meeting saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 100L);
@@ -248,7 +248,7 @@ class MeetingServiceTest {
                 .build();
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(meetingCategoryRepository.findById(1L)).willReturn(Optional.of(category));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
         given(scheduleRepository.findByIdAndGroupTermId(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> meetingService.createMeeting(1L, request))
@@ -559,13 +559,15 @@ class MeetingServiceTest {
     }
 
     @Test
-    void updateMeeting_카테고리가_없으면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
+    void updateMeeting_다른_기수의_카테고리거나_없는_카테고리면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
         Meeting meeting = Meeting.create(groupTerm, null, category, "제목", LocalDate.now(), null, null);
         ReflectionTestUtils.setField(meeting, "id", 10L);
         given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
-        given(meetingCategoryRepository.findById(999L)).willReturn(Optional.empty());
+        // 경로에 기수가 없어 수정 대상 회의의 기수로 카테고리를 찾는다
+        given(groupTerm.getId()).willReturn(1L);
+        given(meetingCategoryRepository.findByIdAndGroupTermId(999L, 1L)).willReturn(Optional.empty());
 
         MeetingUpdateRequest request = MeetingUpdateRequest.builder().categoryId(999L).build();
 
