@@ -382,7 +382,9 @@ cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 **Logics**: 운영 메모, 차수, 참가자·출석, 영수증 정보, 정산 대상, 그 일정에서 올린 자료(file.schedule_id),
 일정-안건 연결, **그 일정에 속한 회의록(meeting.schedule_id)과 그 회의의 안건·요약**을 함께 삭제한다
 (decisions #44 — 일정 소속 회의록의 안건은 다른 일정에 연결될 수 없어 삭제가 번지지 않는다).
-일정과 무관한 회의록(meeting.schedule_id IS NULL)과 부원 원본 명단은 유지한다. 이 일정에서 자동 생성된
+일정-안건 연결(`schedule_agenda_link`)은 **연결만 끊는다** — 그 안건과 안건이 속한 회의록은 원래대로
+남는다. 이 일정에서 만든 회의록이 아니기 때문이다. 일정과 무관한 회의록(meeting.schedule_id IS NULL)과
+부원 원본 명단도 유지한다. 이 일정에서 자동 생성된
 `ledger_entry`(영수증 지출·완납 수입·추가 동아리 지원금 행)는 삭제하지 않고 보존하며,
 `schedule_round_id` 참조만 NULL로 전환한다(decisions #4와 동일 원칙).
 
