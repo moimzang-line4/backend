@@ -38,7 +38,7 @@ global/            config, entity, exception, response, storage(local, s3)
 `meeting`, `file`, `budget`, `chat`. 전부 엔티티(ERD 필드 전체 포함)·레포지토리와
 Controller/Api/Service/Mapper/ErrorCode 틀을 갖추고 있고, 비즈니스 로직은 도메인마다 진행도가
 다르다 — `file`·`meeting`·`chat`은 구현 완료, `attendance`·`settlement`는 진행 중, 나머지는
-아직 껍데기다. 어느 도메인을 건드리기 전에 그 패키지에 `dto/request`·`dto/response`와 Service
+아직 껍데기다(도메인별 상세 상태는 `HARNESS.md`, 담당·남은 작업은 `docs/team-ownership.md`). 어느 도메인을 건드리기 전에 그 패키지에 `dto/request`·`dto/response`와 Service
 구현이 있는지 먼저 확인한다(없으면 그 시점에 추가한다). 구조·DTO·예외 처리 세부 규칙은
 `my-spring-conventions`(Claude Code 스킬) 또는 동급 컨벤션 문서를 따른다.
 
@@ -60,7 +60,10 @@ Controller/Api/Service/Mapper/ErrorCode 틀을 갖추고 있고, 비즈니스 �
 ## 이 프로젝트 고유 결정
 
 - 인증·로그인·회원가입 없음 — 운영진 구분 없이 전원이 같은 권한으로 접근하는 데모 범위
-- API 응답은 전부 `{success, code, message, data}` 래퍼로 감싼다(`docs/api-spec.md` 참고)
+- API 응답은 전부 `{success, code, message, data}` 래퍼로 감싼다(`docs/api-spec.md` 참고).
+  **예외는 파일 바이트를 그대로 내려주는 API-068(ZIP)·API-080(파일 콘텐츠) 뿐이다** — 이 둘은
+  `StreamingResponseBody`로 스트리밍하고 래퍼를 씌우지 않는다. 대신 그 경로의 에러(404 등)는
+  스트리밍이 시작되기 전에 끊어서 래퍼 JSON으로 응답한다
 - enum 계열 컬럼은 SQL에서도 VARCHAR(네이티브 ENUM 안 씀), Java에서는 전용 enum 타입으로 매핑
   (`@Enumerated(EnumType.STRING)`) — 근거는 `docs/decisions.md` #8
 - `application.yml`은 로컬/운영 분리 없이 하나로 운영하고, 환경별 값은 환경변수로 주입한다

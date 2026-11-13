@@ -38,3 +38,38 @@ controller/service/mapper가 각자 패키지 안에 있음), 도메인 패키�
 
 **스키마·마이그레이션을 바꿔야 하는 경우는 이 규칙 밖이다.** 단톡방에 먼저 공지하고
 진행한다.
+
+## 진행 상황과 남은 작업 (2026-11-14 기준)
+
+도메인별 구현 상태는 `HARNESS.md`의 "현재 구현 상태" 표를 본다. 여기에는 담당별로 **지금 열려
+있는 작업**만 적는다. 작업이 끝나면 해당 줄을 지운다.
+
+### A — `group`, `memberlist`, `schedule`, `note`
+
+네 도메인 모두 아직 껍데기다(엔티티·레포지토리·틀만 있음). 등록된 이슈는 없다.
+`schedule`은 운영 공간 집계(API-012~016)까지 담당한다(decisions #13).
+
+### B — `attendance`, `settlement`, `budget`
+
+- 정산 API 5건 미구현 — #57(명단 조회·저장·불러오기), #58(입금 확인·삭제·현황),
+  #59(입금 계좌·정산 공지), #60(정산 홈), #61(영수증 AI 인식)
+- #78 `RoundAttendeeRepositoryImplTest` cursor 테스트 플래키 — `created_at`이 `DATETIME`이라
+  소수점 초가 날아가는데 cursor로 넘기는 `@CreatedDate` 값은 나노초를 갖는다. **이것 하나 때문에
+  `./gradlew build`가 실패해서, 머지 전 로컬 빌드로만 방어하는 이 프로젝트에선 우선도가 높다.**
+  `DATETIME` + cursor 조합을 쓰는 다른 도메인도 같은 문제를 가질 수 있다
+- `budget`은 아직 껍데기다. 영수증 지출 행 생성은 API-074(정산 내역 새로고침)가 담당한다(decisions #41)
+
+### C — `meeting`, `file`, `chat`
+
+세 도메인 모두 구현 완료이고, `file`은 결함 수정까지 끝났다(decisions #42·#43).
+
+- #76 로컬 정적 경로 `/uploads/**`가 소프트 삭제된 파일까지 200으로 서빙한다 —
+  `/api/files/{id}/content`에서 막은 삭제 차단이 이 경로로 우회된다. **B 담당과 합의가 필요하다**:
+  정산 영수증 `imageUrl`이 이 정적 URL을 쓰고 있어서(decisions #41) 핸들러를 그냥 떼면 영수증
+  이미지가 깨진다. 영수증 이미지도 통제되는 서빙 경로로 모을지 결정한 뒤 진행한다
+- 미확정 2건이 남아 `meeting`에서 추가 구현 여부가 열려 있다 — `docs/api-spec.md` §7의 18번
+  (`listSummary` 입력 경로)과 19번(회의 목록 "참석자 수" 산정 기준)
+- HTTP Range(206) 미지원 — `/api/files/{id}/content`는 `Range` 헤더를 무시하고 전체 바이트를
+  보낸다. 업로드 상한이 20MB라 지금은 체감되지 않아 이슈로 등록하지 않았다. S3를 실제 운영에
+  쓰기로 하면 presigned URL 전환과 함께 다시 본다(decisions #18·#42)
+
