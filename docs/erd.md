@@ -263,7 +263,7 @@
 | id | BIGINT | ✅ | | ✅ | long | |
 | ai_chat_room_id | BIGINT | | → ai_chat_room.id | ✅ | long | |
 | navigation_type | VARCHAR(20) | | | ❌ | NavigationType | 답변 아래 이동 버튼이 가리킬 화면 |
-| navigation_target_id | BIGINT | | | ❌ | long | 이동 대상 ID. type에 따라 일정 ID 또는 회의 ID, 기수 단위 화면이면 null. 다형 참조라 FK 없음(decisions #34) |
+| navigation_target_id | BIGINT | | | ❌ | long | 이동 대상 ID. type에 따라 일정 ID 또는 회의 ID, 기수 단위 화면이면 null. 다형 참조라 FK 없음(decisions #40) |
 | role | VARCHAR(20) | | | ✅ | MessageRole | USER(사용자 질문)/ASSISTANT(AI 응답) |
 | content | TEXT | | | ✅ | String | |
 | created_at | DATETIME | | | ✅ | LocalDateTime | |
