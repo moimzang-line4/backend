@@ -26,6 +26,9 @@ out/
 .env.*
 !.env.example
 
+### 로컬 스토리지 업로드 산출물 (app.storage.local.base-dir 기본값) ###
+uploads/
+
 ### macOS ###
 .DS_Store
 
