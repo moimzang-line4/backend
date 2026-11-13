@@ -285,6 +285,18 @@ public class FileService {
                     log.warn("[파일 복구] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
+        // 장부는 기수당 1개만 유지한다 — 교체로 밀려난 장부를 되살리면 활성 장부가 2개가 되고,
+        // 그 뒤의 장부 업로드가 기존 장부를 찾는 단계에서 터진다
+        if (file.getCategory() == FileCategory.LEDGER_FILE) {
+            fileRepository.findActiveFile(file.getGroupTerm().getId(), FileCategory.LEDGER_FILE)
+                    .filter(active -> !active.getId().equals(fileId))
+                    .ifPresent(active -> {
+                        log.warn("[파일 복구] 이미 활성 장부가 있어 복구할 수 없습니다. fileId = {}, activeFileId = {}",
+                                fileId, active.getId());
+                        throw new CustomException(FileErrorCode.FILE_409_LEDGER_ALREADY_EXISTS);
+                    });
+        }
+
         // 이미 복구된 상태여도 에러 없이 통과한다 — 기간 제한이 없어 막을 이유가 없다
         file.restore();
 
