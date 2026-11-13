@@ -8,6 +8,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -43,11 +44,17 @@ public class GlobalExceptionHandler {
                 .body(BaseResponse.fail(CommonErrorCode.BAD_REQUEST, detail));
     }
 
-    /** 잘못된 타입·누락된 파라미터·깨진 JSON은 전부 400이다. */
+    /**
+     * 잘못된 타입·누락된 파라미터·깨진 JSON은 전부 400이다.
+     *
+     * 멀티파트 파트 누락(MissingServletRequestPart)도 같이 받는다 — 파일을 안 보낸 요청은
+     * 클라이언트 잘못이라 500으로 나가면 안 된다.
+     */
     @ExceptionHandler({
             ConstraintViolationException.class,
             HttpMessageNotReadableException.class,
             MissingServletRequestParameterException.class,
+            MissingServletRequestPartException.class,
             MethodArgumentTypeMismatchException.class
     })
     public ResponseEntity<BaseResponse<Void>> handleBadRequest(Exception e) {
