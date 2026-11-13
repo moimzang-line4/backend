@@ -51,8 +51,10 @@ controller/service/mapper가 각자 패키지 안에 있음), 도메인 패키�
 
 - 회의록-안건-일정 연결 구조가 확정됐다(decisions #44). `schedule` 쪽에 남은 작업은 두 가지다:
   **API-008 일정 삭제** 시 그 일정에 속한 회의록(`meeting.schedule_id`)과 안건을 함께 지우는 처리,
-  **API-013~016** 구현(연결 후보 규칙은 decisions #44에서 확정, 후보 목록 조회는 C가 API-083으로
-  제공한다). `meeting.schedule_id` 컬럼과 Flyway `V4`는 C가 이미 넣었다
+  **API-013·015·016** 구현(연결 후보 규칙은 decisions #44에서 확정, 후보 목록 조회는 C가
+  API-083으로 제공한다). `meeting.schedule_id` 컬럼과 Flyway `V4`는 C가 이미 넣었다.
+  **API-014는 명세에서 삭제됐다** — 자동 매칭 화면이 없어서다(decisions #45). 안건 연결은
+  모달에서 직접 고르는 경로 하나뿐이다
 
 ### B — `attendance`, `settlement`, `budget`
 

@@ -1,6 +1,6 @@
 # API 명세 — 모임장
 
-ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 83개. 구현이 시작되면 springdoc이
+ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 82개. 구현이 시작되면 springdoc이
 생성하는 OpenAPI가 정본이 되고, 이 문서는 API ID·화면 매핑·설계 근거를 남기는 역할로 남는다.
 
 ## 1. 개요
@@ -44,8 +44,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 83�
 | API-010 | POST | /api/terms/{termId}/categories | 카테고리 추가 | schedule_category | 불필요 |
 | API-011 | GET | /api/terms/{termId}/categories | 카테고리 목록 조회 | schedule_category | 불필요 |
 | API-012 | GET | /api/terms/{termId}/operation-spaces | 운영 공간 목록 조회 | schedule, meeting | 불필요 |
-| API-013 | POST | /api/schedules/{scheduleId}/agenda-links | 안건 연결(수동) | schedule_agenda_link | 불필요 |
-| API-014 | POST | /api/schedules/{scheduleId}/agenda-links/auto | 연동할 회의록 찾기(자동) | schedule_agenda_link | 불필요 |
+| API-013 | POST | /api/schedules/{scheduleId}/agenda-links | 안건 연결 | schedule_agenda_link | 불필요 |
 | API-015 | GET | /api/schedules/{scheduleId}/agenda-links | 연결된 회의록 조회 | schedule_agenda_link | 불필요 |
 | API-016 | DELETE | /api/schedules/{scheduleId}/agenda-links/{linkId} | 회의록 연결 해제 | schedule_agenda_link | 불필요 |
 | API-017 | POST | /api/terms/{termId}/member-lists | 명단방 생성 | member_list | 불필요 |
@@ -133,7 +132,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 83�
 | operation_note | API-047 | 없음(목록 카드가 상세 역할) | API-046 | API-048, API-050 | API-049 |
 | meeting | API-052 | API-053 | API-051 | API-054, API-059(종료), API-061(요약 저장) | API-055 |
 | meeting_agenda | API-053 응답에 포함, API-083(연결 후보) | 없음 | API-056, API-051(생성 시 함께) | API-057 | API-058 |
-| schedule_agenda_link | API-015 | 없음 | API-013, API-014 | 없음 | API-016, API-055·API-058 cascade |
+| schedule_agenda_link | API-015 | 없음 | API-013 | 없음 | API-016, API-055·API-058 cascade |
 | file | API-064 | 없음(목록 카드가 상세 역할) | API-063 | 없음(파일은 재업로드만) | API-066, API-067(복구) |
 | ai_chat_room | API-077 | 없음(메시지 목록이 상세 역할) | API-076 | 없음 | 없음(화면에 삭제 기능 없음) |
 | ai_message | API-079 | 없음 | API-078 | 없음(수정 불필요한 대화 로그) | 없음 |
@@ -154,7 +153,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | 일정 수정 / 일정 삭제 | API-007, API-008 |
 | 일정 상세 · 회의록 & 안건 섹션 | API-052(scheduleId, 회의록 카드), API-015(안건 카드), API-016 |
 | 일정 상세 · 회의록 작성하기 | API-051(scheduleId 포함) |
-| 안건 연결하기 모달 | API-083(후보 목록), API-013, API-014 |
+| 안건 연결하기 모달 | API-083(후보 목록), API-013 |
 | 부원 홈(명단 카드 목록) | API-018 |
 | 명단방 생성 | API-017 |
 | 링크 관리 | API-019 |
@@ -457,7 +456,7 @@ NAME은 title. 둘 다 id를 tiebreaker로 쓴다.
 
 ---
 
-#### API-013 · POST /api/schedules/{scheduleId}/agenda-links · 안건 연결(수동)
+#### API-013 · POST /api/schedules/{scheduleId}/agenda-links · 안건 연결
 인증: 불필요. 회의록이 아니라 **안건 하나하나**를 연결한다. 선택 목록은 API-083으로 받는다.
 
 **Logics**: 연결할 수 있는 안건은 **어느 일정에도 속하지 않은 안건**뿐이다 —
@@ -467,17 +466,6 @@ NAME은 title. 둘 다 id를 tiebreaker로 쓴다.
 **Request**: agendaIds(number[]). **Response data**: links[].linkId/agendaId
 **에러**: COMMON_400(안건 미선택), COMMON_404, SPACE_409_AGENDA_ALREADY_LINKED(이미 연결됐거나
 다른 일정에 속한 회의록의 안건)
-
----
-
-#### API-014 · POST /api/schedules/{scheduleId}/agenda-links/auto · 연동할 회의록 찾기(자동)
-인증: 불필요. 안건의 내용·논의 내용·결정 사항을 분석해 이 일정과 관련된 기존 안건만 자동 연결한다.
-대상이 없으면 `linkedCount: 0`.
-
-**Response data**: linkedCount, links[].linkId/agendaId. **에러**: COMMON_404
-
-> **미확정**: 자동 매칭 알고리즘의 구체적 기준(날짜·카테고리·키워드 유사도 등 가중치)은
-> 구현 시점에 정한다.
 
 ---
 
@@ -1131,7 +1119,7 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 
 ## 7. 미확정(TBD) 항목 모음
 
-아래 19개 항목 중 **아직 정하지 않은 것은 11개**(1·3·4·5·6·12·14·15·16·18·19번)다. 나머지는
+아래 19개 항목 중 **아직 정하지 않은 것은 10개**(1·3·4·5·6·12·15·16·18·19번)다. 나머지는
 해소돼 각 항목에 결정 번호를 적어 뒀다. 번호는 한 번 붙이면 바꾸지 않는다 — 다른 문서·이슈가
 이 번호를 가리키기 때문에, 해소된 항목도 지우지 않고 "해소됨"으로 남긴다.
 구현 착수 전 미해소 항목에 들어가면 안 된다(§6에서 각 엔드포인트 자리에도 표시):
@@ -1155,7 +1143,8 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 13. ~~API-078 미입금자 조회 외 카드 포맷~~ — **해소됨(2026-11-13)**: 카드는 미입금자 조회
     하나만 만들고, 나머지 의도(공지 작성·일정 조회 등)는 카드 없이 텍스트로만 답한다.
     PRD·Figma에서 포맷이 확정된 카드가 미입금자 조회뿐이기 때문이다(decisions #33).
-14. API-014 자동 매칭 알고리즘 상세 기준
+14. ~~API-014 자동 매칭 알고리즘 상세 기준~~ — **해소됨(2026-11-14)**: API-014 자체를 명세에서
+    삭제해 정할 기준이 없어졌다. 자동으로 안건을 연결해 주는 화면이 처음부터 없었다(decisions #45).
 15. API-007 일정 수정 시 운영 공간 토글(`hasOperationSpace`) 변경 허용 여부 — 보류(decisions #12)
 16. API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지
 17. ~~AI 연동 벤더/모델 — 영수증 인식(API-036), 회의 요약(API-060), AI 채팅 응답(API-078)~~ —
