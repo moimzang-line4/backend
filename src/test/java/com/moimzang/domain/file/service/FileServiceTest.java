@@ -90,6 +90,18 @@ class FileServiceTest {
     }
 
     @Test
+    void upload_자료명이_상한을_넘으면_FILE_400_NAME_TOO_LONG를_던진다() {
+        MultipartFile multipartFile = new MockMultipartFile("file", "계약서.pdf", "application/pdf", "content".getBytes());
+        String tooLong = "가".repeat(FileUploadPolicy.MAX_NAME_LENGTH + 1);
+
+        assertThatThrownBy(() ->
+                fileService.upload(1L, multipartFile, tooLong, FileCategory.ACTIVITY_DOC, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_400_NAME_TOO_LONG);
+    }
+
+    @Test
     void upload_허용하지_않는_확장자면_FILE_400_EXTENSION_NOT_ALLOWED를_던진다() {
         MultipartFile multipartFile = new MockMultipartFile("file", "virus.exe", "application/octet-stream", "content".getBytes());
 
@@ -318,6 +330,56 @@ class FileServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(FileErrorCode.FILE_400_INVALID_CURSOR);
+    }
+
+    @Test
+    void restoreFile_같은_기수에_활성_장부가_있으면_FILE_409_LEDGER_ALREADY_EXISTS를_던진다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        File deleted = newLedgerFile(groupTerm, 10L);
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.of(2026, 11, 13, 10, 0));
+        File active = newLedgerFile(groupTerm, 11L);
+        given(fileRepository.findById(10L)).willReturn(Optional.of(deleted));
+        given(fileRepository.findActiveFile(1L, FileCategory.LEDGER_FILE)).willReturn(Optional.of(active));
+
+        assertThatThrownBy(() -> fileService.restoreFile(10L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_409_LEDGER_ALREADY_EXISTS);
+        assertThat(deleted.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    void restoreFile_활성_장부가_없으면_장부도_복구한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        File deleted = newLedgerFile(groupTerm, 10L);
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.of(2026, 11, 13, 10, 0));
+        given(fileRepository.findById(10L)).willReturn(Optional.of(deleted));
+        given(fileRepository.findActiveFile(1L, FileCategory.LEDGER_FILE)).willReturn(Optional.empty());
+
+        fileService.restoreFile(10L);
+
+        assertThat(deleted.getDeletedAt()).isNull();
+    }
+
+    @Test
+    void restoreFile_장부가_아니면_활성_장부를_확인하지_않는다() {
+        File deleted = newFile();
+        ReflectionTestUtils.setField(deleted, "deletedAt", LocalDateTime.of(2026, 11, 13, 10, 0));
+        given(fileRepository.findById(1L)).willReturn(Optional.of(deleted));
+
+        fileService.restoreFile(1L);
+
+        assertThat(deleted.getDeletedAt()).isNull();
+        verify(fileRepository, never()).findActiveFile(any(), any());
+    }
+
+    private File newLedgerFile(GroupTerm groupTerm, Long id) {
+        File file = File.upload(groupTerm, null, "장부", "xlsx", 1024L,
+                FileCategory.LEDGER_FILE, "files/2026/11/ledger-%d.xlsx".formatted(id));
+        ReflectionTestUtils.setField(file, "id", id);
+        return file;
     }
 
     private File newFile() {
