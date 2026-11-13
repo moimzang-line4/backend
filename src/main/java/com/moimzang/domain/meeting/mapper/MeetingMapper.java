@@ -3,6 +3,7 @@ package com.moimzang.domain.meeting.mapper;
 import com.moimzang.domain.meeting.dto.response.MeetingAgendaDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingLinkableAgendaResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingProgressResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryResponse;
 import com.moimzang.domain.meeting.entity.Meeting;
@@ -27,6 +28,19 @@ public interface MeetingMapper {
 
     // 안건 목록을 상세 응답 목록으로 변환한다
     List<MeetingAgendaDetailResponse> toAgendaResponses(List<MeetingAgenda> agendas);
+
+    // 연결 후보 안건 1건을 변환한다. hasDecision은 모달 카드의 "결정 사항 입력됨/미입력" 표시용이라
+    // 공백만 들어있는 값도 미입력으로 친다
+    @Mapping(target = "agendaId", source = "id")
+    @Mapping(target = "meetingId", source = "meeting.id")
+    @Mapping(target = "meetingTitle", source = "meeting.title")
+    @Mapping(target = "meetingDate", source = "meeting.meetingDate")
+    @Mapping(target = "hasDecision",
+             expression = "java(agenda.getDecision() != null && !agenda.getDecision().isBlank())")
+    MeetingLinkableAgendaResponse toLinkableAgendaResponse(MeetingAgenda agenda);
+
+    // 연결 후보 안건 목록을 변환한다
+    List<MeetingLinkableAgendaResponse> toLinkableAgendaResponses(List<MeetingAgenda> agendas);
 
     // 회의 상세를 변환한다. agendas·progress는 Service가 별도 조회·계산해 넘긴 값이다
     @Mapping(target = "meetingId", source = "meeting.id")

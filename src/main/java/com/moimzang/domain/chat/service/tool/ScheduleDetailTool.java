@@ -9,6 +9,8 @@ import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.domain.file.repository.FileRepository;
 import com.moimzang.domain.meeting.entity.Meeting;
 import com.moimzang.domain.meeting.entity.MeetingAgenda;
+import com.moimzang.domain.meeting.repository.MeetingAgendaRepository;
+import com.moimzang.domain.meeting.repository.MeetingRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.entity.ScheduleAgendaLink;
 import com.moimzang.domain.schedule.repository.ScheduleAgendaLinkRepository;
@@ -40,6 +42,8 @@ public class ScheduleDetailTool implements ChatTool {
     private final ScheduleRoundRepository scheduleRoundRepository;
     private final ScheduleAttendeeRepository scheduleAttendeeRepository;
     private final ScheduleAgendaLinkRepository scheduleAgendaLinkRepository;
+    private final MeetingRepository meetingRepository;
+    private final MeetingAgendaRepository meetingAgendaRepository;
     private final FileRepository fileRepository;
 
     @Override
@@ -47,7 +51,7 @@ public class ScheduleDetailTool implements ChatTool {
         return new AiTool(
                 NAME,
                 "일정 하나의 상세 정보를 조회해 차수별 영수증(가게·금액·회비 지원금)과 입금 안내 계좌, "
-                        + "참가자 명단, 연결된 회의 안건, 첨부 자료를 반환한다. "
+                        + "참가자 명단, 이 일정에서 만든 회의록, 연결된 회의 안건, 첨부 자료를 반환한다. "
                         + "영수증 금액(receiptAmount, totalReceiptAmount)은 가게에서 실제 결제한 총액이다 — "
                         + "'얼마 나왔어', '얼마 썼어'처럼 결제한 금액을 물으면 이 도구를 쓴다. "
                         + "부원에게 걷을 청구 금액은 여기가 아니라 get_settlement_status에 있다. "
@@ -81,6 +85,11 @@ public class ScheduleDetailTool implements ChatTool {
                 attendeesTruncated ? attendees.subList(0, MAX_ATTENDEES) : attendees;
 
         // 상한보다 1건 더 조회해서 잘렸는지 판단한다 — AI가 "일부만 보여드렸다"고 말할 수 있어야 한다
+        // 일정 상세에서 만든 회의록(일정에 통째로 속한 회의)과 개별로 연결한 안건은 서로 다른 목록이다
+        List<Meeting> scheduleMeetings = meetingRepository.findByScheduleForAssistant(scheduleId);
+        Map<Long, Long> agendaCounts = meetingAgendaRepository.countByMeetingIds(
+                scheduleMeetings.stream().map(Meeting::getId).toList());
+
         List<File> files = fileRepository.search(
                 termId, null, null, scheduleId, FileSortOption.LATEST, null, null, null, MAX_FILES + 1);
         boolean filesTruncated = files.size() > MAX_FILES;
@@ -102,6 +111,8 @@ public class ScheduleDetailTool implements ChatTool {
                 attendees.size(),
                 attendeesTruncated,
                 attendeePage.stream().map(AttendeeRow::from).toList(),
+                scheduleMeetings.stream()
+                        .map(m -> MeetingRow.from(m, agendaCounts.getOrDefault(m.getId(), 0L))).toList(),
                 scheduleAgendaLinkRepository.findByScheduleForAssistant(scheduleId).stream()
                         .map(AgendaRow::from).toList(),
                 filesTruncated,
@@ -128,7 +139,24 @@ public class ScheduleDetailTool implements ChatTool {
                           String location, String categoryName, boolean hasOperationSpace, String memo,
                           int totalReceiptAmount, int totalSubsidyAmount, List<RoundRow> rounds,
                           int attendeeCount, boolean attendeesTruncated, List<AttendeeRow> attendees,
-                          List<AgendaRow> linkedAgendas, boolean filesTruncated, List<FileRow> files) {}
+                          List<MeetingRow> scheduleMeetings, List<AgendaRow> linkedAgendas,
+                          boolean filesTruncated, List<FileRow> files) {}
+
+    // 이 일정에서 만든 회의록. 안건 내용까지는 싣지 않는다 — 필요하면 AI가 get_meeting_detail로 더 판다
+    private record MeetingRow(Long meetingId, String title, String meetingDate, String categoryName,
+                              String status, String listSummary, long agendaCount) {
+
+        static MeetingRow from(Meeting meeting, long agendaCount) {
+            return new MeetingRow(
+                    meeting.getId(),
+                    meeting.getTitle(),
+                    meeting.getMeetingDate() == null ? null : meeting.getMeetingDate().toString(),
+                    meeting.getMeetingCategory() == null ? null : meeting.getMeetingCategory().getName(),
+                    meeting.getStatus().name(),
+                    meeting.getListSummary(),
+                    agendaCount);
+        }
+    }
 
     // 영수증 이미지 URL은 싣지 않는다 — 답변 문장에 넣을 수 없는 값이라 토큰만 쓴다.
     // 영수증이 등록됐는지 여부만 알려주면 AI가 "영수증은 화면에서 보라"고 안내할 수 있다

@@ -15,6 +15,8 @@ import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingLinkableAgendaListResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingLinkableAgendaResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingProgressResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryGenerateResponse;
@@ -31,6 +33,9 @@ import com.moimzang.domain.meeting.mapper.MeetingMapper;
 import com.moimzang.domain.meeting.repository.MeetingAgendaRepository;
 import com.moimzang.domain.meeting.repository.MeetingCategoryRepository;
 import com.moimzang.domain.meeting.repository.MeetingRepository;
+import com.moimzang.domain.schedule.entity.Schedule;
+import com.moimzang.domain.schedule.repository.ScheduleAgendaLinkRepository;
+import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.ai.AiClient;
 import com.moimzang.global.ai.AiClientException;
 import com.moimzang.global.cursor.CursorCodec;
@@ -56,6 +61,8 @@ public class MeetingService {
     private final MeetingAgendaRepository meetingAgendaRepository;
     private final GroupTermRepository groupTermRepository;
     private final MeetingCategoryRepository meetingCategoryRepository;
+    private final ScheduleRepository scheduleRepository;
+    private final ScheduleAgendaLinkRepository scheduleAgendaLinkRepository;
     private final MeetingMapper meetingMapper;
     private final AiClient aiClient;
     private final MeetingSummaryPromptBuilder summaryPromptBuilder;
@@ -63,8 +70,8 @@ public class MeetingService {
     // 회의와 안건을 한 번에 생성한다
     @Transactional
     public MeetingCreateResponse createMeeting(Long termId, MeetingCreateRequest request) {
-        log.info("[회의 생성] 생성을 시작합니다. termId = {}, agendaCount = {}",
-                termId, request.getAgendas().size());
+        log.info("[회의 생성] 생성을 시작합니다. termId = {}, scheduleId = {}, agendaCount = {}",
+                termId, request.getScheduleId(), request.getAgendas().size());
 
         GroupTerm groupTerm = groupTermRepository.findById(termId)
                 .orElseThrow(() -> {
@@ -80,8 +87,12 @@ public class MeetingService {
                     return new CustomException(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
                 });
 
+        // scheduleId가 오면 일정 상세의 "회의록 작성하기"로 만든 회의다 — 이 회의의 안건 전체가
+        // 그 일정에 속하고 안건 연결 후보에서 빠진다. 운영 공간에서 만들면 값이 없어 일정과 무관하다
+        Schedule schedule = resolveSchedule(request.getScheduleId());
+
         Meeting meeting = meetingRepository.save(Meeting.create(
-                groupTerm, category, request.getTitle(), request.getMeetingDate(),
+                groupTerm, schedule, category, request.getTitle(), request.getMeetingDate(),
                 request.getAttendees(), request.getListSummary()));
 
         // 요청에 적힌 순서를 그대로 안건의 orderNo로 쓴다 — 회의 진행 화면의 안건 탭 순서가 이 순서다
@@ -93,8 +104,8 @@ public class MeetingService {
             agendaIds.add(agenda.getId());
         }
 
-        log.info("[회의 생성] 생성을 완료했습니다. meetingId = {}, agendaCount = {}",
-                meeting.getId(), agendaIds.size());
+        log.info("[회의 생성] 생성을 완료했습니다. meetingId = {}, scheduleId = {}, agendaCount = {}",
+                meeting.getId(), request.getScheduleId(), agendaIds.size());
 
         return MeetingCreateResponse.builder()
                 .meetingId(meeting.getId())
@@ -102,11 +113,24 @@ public class MeetingService {
                 .build();
     }
 
-    // 기수의 회의 목록을 상태·카테고리·검색어로 필터링해 cursor 페이지네이션으로 조회한다
+    // 소속 일정을 조회한다. 일정과 무관한 회의록이면 scheduleId가 없어 null을 돌려준다
+    private Schedule resolveSchedule(Long scheduleId) {
+        if (scheduleId == null) {
+            return null;
+        }
+        return scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 생성] 존재하지 않는 일정입니다. scheduleId = {}", scheduleId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_SCHEDULE_NOT_FOUND);
+                });
+    }
+
+    // 기수의 회의 목록을 상태·카테고리·검색어·소속 일정으로 필터링해 cursor 페이지네이션으로 조회한다
     public MeetingListResponse listMeetings(Long termId, MeetingStatus status, Long categoryId, String keyword,
-                                             String cursor, Integer size) {
-        log.info("[회의 목록 조회] 조회를 시작합니다. termId = {}, status = {}, categoryId = {}, keyword = {}, cursor = {}",
-                termId, status, categoryId, keyword, cursor);
+                                             Long scheduleId, String cursor, Integer size) {
+        log.info("[회의 목록 조회] 조회를 시작합니다. termId = {}, status = {}, categoryId = {}, keyword = {}, "
+                        + "scheduleId = {}, cursor = {}",
+                termId, status, categoryId, keyword, scheduleId, cursor);
 
         groupTermRepository.findById(termId)
                 .orElseThrow(() -> {
@@ -132,7 +156,7 @@ public class MeetingService {
 
         // size + 1건을 조회해서 그중 마지막 1건이 있으면 "다음 페이지가 있다"는 뜻이다
         List<Meeting> fetched = meetingRepository.search(
-                termId, status, categoryId, keyword, cursorMeetingDate, cursorId, limit + 1);
+                termId, status, categoryId, keyword, scheduleId, cursorMeetingDate, cursorId, limit + 1);
 
         boolean hasNext = fetched.size() > limit;
         List<Meeting> page = hasNext ? fetched.subList(0, limit) : fetched;
@@ -158,6 +182,61 @@ public class MeetingService {
     // 마지막 회의를 기준으로 다음 페이지 cursor를 만든다
     private String buildCursor(Meeting last) {
         return CursorCodec.encode(last.getMeetingDate().toString(), last.getId());
+    }
+
+    // 일정에 연결할 수 있는 안건 목록을 조회한다 — 일정 상세의 "안건 연결하기" 모달 후보 목록이다.
+    // 후보 조건이 특정 일정과 무관해서(어느 일정에도 속하지 않은 안건) scheduleId를 받지 않는다
+    public MeetingLinkableAgendaListResponse listLinkableAgendas(Long termId, String keyword,
+                                                                  String cursor, Integer size) {
+        log.info("[연결 가능 안건 조회] 조회를 시작합니다. termId = {}, keyword = {}, cursor = {}",
+                termId, keyword, cursor);
+
+        groupTermRepository.findById(termId)
+                .orElseThrow(() -> {
+                    log.warn("[연결 가능 안건 조회] 존재하지 않는 기수입니다. termId = {}", termId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
+                });
+
+        int limit = CursorPageConstants.resolveSize(size);
+
+        // cursor 디코딩 — sortValue는 회의 ID, id는 안건 ID다(회의 묶음을 유지하는 복합 정렬)
+        Long cursorMeetingId = null;
+        Long cursorAgendaId = null;
+        if (cursor != null) {
+            try {
+                CursorCodec decoded = CursorCodec.decode(cursor);
+                cursorMeetingId = Long.parseLong(decoded.getSortValue());
+                cursorAgendaId = decoded.getId();
+            } catch (RuntimeException e) {
+                log.warn("[연결 가능 안건 조회] cursor 형식이 올바르지 않습니다. termId = {}, cursor = {}", termId, cursor);
+                throw new CustomException(MeetingErrorCode.MEETING_400_INVALID_CURSOR);
+            }
+        }
+
+        List<MeetingAgenda> fetched = meetingAgendaRepository.searchLinkable(
+                termId, keyword, cursorMeetingId, cursorAgendaId, limit + 1);
+
+        boolean hasNext = fetched.size() > limit;
+        List<MeetingAgenda> page = hasNext ? fetched.subList(0, limit) : fetched;
+
+        List<MeetingLinkableAgendaResponse> agendas = meetingMapper.toLinkableAgendaResponses(page);
+
+        MeetingAgenda last = page.isEmpty() ? null : page.get(page.size() - 1);
+        String nextCursor = hasNext
+                ? CursorCodec.encode(String.valueOf(last.getMeeting().getId()), last.getId())
+                : null;
+
+        // 첫 페이지(cursor 없음)에서만 count 쿼리를 날린다 — 스크롤마다 다시 세지 않는다
+        Long totalCount = cursor == null ? meetingAgendaRepository.countLinkable(termId, keyword) : null;
+
+        log.info("[연결 가능 안건 조회] 조회를 완료했습니다. termId = {}, count = {}, hasNext = {}",
+                termId, agendas.size(), hasNext);
+
+        return MeetingLinkableAgendaListResponse.builder()
+                .agendas(agendas)
+                .nextCursor(nextCursor)
+                .totalCount(totalCount)
+                .build();
     }
 
     // 회의 상세를 조회한다 — 안건 전체 목록과 완료/전체 안건 수 기반 진행률을 함께 내려준다
@@ -235,6 +314,8 @@ public class MeetingService {
                     return new CustomException(MeetingErrorCode.MEETING_404_NOT_FOUND);
                 });
 
+        // 안건에 걸린 일정-안건 연결을 먼저 끊는다 — 연결이 남아있으면 FK가 안건 삭제를 막는다
+        scheduleAgendaLinkRepository.deleteAllByMeetingId(meetingId);
         meetingAgendaRepository.deleteAllByMeetingId(meetingId);
         meetingRepository.delete(meeting);
 
@@ -367,6 +448,8 @@ public class MeetingService {
             throw new CustomException(MeetingErrorCode.AGENDA_409_AT_LEAST_ONE_REQUIRED);
         }
 
+        // 이 안건이 일정에 연결돼 있으면 그 연결부터 끊는다 — 연결이 남아있으면 FK가 삭제를 막는다
+        scheduleAgendaLinkRepository.deleteAllByMeetingAgendaId(agendaId);
         meetingAgendaRepository.delete(agenda);
 
         log.info("[안건 삭제] 삭제를 완료했습니다. agendaId = {}", agendaId);

@@ -2,6 +2,7 @@ package com.moimzang.domain.meeting.entity;
 
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.meeting.enums.MeetingStatus;
+import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.global.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -40,6 +41,12 @@ public class Meeting extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_term_id", nullable = false)
     private GroupTerm groupTerm;
+
+    // 소속 일정 — NULL이면 일정과 무관한 회의록, 값이 있으면 그 일정 상세에서 만든 회의록이다.
+    // 소속은 생성 시점에 확정하고 이후 바꾸지 않는다(소속을 옮기면 안건 연결 후보 규칙이 깨진다)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "schedule_id")
+    private Schedule schedule;
 
     // 회의 카테고리(일정 카테고리와 별도 운영)
     @ManyToOne(fetch = FetchType.LAZY)
@@ -80,10 +87,11 @@ public class Meeting extends BaseEntity {
     private String listSummary;
 
     // 생성 직후에는 안건을 논의하지 않은 상태이므로 항상 진행중으로 시작한다
-    public static Meeting create(GroupTerm groupTerm, MeetingCategory meetingCategory, String title,
-                                  LocalDate meetingDate, String attendees, String listSummary) {
+    public static Meeting create(GroupTerm groupTerm, Schedule schedule, MeetingCategory meetingCategory,
+                                  String title, LocalDate meetingDate, String attendees, String listSummary) {
         return Meeting.builder()
                 .groupTerm(groupTerm)
+                .schedule(schedule)
                 .meetingCategory(meetingCategory)
                 .title(title)
                 .meetingDate(meetingDate)

@@ -72,8 +72,10 @@ public class MeetingSearchTool implements ChatTool {
         return new Result(rows.size(), truncated, rows, availableTitles);
     }
 
+    // 일정 소속 회의록도 검색 대상이다 — AI가 "그 회의록" 하나만 찾으면 되고, 어느 일정에서
+    // 만들었는지는 묻지 않기 때문에 scheduleId 필터를 걸지 않는다
     private List<Meeting> search(Long termId, String keyword, int limit) {
-        return meetingRepository.search(termId, null, null, keyword, null, null, limit);
+        return meetingRepository.search(termId, null, null, keyword, null, null, null, limit);
     }
 
     // availableTitles는 검색어가 0건일 때만 채워진다 — 비어 있으면 JSON에서 빠진다

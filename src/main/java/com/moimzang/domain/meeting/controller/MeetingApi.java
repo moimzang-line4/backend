@@ -13,6 +13,7 @@ import com.moimzang.domain.meeting.dto.response.MeetingCategoryResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingCreateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingDetailResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingEndResponse;
+import com.moimzang.domain.meeting.dto.response.MeetingLinkableAgendaListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingListResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryGenerateResponse;
 import com.moimzang.domain.meeting.dto.response.MeetingSummaryUpdateResponse;
@@ -43,7 +44,8 @@ public interface MeetingApi {
     ResponseEntity<BaseResponse<MeetingCreateResponse>> createMeeting(
             Long termId, @Valid MeetingCreateRequest request);
 
-    @Operation(summary = "회의 목록 조회", description = "기수의 회의 목록을 상태·카테고리·검색어로 필터링해 cursor 페이지네이션으로 조회한다.")
+    @Operation(summary = "회의 목록 조회",
+               description = "기수의 회의 목록을 상태·카테고리·검색어·소속 일정으로 필터링해 cursor 페이지네이션으로 조회한다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공"),
         @ApiResponse(responseCode = "400", description = "MEETING_400_INVALID_CURSOR",
@@ -56,7 +58,25 @@ public interface MeetingApi {
             @Parameter(description = "회의 상태 필터") MeetingStatus status,
             @Parameter(description = "회의 카테고리 ID 필터", example = "1") Long categoryId,
             @Parameter(description = "검색어(제목·목록 요약·참석자 중 하나라도 일치하면 조회)", example = "운영진") String keyword,
+            @Parameter(description = "소속 일정 ID 필터. 주면 그 일정에 속한 회의록만, 생략하면 전부 조회", example = "1")
+            Long scheduleId,
             @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지", example = "MjAyNi0xMS0wNw.5") String cursor,
+            @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
+
+    @Operation(summary = "연결 가능한 안건 목록 조회",
+               description = "일정 상세의 '안건 연결하기' 모달에 띄울 후보 목록. 어느 일정에도 속하지 않은 "
+                       + "안건(소속 일정이 없는 회의의 안건 중 아직 연결되지 않은 것)만 내려준다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "400", description = "MEETING_400_INVALID_CURSOR",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_GROUP_TERM_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingLinkableAgendaListResponse>> listLinkableAgendas(
+            @Parameter(description = "기수 ID", example = "1") Long termId,
+            @Parameter(description = "안건 내용 검색어", example = "홍보") String keyword,
+            @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지", example = "Mw.7") String cursor,
             @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
 
     @Operation(summary = "회의 상세 조회", description = "회의 진행 화면·정리 화면이 공통으로 쓰는 상세 조회. 안건 전체 목록과 진행률을 함께 내려준다.")
