@@ -49,6 +49,11 @@ controller/service/mapper가 각자 패키지 안에 있음), 도메인 패키�
 네 도메인 모두 아직 껍데기다(엔티티·레포지토리·틀만 있음). 등록된 이슈는 없다.
 `schedule`은 운영 공간 집계(API-012~016)까지 담당한다(decisions #13).
 
+- 회의록-안건-일정 연결 구조가 확정됐다(decisions #44). `schedule` 쪽에 남은 작업은 두 가지다:
+  **API-008 일정 삭제** 시 그 일정에 속한 회의록(`meeting.schedule_id`)과 안건을 함께 지우는 처리,
+  **API-013~016** 구현(연결 후보 규칙은 decisions #44에서 확정, 후보 목록 조회는 C가 API-083으로
+  제공한다). `meeting.schedule_id` 컬럼과 Flyway `V4`는 C가 이미 넣었다
+
 ### B — `attendance`, `settlement`, `budget`
 
 - 정산 API 5건 미구현 — #57(명단 조회·저장·불러오기), #58(입금 확인·삭제·현황),
