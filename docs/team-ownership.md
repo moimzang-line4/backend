@@ -74,6 +74,9 @@ controller/service/mapper가 각자 패키지 안에 있음), 도메인 패키�
 ### C — `meeting`, `file`, `chat`
 
 세 도메인 모두 구현 완료이고, `file`은 결함 수정까지 끝났다(decisions #42·#43).
+회의록-안건-일정 연결(decisions #44~#46)도 `meeting` 쪽은 끝났다 — `meeting.schedule_id`(Flyway `V4`),
+API-051의 `scheduleId`, API-052의 `scheduleId` 필터, 연결 후보 조회 API-083, 회의·안건 삭제 시
+`schedule_agenda_link` 선삭제까지.
 
 - #76 로컬 정적 경로 `/uploads/**`가 소프트 삭제된 파일까지 200으로 서빙한다 —
   `/api/files/{id}/content`에서 막은 삭제 차단이 이 경로로 우회된다. **B 담당과 합의가 필요하다**:
