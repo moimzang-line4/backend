@@ -908,11 +908,12 @@ cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 
 ---
 
 #### API-065 · GET /api/files/{fileId}/download-url · 파일 미리보기·다운로드 URL 발급
-인증: 불필요. **Query**: mode(PREVIEW|DOWNLOAD, 기본 DOWNLOAD). **Response data**: url, expiresAt.
-**에러**: FILE_404_NOT_FOUND
+인증: 불필요. **Query**: mode(PREVIEW|DOWNLOAD, 기본 DOWNLOAD). **Response data**: url.
+**에러**: FILE_404_NOT_FOUND(없는 파일, 소프트 삭제된 파일)
 
 `url`은 외부 스토리지 주소가 아니라 이 서버 자신의 API-080을 가리킨다(`mode`를 그대로 실어서).
-실제 파일 바이트가 나가는 동작은 API-080 쪽에서 일어난다.
+실제 파일 바이트가 나가는 동작은 API-080 쪽에서 일어난다. 만료 시각은 응답에 담지 않는다 —
+만료를 강제하는 구현이 없다(결정 42).
 
 ---
 
@@ -927,10 +928,12 @@ cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 
 `Content-Disposition`은 `mode=DOWNLOAD`면 `attachment`(브라우저가 저장 대화상자를 띄움),
 `PREVIEW`면 `inline`(브라우저가 바로 열어서 보여줌)으로 서버가 강제한다.
 
-**에러**: FILE_404_NOT_FOUND
+**에러**: FILE_404_NOT_FOUND(없는 파일, 소프트 삭제된 파일 — URL을 알고 있어도 열리지 않는다)
 
 #### API-066 · DELETE /api/files/{fileId} · 파일 삭제
-인증: 불필요. 소프트 삭제(deleted_at). **에러**: FILE_404_NOT_FOUND
+인증: 불필요. 소프트 삭제(deleted_at). **에러**: FILE_404_NOT_FOUND(없는 파일)
+
+이미 삭제된 파일에 다시 호출해도 200이다(멱등). `deleted_at`은 처음 삭제한 시점을 유지한다.
 
 #### API-067 · POST /api/files/{fileId}/restore · 파일 삭제 되돌리기
 인증: 불필요. **Response data**: fileId. **에러**: FILE_404_NOT_FOUND
