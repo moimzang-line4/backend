@@ -44,8 +44,8 @@ public class NoteSearchTool implements ChatTool {
                                         "description", "search_schedules로 얻은 일정 ID. 생략하면 기수 전체 일정의 메모"),
                                 "noteType", Map.of(
                                         "type", "string",
-                                        "description", "메모 유형. 할 일만 보려면 TODO, 일반 메모만 보려면 MEMO. "
-                                                + "생략하면 둘 다")),
+                                        "description", "메모 유형. 일반 메모는 GENERAL, 할 일은 TODO, 결정사항은 DECISION, "
+                                                + "아이디어는 IDEA. 생략하면 전부")),
                         "required", List.of()));
     }
 
