@@ -3,7 +3,6 @@ package com.moimzang.domain.budget.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -38,6 +37,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.BeanUtils;
 import org.springframework.test.util.ReflectionTestUtils;
 
+// 직접 입력·고아(schedule_id null)·다른 기수 자동기록이 sync로 건드려지지 않는다는 보장은 이
+// 클래스가 아니라 LedgerEntryRepositoryImplTest의 findAutoScheduleIds_직접_입력만_있으면_제외한다·
+// findAutoScheduleIds_schedule이_null인_고아_자동기록은_제외한다·findAutoScheduleIds_다른_기수의_자동기록은_제외한다·
+// findByScheduleIdAndAutoCategoryIsNotNull_직접_입력은_제외하고_그_일정의_자동기록만_반환한다 네 건이 맡는다 —
+// 이 서비스는 그 쿼리들이 돌려준 결과만 보고 동작하므로, 거기서 제외된 레코드는 여기서도 결코 대상이 될 수 없다
 @ExtendWith(MockitoExtension.class)
 class LedgerSyncServiceTest {
 
@@ -250,7 +254,7 @@ class LedgerSyncServiceTest {
     }
 
     @Test
-    void sync_조건이_깨지면_기존_자동기록을_삭제하고_직접_입력은_건드리지_않는다() {
+    void sync_조건이_깨지면_기존_자동기록을_삭제한다() {
         Schedule schedule = scheduleWithId(10L, "가을 공연", LocalDateTime.of(2026, 11, 20, 18, 0));
         ScheduleRound round = roundWithReceipt(100L, schedule, 1, 50500, 10000);
         // 입금 되돌리기로 전원 완료가 깨진 상태
@@ -271,10 +275,41 @@ class LedgerSyncServiceTest {
         LedgerSyncResponse response = ledgerSyncService.sync(1L);
 
         assertThat(response.getDeletedCount()).isEqualTo(1);
-        verify(ledgerEntryRepository).delete(stalePaymentIncome);
-        // 직접 입력·다른 일정의 자동기록은 findByScheduleIdAndAutoCategoryIsNotNull(10L)로만 조회되므로
-        // 애초에 삭제 후보에 오르지 않는다 — 다른 scheduleId로는 조회도 호출되지 않는다
-        verify(ledgerEntryRepository, never()).findByScheduleIdAndAutoCategoryIsNotNull(eq(99L));
+        // 삭제 대상이 정확히 조건이 깨진 그 자동기록 하나뿐임을 캡처해서 확인한다(다른 레코드는
+        // findByScheduleIdAndAutoCategoryIsNotNull(10L)이 돌려준 existing 목록에 아예 없어 후보에도 오르지 않는다)
+        ArgumentCaptor<LedgerEntry> deleteCaptor = ArgumentCaptor.forClass(LedgerEntry.class);
+        verify(ledgerEntryRepository, org.mockito.Mockito.times(1)).delete(deleteCaptor.capture());
+        assertThat(deleteCaptor.getValue()).isSameAs(stalePaymentIncome);
+    }
+
+    @Test
+    void sync_부분_납부면_수입_행은_생성하지_않고_지출_3줄만_생성한다() {
+        Schedule schedule = scheduleWithId(10L, "가을 공연", LocalDateTime.of(2026, 11, 20, 18, 0));
+        ScheduleRound round = roundWithReceipt(100L, schedule, 1, 50500, 10000);
+        // 한 명만 입금 완료 — 지원금·버림 차액은 입금 여부와 무관하게 확정되지만 수입은 전원 완료가 필요하다
+        List<SettlementTarget> targets = List.of(target(round, 20200, true), target(round, 20200, false));
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(settlementTargetRepository.findScheduleIdsByGroupTerm(1L)).willReturn(List.of(10L));
+        given(ledgerEntryRepository.findAutoScheduleIds(1L)).willReturn(List.of());
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+        given(settlementTargetRepository.findByScheduleForAssistant(10L, null)).willReturn(targets);
+        given(ledgerEntryRepository.findByScheduleIdAndAutoCategoryIsNotNull(10L)).willReturn(List.of());
+
+        LedgerSyncResponse response = ledgerSyncService.sync(1L);
+
+        assertThat(response.getCreatedCount()).isEqualTo(3);
+        assertThat(response.getUpdatedCount()).isZero();
+        assertThat(response.getDeletedCount()).isZero();
+
+        ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
+        verify(ledgerEntryRepository, org.mockito.Mockito.times(3)).save(captor.capture());
+        List<LedgerEntry> saved = captor.getAllValues();
+
+        assertThat(saved).extracting(LedgerEntry::getAutoCategory)
+                .containsExactlyInAnyOrder(LedgerAutoCategory.RECEIPT_EXPENSE, LedgerAutoCategory.CLUB_SUBSIDY_EXPENSE,
+                        LedgerAutoCategory.ROUNDING_SUBSIDY_EXPENSE);
+        assertThat(saved).noneMatch(entry -> entry.getAutoCategory() == LedgerAutoCategory.PAYMENT_INCOME);
     }
 
     @Test
@@ -321,6 +356,68 @@ class LedgerSyncServiceTest {
         assertThat(response.getCreatedCount()).isZero();
         assertThat(response.getUpdatedCount()).isZero();
         assertThat(response.getDeletedCount()).isZero();
+        verify(ledgerEntryRepository, never()).save(any());
+    }
+
+    // 영수증은 등록됐지만 settlement_target이 0명인 차수는 findByScheduleForAssistant가 애초에
+    // 그 행을 반환하지 않는다(SettlementTargetRepositoryImplTest.
+    // findByScheduleForAssistant_영수증은_있지만_정산대상이_0명인_차수는_반환하지_않는다로 검증) —
+    // 여기서는 그 결과를 받는 서비스가 나머지 정상 차수만으로 올바르게 합산하는지 확인한다
+    @Test
+    void sync_정상_차수와_0명_차수가_섞이면_정상_차수만_합산한다() {
+        Schedule schedule = scheduleWithId(10L, "가을 공연", LocalDateTime.of(2026, 11, 20, 18, 0));
+        ScheduleRound roundWithTargets = roundWithReceipt(100L, schedule, 1, 20000, 0);
+        // 영수증은 등록됐지만 정산 명단이 없는(0명) 차수 — 실제 쿼리라면 target이 전혀 없어
+        // 아래 targets 목록에 나타나지 않는다
+        roundWithReceipt(101L, schedule, 2, 30000, 0);
+        List<SettlementTarget> targets = List.of(target(roundWithTargets, 10000, true), target(roundWithTargets, 10000, true));
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(settlementTargetRepository.findScheduleIdsByGroupTerm(1L)).willReturn(List.of(10L));
+        given(ledgerEntryRepository.findAutoScheduleIds(1L)).willReturn(List.of());
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+        given(settlementTargetRepository.findByScheduleForAssistant(10L, null)).willReturn(targets);
+        given(ledgerEntryRepository.findByScheduleIdAndAutoCategoryIsNotNull(10L)).willReturn(List.of());
+
+        LedgerSyncResponse response = ledgerSyncService.sync(1L);
+
+        // 0명 차수(30000원)는 전혀 반영되지 않고, 정상 차수(20000원)만 영수증 지출·수입 2줄로 생성된다
+        assertThat(response.getCreatedCount()).isEqualTo(2);
+        ArgumentCaptor<LedgerEntry> captor = ArgumentCaptor.forClass(LedgerEntry.class);
+        verify(ledgerEntryRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        assertThat(amountOf(captor.getAllValues(), LedgerAutoCategory.RECEIPT_EXPENSE)).isEqualTo(20000);
+        assertThat(amountOf(captor.getAllValues(), LedgerAutoCategory.PAYMENT_INCOME)).isEqualTo(20000);
+    }
+
+    // 정산 대상이 전부 제외돼(decisions #31·#48) 0명이 된 일정은 findScheduleIdsByGroupTerm에
+    // 더 이상 걸리지 않지만, 과거에 생성된 자동기록이 남아있다면 findAutoScheduleIds로 대상에
+    // 포함돼 삭제까지 이어져야 한다
+    @Test
+    void sync_0명_차수만_남은_일정의_기존_자동기록은_삭제한다() {
+        Schedule schedule = scheduleWithId(10L, "인원이_모두_빠진_일정", LocalDateTime.of(2026, 11, 20, 18, 0));
+        LocalDate entryDate = LocalDate.of(2026, 11, 20);
+
+        LedgerEntry staleReceipt = existingAuto(groupTerm, schedule, LedgerAutoCategory.RECEIPT_EXPENSE,
+                "인원이_모두_빠진_일정 영수증 지출", 20000, entryDate);
+        LedgerEntry stalePaymentIncome = existingAuto(groupTerm, schedule, LedgerAutoCategory.PAYMENT_INCOME,
+                "인원이_모두_빠진_일정 부원 납부", 20000, entryDate);
+        List<LedgerEntry> existing = List.of(staleReceipt, stalePaymentIncome);
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        // 정산 대상이 하나도 없어 findScheduleIdsByGroupTerm은 이 일정을 돌려주지 않는다
+        given(settlementTargetRepository.findScheduleIdsByGroupTerm(1L)).willReturn(List.of());
+        given(ledgerEntryRepository.findAutoScheduleIds(1L)).willReturn(List.of(10L));
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+        given(settlementTargetRepository.findByScheduleForAssistant(10L, null)).willReturn(List.of());
+        given(ledgerEntryRepository.findByScheduleIdAndAutoCategoryIsNotNull(10L)).willReturn(existing);
+
+        LedgerSyncResponse response = ledgerSyncService.sync(1L);
+
+        assertThat(response.getCreatedCount()).isZero();
+        assertThat(response.getUpdatedCount()).isZero();
+        assertThat(response.getDeletedCount()).isEqualTo(2);
+        verify(ledgerEntryRepository).delete(staleReceipt);
+        verify(ledgerEntryRepository).delete(stalePaymentIncome);
         verify(ledgerEntryRepository, never()).save(any());
     }
 
@@ -380,5 +477,52 @@ class LedgerSyncServiceTest {
 
         // 일정마다 영수증 지출 + 부원 납부 수입(지원금 0, 버림 차액 0) = 2줄씩, 합쳐 4줄
         assertThat(response.getCreatedCount()).isEqualTo(4);
+    }
+
+    @Test
+    void sync_한_번의_호출에서_생성_갱신_삭제가_모두_발생한다() {
+        // 일정A: 자동기록이 전혀 없던 일정 — 새로 생성된다
+        Schedule scheduleA = scheduleWithId(20L, "일정A_신규", LocalDateTime.of(2026, 11, 20, 18, 0));
+        ScheduleRound roundA = roundWithReceipt(200L, scheduleA, 1, 20000, 0);
+        List<SettlementTarget> targetsA = List.of(target(roundA, 10000, true), target(roundA, 10000, true));
+
+        // 일정B: 기존 영수증 지출 금액이 바뀌어 갱신된다(수입 줄은 기존에 없어 새로 생성됨)
+        Schedule scheduleB = scheduleWithId(21L, "일정B_변경", LocalDateTime.of(2026, 11, 21, 18, 0));
+        ScheduleRound roundB = roundWithReceipt(201L, scheduleB, 1, 20000, 0);
+        List<SettlementTarget> targetsB = List.of(target(roundB, 10000, true), target(roundB, 10000, true));
+        LedgerEntry staleReceiptB = existingAuto(groupTerm, scheduleB, LedgerAutoCategory.RECEIPT_EXPENSE,
+                "일정B_변경 영수증 지출", 5000, LocalDate.of(2026, 11, 21));
+
+        // 일정C: 입금이 되돌려져 조건이 깨진 기존 수입 줄이 삭제된다
+        Schedule scheduleC = scheduleWithId(22L, "일정C_삭제", LocalDateTime.of(2026, 11, 22, 18, 0));
+        ScheduleRound roundC = roundWithReceipt(202L, scheduleC, 1, 20000, 0);
+        List<SettlementTarget> targetsC = List.of(target(roundC, 10000, true), target(roundC, 10000, false));
+        LedgerEntry stalePaymentIncomeC = existingAuto(groupTerm, scheduleC, LedgerAutoCategory.PAYMENT_INCOME,
+                "일정C_삭제 부원 납부", 20000, LocalDate.of(2026, 11, 22));
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(settlementTargetRepository.findScheduleIdsByGroupTerm(1L)).willReturn(List.of(20L, 21L, 22L));
+        given(ledgerEntryRepository.findAutoScheduleIds(1L)).willReturn(List.of());
+        given(scheduleRepository.findById(20L)).willReturn(Optional.of(scheduleA));
+        given(scheduleRepository.findById(21L)).willReturn(Optional.of(scheduleB));
+        given(scheduleRepository.findById(22L)).willReturn(Optional.of(scheduleC));
+        given(settlementTargetRepository.findByScheduleForAssistant(20L, null)).willReturn(targetsA);
+        given(settlementTargetRepository.findByScheduleForAssistant(21L, null)).willReturn(targetsB);
+        given(settlementTargetRepository.findByScheduleForAssistant(22L, null)).willReturn(targetsC);
+        given(ledgerEntryRepository.findByScheduleIdAndAutoCategoryIsNotNull(20L)).willReturn(List.of());
+        given(ledgerEntryRepository.findByScheduleIdAndAutoCategoryIsNotNull(21L)).willReturn(List.of(staleReceiptB));
+        given(ledgerEntryRepository.findByScheduleIdAndAutoCategoryIsNotNull(22L)).willReturn(List.of(stalePaymentIncomeC));
+
+        LedgerSyncResponse response = ledgerSyncService.sync(1L);
+
+        // 일정A: 영수증 지출·수입 2건 생성. 일정B: 수입 1건 생성. 일정C: 영수증 지출 1건 생성 → 합 4건
+        assertThat(response.getCreatedCount()).isEqualTo(4);
+        // 일정B의 영수증 지출 금액이 5000 → 20000으로 바뀌어 1건 갱신
+        assertThat(response.getUpdatedCount()).isEqualTo(1);
+        // 일정C는 부분 납부로 전원 완료가 깨져 기존 수입 줄이 삭제됨
+        assertThat(response.getDeletedCount()).isEqualTo(1);
+
+        assertThat(staleReceiptB.getAmount()).isEqualTo(20000);
+        verify(ledgerEntryRepository).delete(stalePaymentIncomeC);
     }
 }

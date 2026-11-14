@@ -83,6 +83,23 @@ class SettlementTargetRepositoryImplTest {
         assertThat(scheduleIds).isEmpty();
     }
 
+    // 정산 내역 새로고침(API-074)이 재사용하는 조회 쿼리 — 영수증은 있지만 정산 대상이 0명인
+    // 차수는 settlement_target 행 자체가 없어 결과에 전혀 나타나지 않는다
+    @Test
+    void findByScheduleForAssistant_영수증은_있지만_정산대상이_0명인_차수는_반환하지_않는다() {
+        Schedule schedule = persistSchedule(groupTerm, "가을 공연");
+        ScheduleRound roundWithTarget = persistRound(schedule, 1, 50000, 10000);
+        ScheduleAttendee attendee = persistAttendee(schedule, "홍길동");
+        SettlementTarget target = persistTarget(roundWithTarget, attendee, 20000);
+        persistRound(schedule, 2, 30000, 0);
+
+        List<SettlementTarget> result = settlementTargetRepository.findByScheduleForAssistant(schedule.getId(), null);
+
+        assertThat(result).containsExactly(target);
+        assertThat(result).extracting(t -> t.getScheduleRound().getId())
+                .containsOnly(roundWithTarget.getId());
+    }
+
     private ClubGroup persistClubGroup(String name) {
         return em.persistAndFlush(ClubGroup.create(name));
     }
