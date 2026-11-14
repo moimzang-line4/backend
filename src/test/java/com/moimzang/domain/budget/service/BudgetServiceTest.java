@@ -2,7 +2,10 @@ package com.moimzang.domain.budget.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -13,6 +16,7 @@ import com.moimzang.domain.budget.dto.request.LedgerEntryUpdateRequest;
 import com.moimzang.domain.budget.dto.response.LedgerEntryCreateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryDetailResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryUpdateResponse;
+import com.moimzang.domain.budget.dto.response.LedgerSummaryResponse;
 import com.moimzang.domain.budget.entity.LedgerEntry;
 import com.moimzang.domain.budget.enums.LedgerAutoCategory;
 import com.moimzang.domain.budget.enums.LedgerSource;
@@ -20,6 +24,9 @@ import com.moimzang.domain.budget.enums.LedgerType;
 import com.moimzang.domain.budget.exception.BudgetErrorCode;
 import com.moimzang.domain.budget.mapper.BudgetMapper;
 import com.moimzang.domain.budget.repository.LedgerEntryRepository;
+import com.moimzang.domain.budget.repository.LedgerTypeTotal;
+import com.moimzang.domain.file.entity.File;
+import com.moimzang.domain.file.repository.FileRepository;
 import com.moimzang.domain.group.entity.ClubGroup;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
@@ -27,6 +34,7 @@ import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +55,9 @@ class BudgetServiceTest {
     @Mock
     private GroupTermRepository groupTermRepository;
 
+    @Mock
+    private FileRepository fileRepository;
+
     // mapper는 mock하지 않는다 — 매핑 누락을 실제 생성 코드로 검증한다
     private final BudgetMapper budgetMapper = Mappers.getMapper(BudgetMapper.class);
 
@@ -54,7 +65,7 @@ class BudgetServiceTest {
 
     @BeforeEach
     void setUp() {
-        budgetService = new BudgetService(ledgerEntryRepository, groupTermRepository, budgetMapper);
+        budgetService = new BudgetService(ledgerEntryRepository, groupTermRepository, fileRepository, budgetMapper);
     }
 
     private GroupTerm groupTermWithId(Long id) {
@@ -86,6 +97,13 @@ class BudgetServiceTest {
         ReflectionTestUtils.setField(entry, "amount", 30000);
         ReflectionTestUtils.setField(entry, "entryDate", LocalDate.of(2026, 11, 1));
         return entry;
+    }
+
+    private File fileWithId(Long id, String name) {
+        File file = BeanUtils.instantiateClass(File.class);
+        ReflectionTestUtils.setField(file, "id", id);
+        ReflectionTestUtils.setField(file, "name", name);
+        return file;
     }
 
     @Test
@@ -274,5 +292,140 @@ class BudgetServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void getLedgerSummary_존재하지_않는_기수면_COMMON_404() {
+        given(groupTermRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> budgetService.getLedgerSummary(999L, "ALL", null, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void getLedgerSummary_잘못된_cursor이면_COMMON_400() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+
+        assertThatThrownBy(() -> budgetService.getLedgerSummary(1L, "ALL", "깨진cursor", null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void getLedgerSummary_잘못된_type이면_COMMON_400() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+
+        assertThatThrownBy(() -> budgetService.getLedgerSummary(1L, "INVALID", null, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void getLedgerSummary_currentBalance는_그룹_전체_수입에서_지출을_뺀_값이다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+        given(ledgerEntryRepository.search(eq(1L), any(), any(), any(), anyInt())).willReturn(List.of());
+        given(ledgerEntryRepository.aggregateByTypeForGroup(any())).willReturn(List.of(
+                new LedgerTypeTotal(LedgerType.INCOME, 1000000L, 3L),
+                new LedgerTypeTotal(LedgerType.EXPENSE, 400000L, 2L)));
+        given(fileRepository.findActiveFile(any(), any())).willReturn(Optional.empty());
+
+        LedgerSummaryResponse response = budgetService.getLedgerSummary(1L, "ALL", null, null);
+
+        assertThat(response.getTotalIncome()).isEqualTo(1000000L);
+        assertThat(response.getTotalExpense()).isEqualTo(400000L);
+        assertThat(response.getCurrentBalance()).isEqualTo(600000L);
+    }
+
+    @Test
+    void getLedgerSummary_수입이나_지출이_한쪽도_없으면_0으로_채운다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+        given(ledgerEntryRepository.search(eq(1L), any(), any(), any(), anyInt())).willReturn(List.of());
+        given(ledgerEntryRepository.aggregateByTypeForGroup(any()))
+                .willReturn(List.of(new LedgerTypeTotal(LedgerType.INCOME, 500000L, 1L)));
+        given(fileRepository.findActiveFile(any(), any())).willReturn(Optional.empty());
+
+        LedgerSummaryResponse response = budgetService.getLedgerSummary(1L, "ALL", null, null);
+
+        assertThat(response.getTotalIncome()).isEqualTo(500000L);
+        assertThat(response.getTotalExpense()).isEqualTo(0L);
+        assertThat(response.getCurrentBalance()).isEqualTo(500000L);
+    }
+
+    @Test
+    void getLedgerSummary_장부_파일이_있으면_ledgerFile을_채운다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+        given(ledgerEntryRepository.search(eq(1L), any(), any(), any(), anyInt())).willReturn(List.of());
+        given(ledgerEntryRepository.aggregateByTypeForGroup(any())).willReturn(List.of());
+        given(fileRepository.findActiveFile(eq(1L), any())).willReturn(Optional.of(fileWithId(7L, "장부.xlsx")));
+
+        LedgerSummaryResponse response = budgetService.getLedgerSummary(1L, "ALL", null, null);
+
+        assertThat(response.getLedgerFile()).isNotNull();
+        assertThat(response.getLedgerFile().getFileId()).isEqualTo(7L);
+        assertThat(response.getLedgerFile().getName()).isEqualTo("장부.xlsx");
+    }
+
+    @Test
+    void getLedgerSummary_장부_파일이_없으면_ledgerFile은_null이다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+        given(ledgerEntryRepository.search(eq(1L), any(), any(), any(), anyInt())).willReturn(List.of());
+        given(ledgerEntryRepository.aggregateByTypeForGroup(any())).willReturn(List.of());
+        given(fileRepository.findActiveFile(eq(1L), any())).willReturn(Optional.empty());
+
+        LedgerSummaryResponse response = budgetService.getLedgerSummary(1L, "ALL", null, null);
+
+        assertThat(response.getLedgerFile()).isNull();
+    }
+
+    @Test
+    void getLedgerSummary_entries의_source를_직접입력_자동기록으로_각각_매핑한다() {
+        LedgerEntry manual = directEntryWithId(1L, LedgerType.EXPENSE, "간식비", 15000, LocalDate.of(2026, 11, 10));
+        LedgerEntry auto = autoEntryWithId(2L, LedgerAutoCategory.RECEIPT_EXPENSE, scheduleWithId(5L, "정기 모임"));
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+        given(ledgerEntryRepository.search(eq(1L), any(), any(), any(), anyInt())).willReturn(List.of(manual, auto));
+        given(ledgerEntryRepository.aggregateByTypeForGroup(any())).willReturn(List.of());
+        given(fileRepository.findActiveFile(any(), any())).willReturn(Optional.empty());
+
+        LedgerSummaryResponse response = budgetService.getLedgerSummary(1L, "ALL", null, null);
+
+        assertThat(response.getEntries()).extracting("entryId", "source")
+                .containsExactly(
+                        tuple(1L, LedgerSource.MANUAL),
+                        tuple(2L, LedgerSource.RECEIPT));
+    }
+
+    @Test
+    void getLedgerSummary_다음_페이지가_있으면_nextCursor를_만든다() {
+        LedgerEntry first = directEntryWithId(1L, LedgerType.EXPENSE, "첫번째", 10000, LocalDate.of(2026, 11, 10));
+        LedgerEntry second = directEntryWithId(2L, LedgerType.EXPENSE, "두번째", 20000, LocalDate.of(2026, 11, 5));
+        LedgerEntry extra = directEntryWithId(3L, LedgerType.EXPENSE, "다음페이지용", 30000, LocalDate.of(2026, 11, 1));
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+        given(ledgerEntryRepository.search(eq(1L), any(), any(), any(), eq(3)))
+                .willReturn(List.of(first, second, extra));
+        given(ledgerEntryRepository.aggregateByTypeForGroup(any())).willReturn(List.of());
+        given(fileRepository.findActiveFile(any(), any())).willReturn(Optional.empty());
+
+        LedgerSummaryResponse response = budgetService.getLedgerSummary(1L, "ALL", null, 2);
+
+        assertThat(response.getEntries()).hasSize(2);
+        assertThat(response.getNextCursor()).isNotNull();
+    }
+
+    @Test
+    void getLedgerSummary_마지막_페이지면_nextCursor는_null이다() {
+        LedgerEntry only = directEntryWithId(1L, LedgerType.EXPENSE, "유일한 항목", 10000, LocalDate.of(2026, 11, 10));
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTermWithId(1L)));
+        given(ledgerEntryRepository.search(eq(1L), any(), any(), any(), anyInt())).willReturn(List.of(only));
+        given(ledgerEntryRepository.aggregateByTypeForGroup(any())).willReturn(List.of());
+        given(fileRepository.findActiveFile(any(), any())).willReturn(Optional.empty());
+
+        LedgerSummaryResponse response = budgetService.getLedgerSummary(1L, "ALL", null, null);
+
+        assertThat(response.getEntries()).hasSize(1);
+        assertThat(response.getNextCursor()).isNull();
     }
 }

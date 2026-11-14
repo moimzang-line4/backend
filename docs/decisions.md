@@ -861,3 +861,25 @@ RECEIPT")은 #63 이후로 더 이상 성립하지 않는다 — 자동기록도
   위반으로 처리해 "생략" 의미를 낼 수 없어 쓰지 않았다).
 - **존재하지 않는 termId·entryId**: 다른 도메인과 같은 관례로 `CommonErrorCode.NOT_FOUND`
   (COMMON_404)를 쓴다. 전용 코드를 만들지 않았다.
+
+## 68. API-069 totalIncome·totalExpense는 그룹 전체 누적이고, cursor·테스트는 기존 관례를 그대로 쓴다
+`docs/api-spec.md`가 미확정으로 남겨 둔 집계 범위를 구현 전에 확인했다(사용자 결정,
+2026-11-15).
+
+- **totalIncome·totalExpense 집계 범위**: `currentBalance`와 같은 **그룹 전체(모든 기수) 누적**
+  이다. `LedgerEntryRepositoryCustom.aggregateByTypeForGroup(groupId)`(기존 `aggregateByType`의
+  where 조건만 `groupTerm.id` 대신 `groupTerm.group.id`로 바꾼 버전, 내부 Tuple→
+  `LedgerTypeTotal` 매핑은 `aggregateByTypeWhere` private 메서드로 공유)의 결과 하나로 세
+  필드를 전부 만든다 — `currentBalance = totalIncome - totalExpense`라 별도 집계 쿼리가
+  필요 없다.
+- **cursor 정렬·동점 처리**: `entryDate desc, id desc` + `lt()` 복합 조건. 내림차순 cursor를
+  쓰는 다른 도메인(`MeetingRepositoryImpl`, `FileRepositoryImpl`, `OperationNoteRepositoryImpl`
+  등)과 동일한 패턴이라 새로 정하지 않고 그대로 따랐다. cursor 인코딩도 `CursorCodec`을
+  그대로 재사용하고, sortValue는 `MeetingService`와 같이 `LocalDate.toString()`(ISO-8601)으로
+  직렬화한다.
+- **테스트 분담**: DB 집계·정렬·필터처럼 Mockito로는 검증할 수 없는 로직은
+  `LedgerEntryRepositoryImplTest`(Testcontainers, 기존 관례)에 추가했다 — 그룹 전체 누적(다른
+  기수 포함)·다른 그룹 미포함, `entries`의 다른 기수 미포함·type 필터·cursor 이후 항목만
+  반환·같은 날짜 내역의 id 내림차순·limit 적용을 검증한다. `BudgetServiceTest`(Mockito)는
+  존재하지 않는 기수(COMMON_404), 잘못된 cursor·type(COMMON_400), source 매핑, ledgerFile
+  유무, nextCursor 생성 여부처럼 레포지토리를 모킹해도 되는 로직만 검증한다.
