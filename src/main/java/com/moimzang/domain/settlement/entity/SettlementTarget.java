@@ -15,6 +15,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -28,7 +29,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder(access = AccessLevel.PRIVATE)
 @Entity
-@Table(name = "settlement_target")
+@Table(name = "settlement_target", uniqueConstraints = @UniqueConstraint(
+        name = "uk_settlement_target_round_attendee",
+        columnNames = {"schedule_round_id", "schedule_attendee_id"}))
 public class SettlementTarget extends BaseEntity {
 
     // 정산 대상 ID
@@ -58,6 +61,16 @@ public class SettlementTarget extends BaseEntity {
     // 입금 완료일시
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
+
+    // 정산 명단 저장(API-038)으로 새로 추가되는 참가자를 미입금 상태로 만든다
+    public static SettlementTarget create(ScheduleRound scheduleRound, ScheduleAttendee scheduleAttendee, int billedAmount) {
+        return SettlementTarget.builder()
+                .scheduleRound(scheduleRound)
+                .scheduleAttendee(scheduleAttendee)
+                .billedAmount(billedAmount)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .build();
+    }
 
     // 영수증 금액 변경 시 1인 청구액을 다시 계산한 값으로 갱신한다
     public void updateBilledAmount(int billedAmount) {

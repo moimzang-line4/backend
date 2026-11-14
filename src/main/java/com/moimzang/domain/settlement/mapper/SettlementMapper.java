@@ -1,8 +1,13 @@
 package com.moimzang.domain.settlement.mapper;
 
+import com.moimzang.domain.attendance.entity.RoundAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementImportAttendeeResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementTargetResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementTargetSaveResponse;
+import com.moimzang.domain.settlement.entity.SettlementTarget;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
@@ -19,4 +24,23 @@ public interface SettlementMapper {
     // 영수증 등록·수정(API-034) 응답으로 변환한다
     @Mapping(target = "roundId", source = "id")
     ReceiptRegisterResponse toReceiptRegisterResponse(ScheduleRound round);
+
+    // 정산 명단 조회(API-037)의 대상 한 명을 변환한다
+    @Mapping(target = "settlementTargetId", source = "id")
+    @Mapping(target = "attendeeId", source = "scheduleAttendee.id")
+    @Mapping(target = "name", source = "scheduleAttendee.name")
+    @Mapping(target = "affiliation", source = "scheduleAttendee.affiliation")
+    @Mapping(target = "phoneLast4", source = "scheduleAttendee.phoneLast4")
+    SettlementTargetResponse toSettlementTargetResponse(SettlementTarget target);
+
+    // 정산 명단 저장(API-038) 응답으로 변환한다. targetCount·billedAmount는 Service가 계산해 넘기는 값이다
+    @Mapping(target = "label", source = "round.label")
+    SettlementTargetSaveResponse toSettlementTargetSaveResponse(ScheduleRound round, long targetCount, int billedAmount);
+
+    // 행사 명단 불러오기(API-039)의 참가자 한 명을 변환한다
+    @Mapping(target = "attendeeId", source = "scheduleAttendee.id")
+    @Mapping(target = "name", source = "scheduleAttendee.name")
+    @Mapping(target = "affiliation", source = "scheduleAttendee.affiliation")
+    @Mapping(target = "phoneLast4", source = "scheduleAttendee.phoneLast4")
+    SettlementImportAttendeeResponse toImportAttendeeResponse(RoundAttendee roundAttendee);
 }

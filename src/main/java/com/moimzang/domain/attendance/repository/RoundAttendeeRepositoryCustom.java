@@ -15,4 +15,8 @@ public interface RoundAttendeeRepositoryCustom {
     // 일정의 출석 기록을 차수·참가자와 함께 조회한다(AI 비서 조회용, 읽기 전용).
     // roundNo가 null이면 전체 차수
     List<RoundAttendee> findByScheduleForAssistant(Long groupTermId, Long scheduleId, Integer roundNo);
+
+    // 행사 명단 불러오기(API-039)용 — 그 차수의 출석 완료자만 이름순으로 조회한다.
+    // scheduleAttendee를 fetch join해서 이름·소속·전화번호를 한 번에 로딩한다
+    List<RoundAttendee> findCheckedInByScheduleRoundId(Long scheduleRoundId);
 }
