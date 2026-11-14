@@ -27,6 +27,11 @@ import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.domain.settlement.entity.SettlementTarget;
+import com.moimzang.domain.settlement.enums.PaymentStatus;
+import com.moimzang.domain.settlement.exception.SettlementErrorCode;
+import com.moimzang.domain.settlement.repository.SettlementTargetRepository;
+import com.moimzang.domain.settlement.service.BilledAmountCalculator;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDateTime;
@@ -58,6 +63,12 @@ class AttendanceServiceTest {
     @Mock
     private ScheduleRepository scheduleRepository;
 
+    @Mock
+    private SettlementTargetRepository settlementTargetRepository;
+
+    @Mock
+    private BilledAmountCalculator billedAmountCalculator;
+
     // mapper는 mock하지 않는다 — 매핑 누락을 테스트에서도 실제 생성 코드로 검증한다
     private final AttendanceMapper attendanceMapper = Mappers.getMapper(AttendanceMapper.class);
 
@@ -67,7 +78,7 @@ class AttendanceServiceTest {
     void setUp() {
         attendanceService = new AttendanceService(
                 scheduleAttendeeRepository, scheduleRoundRepository, roundAttendeeRepository,
-                scheduleRepository, attendanceMapper);
+                scheduleRepository, attendanceMapper, settlementTargetRepository, billedAmountCalculator);
     }
 
     private ScheduleRound roundWithId(Long id, Schedule schedule, Integer roundNo, String label) {
@@ -448,6 +459,82 @@ class AttendanceServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    private SettlementTarget settlementTargetWithId(Long id, PaymentStatus paymentStatus) {
+        SettlementTarget target = BeanUtils.instantiateClass(SettlementTarget.class);
+        ReflectionTestUtils.setField(target, "id", id);
+        ReflectionTestUtils.setField(target, "billedAmount", 10000);
+        ReflectionTestUtils.setField(target, "paymentStatus", paymentStatus);
+        return target;
+    }
+
+    @Test
+    void removeAttendee_입금완료된_인원이면_SETTLEMENT_423_PAID_MEMBER_LOCKED를_던지고_아무것도_지우지_않는다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        ScheduleAttendee attendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        RoundAttendee roundAttendee = roundAttendeeWithId(1L, round, attendee, LocalDateTime.now());
+        SettlementTarget paidTarget = settlementTargetWithId(10L, PaymentStatus.PAID);
+
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(roundAttendee));
+        given(settlementTargetRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(paidTarget));
+
+        assertThatThrownBy(() -> attendanceService.removeAttendee(1L, 200L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(SettlementErrorCode.SETTLEMENT_423_PAID_MEMBER_LOCKED);
+        verify(roundAttendeeRepository, never()).delete(any());
+        verify(settlementTargetRepository, never()).delete(any());
+    }
+
+    @Test
+    void removeAttendee_미입금_정산대상이면_함께_삭제하고_남은_인원으로_재계산한다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        ReflectionTestUtils.setField(round, "totalAmount", 30000);
+        ReflectionTestUtils.setField(round, "clubSubsidyAmount", 0);
+        ScheduleAttendee attendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        RoundAttendee roundAttendee = roundAttendeeWithId(1L, round, attendee, LocalDateTime.now());
+        SettlementTarget targetToRemove = settlementTargetWithId(10L, PaymentStatus.UNPAID);
+        SettlementTarget remainingTarget = settlementTargetWithId(11L, PaymentStatus.UNPAID);
+
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(roundAttendee));
+        given(settlementTargetRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(targetToRemove));
+        given(settlementTargetRepository.findByScheduleRoundId(1L))
+                .willReturn(List.of(targetToRemove, remainingTarget));
+        given(billedAmountCalculator.calculate(30000, 0, 1)).willReturn(30000);
+
+        attendanceService.removeAttendee(1L, 200L);
+
+        verify(roundAttendeeRepository).delete(roundAttendee);
+        verify(settlementTargetRepository).delete(targetToRemove);
+        assertThat(remainingTarget.getBilledAmount()).isEqualTo(30000);
+    }
+
+    @Test
+    void removeAttendee_마지막_한_명을_제외하면_계산기를_호출하지_않는다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        ScheduleAttendee attendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        RoundAttendee roundAttendee = roundAttendeeWithId(1L, round, attendee, LocalDateTime.now());
+        SettlementTarget onlyTarget = settlementTargetWithId(10L, PaymentStatus.UNPAID);
+
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(roundAttendee));
+        given(settlementTargetRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L))
+                .willReturn(Optional.of(onlyTarget));
+        given(settlementTargetRepository.findByScheduleRoundId(1L))
+                .willReturn(List.of(onlyTarget));
+
+        attendanceService.removeAttendee(1L, 200L);
+
+        verify(settlementTargetRepository).delete(onlyTarget);
+        verify(billedAmountCalculator, never()).calculate(any(Integer.class), any(Integer.class), any(Integer.class));
     }
 
     @Test
