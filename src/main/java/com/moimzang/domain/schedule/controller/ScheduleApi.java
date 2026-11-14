@@ -1,8 +1,12 @@
 package com.moimzang.domain.schedule.controller;
 
+import com.moimzang.domain.schedule.dto.request.AgendaLinkCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCategoryCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleUpdateRequest;
+import com.moimzang.domain.schedule.dto.response.AgendaLinkCreateResponse;
+import com.moimzang.domain.schedule.dto.response.LinkedAgendaListResponse;
+import com.moimzang.domain.schedule.dto.response.OperationSpaceListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCreateResponse;
@@ -10,6 +14,9 @@ import com.moimzang.domain.schedule.dto.response.ScheduleDetailResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleUpdateResponse;
 import com.moimzang.domain.schedule.dto.response.UpcomingScheduleListResponse;
+import com.moimzang.domain.schedule.enums.OperationSpaceSort;
+import com.moimzang.domain.schedule.enums.OperationSpaceStatus;
+import com.moimzang.domain.schedule.enums.OperationSpaceType;
 import com.moimzang.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -115,4 +122,56 @@ public interface ScheduleApi {
     })
     ResponseEntity<BaseResponse<ScheduleCategoryListResponse>> listCategories(
             @Parameter(description = "기수 ID", example = "1") Long termId);
+
+    @Operation(summary = "운영 공간 목록 조회",
+               description = "운영 공간을 켠 일정과 회의록을 한 목록으로 조회한다. 일정은 종료 시각이 지나면, 회의는 완료되면 지난 기록이다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(status 누락·잘못된 값) 또는 SPACE_400_INVALID_CURSOR",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "SCHEDULE_404_GROUP_TERM_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<OperationSpaceListResponse>> listOperationSpaces(
+            @Parameter(description = "기수 ID", example = "1") Long termId,
+            @Parameter(description = "진행 중(ONGOING)/지난 기록(PAST)", example = "ONGOING") OperationSpaceStatus status,
+            @Parameter(description = "유형 필터(기본 ALL)", example = "ALL") OperationSpaceType type,
+            @Parameter(description = "제목 검색어", example = "공연") String keyword,
+            @Parameter(description = "정렬(기본 LATEST)", example = "LATEST") OperationSpaceSort sort,
+            @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지") String cursor,
+            @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
+
+    @Operation(summary = "안건 연결",
+               description = "고른 안건들을 일정에 연결한다. 어느 일정에도 속하지 않은 안건만 연결할 수 있다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "연결 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(안건 미선택)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "SCHEDULE_404_NOT_FOUND 또는 SPACE_404_AGENDA_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "SPACE_409_AGENDA_ALREADY_LINKED",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<AgendaLinkCreateResponse>> linkAgendas(
+            @Parameter(description = "일정 ID", example = "10") Long scheduleId, @Valid AgendaLinkCreateRequest request);
+
+    @Operation(summary = "연결된 안건 조회",
+               description = "일정 상세 '회의록 & 안건'의 안건 카드. 회의가 끝난 안건은 meetingStatus로 읽기 전용 표시한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "404", description = "SCHEDULE_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<LinkedAgendaListResponse>> listLinkedAgendas(
+            @Parameter(description = "일정 ID", example = "10") Long scheduleId);
+
+    @Operation(summary = "안건 연결 해제", description = "연결만 끊고 원본 회의록·안건은 남긴다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "해제 성공"),
+        @ApiResponse(responseCode = "404", description = "SPACE_404_LINK_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> unlinkAgenda(
+            @Parameter(description = "일정 ID", example = "10") Long scheduleId,
+            @Parameter(description = "연결 ID", example = "7") Long linkId);
 }

@@ -39,4 +39,11 @@ public class ScheduleAgendaLink extends BaseCreatedEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "meeting_agenda_id", nullable = false)
     private MeetingAgenda meetingAgenda;
+
+    public static ScheduleAgendaLink create(Schedule schedule, MeetingAgenda meetingAgenda) {
+        return ScheduleAgendaLink.builder()
+                .schedule(schedule)
+                .meetingAgenda(meetingAgenda)
+                .build();
+    }
 }

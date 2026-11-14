@@ -1,8 +1,12 @@
 package com.moimzang.domain.schedule.controller;
 
+import com.moimzang.domain.schedule.dto.request.AgendaLinkCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCategoryCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleUpdateRequest;
+import com.moimzang.domain.schedule.dto.response.AgendaLinkCreateResponse;
+import com.moimzang.domain.schedule.dto.response.LinkedAgendaListResponse;
+import com.moimzang.domain.schedule.dto.response.OperationSpaceListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCreateResponse;
@@ -10,6 +14,10 @@ import com.moimzang.domain.schedule.dto.response.ScheduleDetailResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleUpdateResponse;
 import com.moimzang.domain.schedule.dto.response.UpcomingScheduleListResponse;
+import com.moimzang.domain.schedule.enums.OperationSpaceSort;
+import com.moimzang.domain.schedule.enums.OperationSpaceStatus;
+import com.moimzang.domain.schedule.enums.OperationSpaceType;
+import com.moimzang.domain.schedule.service.OperationSpaceService;
 import com.moimzang.domain.schedule.service.ScheduleService;
 import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.Valid;
@@ -30,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ScheduleController implements ScheduleApi {
 
     private final ScheduleService scheduleService;
+    private final OperationSpaceService operationSpaceService;
 
     // 일정을 등록한다
     @Override
@@ -110,6 +119,50 @@ public class ScheduleController implements ScheduleApi {
     @DeleteMapping("/api/schedules/{scheduleId}")
     public ResponseEntity<BaseResponse<Void>> deleteSchedule(@PathVariable Long scheduleId) {
         scheduleService.deleteSchedule(scheduleId);
+        return ResponseEntity.ok(BaseResponse.success());
+    }
+
+    // 운영 공간을 켠 일정과 회의록을 한 목록으로 조회한다
+    @Override
+    @GetMapping("/api/terms/{termId}/operation-spaces")
+    public ResponseEntity<BaseResponse<OperationSpaceListResponse>> listOperationSpaces(
+            @PathVariable Long termId,
+            @RequestParam OperationSpaceStatus status,
+            @RequestParam(required = false) OperationSpaceType type,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) OperationSpaceSort sort,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer size
+    ) {
+        OperationSpaceListResponse response =
+                operationSpaceService.listOperationSpaces(termId, status, type, keyword, sort, cursor, size);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 고른 안건들을 일정에 연결한다
+    @Override
+    @PostMapping("/api/schedules/{scheduleId}/agenda-links")
+    public ResponseEntity<BaseResponse<AgendaLinkCreateResponse>> linkAgendas(
+            @PathVariable Long scheduleId,
+            @Valid @RequestBody AgendaLinkCreateRequest request
+    ) {
+        AgendaLinkCreateResponse response = operationSpaceService.linkAgendas(scheduleId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 일정에 연결된 안건 카드를 조회한다
+    @Override
+    @GetMapping("/api/schedules/{scheduleId}/agenda-links")
+    public ResponseEntity<BaseResponse<LinkedAgendaListResponse>> listLinkedAgendas(@PathVariable Long scheduleId) {
+        LinkedAgendaListResponse response = operationSpaceService.listLinkedAgendas(scheduleId);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 안건 연결을 해제한다
+    @Override
+    @DeleteMapping("/api/schedules/{scheduleId}/agenda-links/{linkId}")
+    public ResponseEntity<BaseResponse<Void>> unlinkAgenda(@PathVariable Long scheduleId, @PathVariable Long linkId) {
+        operationSpaceService.unlinkAgenda(scheduleId, linkId);
         return ResponseEntity.ok(BaseResponse.success());
     }
 }

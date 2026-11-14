@@ -14,6 +14,10 @@ public enum ScheduleErrorCode implements ErrorCode {
     SCHEDULE_404_NOT_FOUND(HttpStatus.NOT_FOUND, "SCHEDULE_404_NOT_FOUND", "존재하지 않는 일정입니다."),
     SCHEDULE_404_CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "SCHEDULE_404_CATEGORY_NOT_FOUND", "존재하지 않는 일정 카테고리입니다."),
     SCHEDULE_404_GROUP_TERM_NOT_FOUND(HttpStatus.NOT_FOUND, "SCHEDULE_404_GROUP_TERM_NOT_FOUND", "존재하지 않는 기수입니다."),
+    SPACE_400_INVALID_CURSOR(HttpStatus.BAD_REQUEST, "SPACE_400_INVALID_CURSOR", "cursor 형식이 올바르지 않습니다."),
+    SPACE_404_AGENDA_NOT_FOUND(HttpStatus.NOT_FOUND, "SPACE_404_AGENDA_NOT_FOUND", "존재하지 않는 안건입니다."),
+    SPACE_404_LINK_NOT_FOUND(HttpStatus.NOT_FOUND, "SPACE_404_LINK_NOT_FOUND", "존재하지 않는 안건 연결입니다."),
+    SPACE_409_AGENDA_ALREADY_LINKED(HttpStatus.CONFLICT, "SPACE_409_AGENDA_ALREADY_LINKED", "이미 연결된 안건입니다."),
     SCHEDULE_409_CATEGORY_DUPLICATED(HttpStatus.CONFLICT, "SCHEDULE_409_CATEGORY_DUPLICATED", "이미 있는 카테고리입니다.");
 
     private final HttpStatus status;
