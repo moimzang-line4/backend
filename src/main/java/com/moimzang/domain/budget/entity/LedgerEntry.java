@@ -91,6 +91,21 @@ public class LedgerEntry extends BaseEntity {
                 .build();
     }
 
+    // 정산 내역 새로고침(API-074)의 자동 기록을 생성한다. scheduleRound는 일정 단위 합산 설계상
+    // 채우지 않는다(decisions #64) — schedule만으로 출처를 표현한다
+    public static LedgerEntry createAuto(GroupTerm groupTerm, Schedule schedule, LedgerAutoCategory autoCategory,
+                                          String itemName, Integer amount, LocalDate entryDate) {
+        return LedgerEntry.builder()
+                .groupTerm(groupTerm)
+                .schedule(schedule)
+                .autoCategory(autoCategory)
+                .type(autoCategory.type())
+                .itemName(itemName)
+                .amount(amount)
+                .entryDate(entryDate)
+                .build();
+    }
+
     // 자동 기록 여부. auto_category가 있으면 정산 내역 새로고침이 생성한 행이다(decisions #65)
     public boolean isAutoEntry() {
         return autoCategory != null;

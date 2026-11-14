@@ -6,6 +6,7 @@ import com.moimzang.domain.budget.dto.response.LedgerEntryCreateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryDetailResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryUpdateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerSummaryResponse;
+import com.moimzang.domain.budget.dto.response.LedgerSyncResponse;
 import com.moimzang.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -86,4 +87,16 @@ public interface BudgetApi {
     })
     ResponseEntity<BaseResponse<Void>> deleteLedgerEntry(
             @Parameter(description = "장부 항목 ID", example = "1") Long entryId);
+
+    @Operation(summary = "정산 내역 새로고침", description = "일정 단위로 최대 4종 자동 기록(영수증 지출·동아리 지원금·추가 "
+            + "지원금(100원 버림 차액)·부원 납부 수입)을 계산해 반영한다. 정산 대상이 없거나 영수증이 없는 차수, 부원 납부 "
+            + "수입은 그 일정 전체가 전원 입금 완료일 때만 포함한다. 금액이 0원인 줄은 생성하지 않고, 조건이 깨져 0원이 된 "
+            + "기존 자동 기록은 삭제한다. 재호출해도 UNIQUE(schedule_id, auto_category) 기준으로 중복 없이 반영된다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "새로고침 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<LedgerSyncResponse>> syncLedger(
+            @Parameter(description = "기수 ID", example = "1") Long termId);
 }

@@ -934,3 +934,57 @@ Gemini 멀티모달로 영수증 이미지를 직접 분석하도록 구현했�
   `RECEIPT_502_RECOGNITION_FAILED`만 적혀 있다. decisions #29·#30과 같은 선례(존재하지 않는
   리소스를 막지 않을 이유가 없고, 같은 리소스를 다루는 다른 API가 전부 404를 포함)로 문서
   누락으로 간주하고 구현했다.
+
+## 70. API-074(정산 내역 새로고침) 구현 시점에 정한 계산식·범위
+
+#63이 정한 "일정 단위 4줄"의 구체적인 계산식·경계 조건을 구현 전에 확인했다(사용자 결정,
+2026-11-15).
+
+- **RECEIPT_EXPENSE의 의미를 확정한다**: #63·`LedgerAutoCategory` 주석의 "지원금 제외 — 부원
+  부담분 합계"는 "100원 버림 차액도 뺀, 실제로 부원에게 청구된 금액(`billed_amount`) 합"으로
+  더 좁게 확정한다. 차수 하나의 계산은 `club_subsidy_amount`(동아리 지원금) + `Σbilled_amount`
+  (영수증 지출, 한 차수 안의 `settlement_target` 전원 합) + `(total_amount −
+  club_subsidy_amount − Σbilled_amount)`(100원 버림 차액, 추가 지원금)이고, 이 셋을 일정 내
+  모든 차수에서 합산한 값이 `RECEIPT_EXPENSE`/`CLUB_SUBSIDY_EXPENSE`/`ROUNDING_SUBSIDY_EXPENSE`
+  세 줄이다. **지출 3줄의 합은 그 일정의 영수증 총액(`total_amount`) 합과 항상 같다** — 이
+  불변식을 `LedgerSyncServiceTest`로 검증한다. `PAYMENT_INCOME`은 그 일정 전체
+  `settlement_target`이 하나 이상 있고 전원 `PAID`일 때만(decisions #60과 같은 기준,
+  `totalCount > 0 && paidCount == totalCount`) `Σbilled_amount`다.
+- **`billed_amount`는 합으로 계산한다(단일값 × 인원수가 아니다)**: 한 차수 안에서 개인별로
+  금액을 다르게 주는 경로(면제 등)가 현재 구현에 없어 두 계산 방식의 결과가 같지만, 더 안전한
+  합산 방식을 택했다.
+- **버림 차액이 음수가 되는 경우는 없다**: `ReceiptAmountValidator`가 등록 시점에
+  `club_subsidy_amount <= total_amount`를 강제하고, `BilledAmountCalculator`는 항상
+  `(total_amount − club_subsidy_amount) ≥ 0`을 사람 수로 나눈 나머지를 버리므로 차액은
+  `0 ≤ 차액 < 인원수 × 100`이다.
+- **정산 대상이 있는데 영수증이 없는 차수는 현재 구현상 불가능하다**: `SettlementService.
+  saveSettlementTargets`가 `round.hasReceipt()`가 아니면
+  `SETTLEMENT_409_RECEIPT_NOT_REGISTERED`로 막고, `deleteReceipt`는 차수 자체를 삭제해
+  `settlement_target`만 남기고 영수증만 없어지는 상태를 만들 수 없다. 그래도 방어적으로
+  `LedgerSyncService`는 `scheduleRound.hasReceipt()`가 아닌 차수의 `settlement_target`은
+  전부 걸러낸다.
+- **정산 명단이 없거나(API-038 미실행) 전원 제외돼 0명이 된 차수(decisions #31·#48)는 통째로
+  미반영한다**: 지원금도 포함해 그 차수는 계산에서 완전히 빠진다(명단이 생기면 다음 sync에서
+  반영). 이 결정으로 "지출 3줄 합 = 영수증 총액 합" 불변식의 기준이 "정산 대상이 1명 이상인
+  차수의 영수증 총액 합"으로 좁혀진다 — 명단이 아예 없는 일정의 영수증은 장부에 전혀 나타나지
+  않는다.
+- **조건이 깨지면(입금 되돌리기로 전원 납부가 깨짐, 영수증·지원금이 0원이 됨 등) 기존 자동
+  기록을 삭제한다**: "지금 상태로 재구성"이 목적이라 과거에 생성됐던 줄도 그대로 유지하지
+  않는다. 삭제 대상은 `auto_category IS NOT NULL AND schedule_id = 그 일정`뿐이고
+  (`LedgerEntryRepository.findByScheduleIdAndAutoCategoryIsNotNull`로만 조회), 직접 입력
+  (`auto_category` null)과 다른 일정의 자동기록은 애초에 조회 대상에 들지 않아 건드릴 수 없다.
+- **API-072와는 충돌하지 않는다**: `BudgetService.updateLedgerEntry`가 자동기록을 고아 여부와
+  무관하게 항상 거부해(decisions #67) "API-072로 사용자가 수정한 자동기록"이라는 상태 자체가
+  현재 시스템에서 발생할 수 없다. 그래서 sync는 항상 재계산값으로 덮어쓰는 지금 방식을 그대로
+  유지한다 — API-072의 잠금을 푸는 것은 이번 이슈 범위 밖이다.
+- **updatedCount는 실제로 바뀐 경우에만 포함한다**: 금액·항목명(`일정 제목 + 라벨`)·거래일
+  (`schedule.start_at`의 날짜 부분) 중 하나라도 기존 값과 다를 때만 갱신하고 카운트한다. 같은
+  값으로 재호출하면 `updatedCount`는 0이다.
+- **대상 일정 선정**: termId로 (1) `settlement_target`이 하나라도 있는 일정
+  (`SettlementTargetRepositoryCustom.findScheduleIdsByGroupTerm`, settlement 파트) 과 (2) 이미
+  자동기록이 남아있는 일정(`LedgerEntryRepository.findAutoScheduleIds`, budget 파트)의 합집합을
+  돈다. (2)가 있어야 정산 대상이 전부 사라진 뒤에도 기존 자동기록을 삭제할 기회가 생긴다. 두
+  쿼리 모두 termId로 범위를 좁혀 다른 기수의 일정·자동기록은 대상에 들지 않는다. schedule
+  도메인 파일은 건드리지 않고, 기존 `ScheduleRepository.findById`(읽기 전용)만 재사용했다.
+- **서비스 분리**: `BudgetService`가 아니라 신규 `LedgerSyncService`에 둔다. 동기화 전체(일정
+  여러 개 순회)는 `sync()` 메서드 하나에 걸린 단일 트랜잭션이다.
