@@ -79,4 +79,36 @@ public class LedgerEntry extends BaseEntity {
     // 거래 일자
     @Column(name = "entry_date", nullable = false)
     private LocalDate entryDate;
+
+    // 장부 직접 입력(API-070). auto_category·schedule·scheduleRound는 전부 null이다
+    public static LedgerEntry create(GroupTerm groupTerm, LedgerType type, String itemName, Integer amount, LocalDate entryDate) {
+        return LedgerEntry.builder()
+                .groupTerm(groupTerm)
+                .type(type)
+                .itemName(itemName)
+                .amount(amount)
+                .entryDate(entryDate)
+                .build();
+    }
+
+    // 자동 기록 여부. auto_category가 있으면 정산 내역 새로고침이 생성한 행이다(decisions #65)
+    public boolean isAutoEntry() {
+        return autoCategory != null;
+    }
+
+    // 직접 입력 내역을 부분 수정한다 — 인자가 null인 필드는 바꾸지 않는다
+    public void update(LedgerType type, String itemName, Integer amount, LocalDate entryDate) {
+        if (type != null) {
+            this.type = type;
+        }
+        if (itemName != null) {
+            this.itemName = itemName;
+        }
+        if (amount != null) {
+            this.amount = amount;
+        }
+        if (entryDate != null) {
+            this.entryDate = entryDate;
+        }
+    }
 }
