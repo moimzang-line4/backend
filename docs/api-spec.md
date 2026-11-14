@@ -197,10 +197,13 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | GROUP_404_NOT_FOUND | 404 | 존재하지 않는 그룹입니다. | API-002, API-003 |
 
-### 일정 (ScheduleErrorCode) — API-010, API-011
+### 일정 (ScheduleErrorCode) — API-004~011
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| SCHEDULE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-010, API-011 |
+| SCHEDULE_400_END_BEFORE_START | 400 | 종료 시간이 시작 시간보다 빠릅니다. | API-004, API-007 |
+| SCHEDULE_404_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-006, API-007 |
+| SCHEDULE_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 일정 카테고리입니다. | API-004, API-007 |
+| SCHEDULE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-004, API-010, API-011 |
 | SCHEDULE_409_CATEGORY_DUPLICATED | 409 | 이미 있는 카테고리입니다. | API-010 |
 
 ### 정산 (SettlementErrorCode) — API-034~045
@@ -358,7 +361,11 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ```json
 { "success": true, "code": "COMMON_201", "message": "생성에 성공했습니다.", "data": { "scheduleId": 10, "hasOperationSpace": true } }
 ```
-**에러**: COMMON_400(필수 누락), SCHEDULE_400_END_BEFORE_START(종료가 시작보다 빠름), COMMON_404(카테고리 없음)
+**Logics**: createOperationSpace=true면 운영 공간과 함께 1차 차수(roundNo=1, label "1차")를 만든다 — 출석·정산이 차수
+단위로 동작하기 때문이다. 종료가 시작과 같은 시각은 허용한다(종일 일정).
+
+**에러**: COMMON_400(필수 누락·색상 값 오류), SCHEDULE_400_END_BEFORE_START(종료가 시작보다 빠름),
+SCHEDULE_404_GROUP_TERM_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND(없거나 다른 기수의 카테고리)
 
 ---
 
@@ -380,13 +387,17 @@ cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 
 **Response data**: scheduleId, title, color, categoryId, categoryName, isAllDay, startAt, endAt, location, memo, dDay, hasOperationSpace
 
-**에러**: COMMON_404
+dDay는 한국 날짜 기준 시작일까지 남은 일수(당일 0, 지난 일정은 음수).
+
+**에러**: SCHEDULE_404_NOT_FOUND
 
 ---
 
 #### API-007 · PATCH /api/schedules/{scheduleId} · 일정 수정
-인증: 불필요. Request 필드는 API-004와 동일(createOperationSpace 제외). **Response**: scheduleId
-**에러**: COMMON_400, SCHEDULE_400_END_BEFORE_START, COMMON_404
+인증: 불필요. Request 필드는 API-004와 동일(createOperationSpace 제외)하고 전부 선택값 — 보낸 필드만 수정한다.
+location·memo에 빈 문자열을 보내면 지운다. 시작·종료 중 하나만 바꿔도 바뀐 결과 기준으로 순서를 확인한다.
+**Response**: scheduleId
+**에러**: COMMON_400, SCHEDULE_400_END_BEFORE_START, SCHEDULE_404_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND
 
 ---
 

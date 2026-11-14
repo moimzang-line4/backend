@@ -73,4 +73,51 @@ public class Schedule extends BaseEntity {
     // 메모
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
+
+    public static Schedule create(GroupTerm groupTerm, ScheduleCategory scheduleCategory, String title, String color,
+                                  Boolean isAllDay, LocalDateTime startAt, LocalDateTime endAt, String location,
+                                  String memo, Boolean hasOperationSpace) {
+        return Schedule.builder()
+                .groupTerm(groupTerm)
+                .scheduleCategory(scheduleCategory)
+                .title(title)
+                .color(color)
+                .isAllDay(isAllDay)
+                .startAt(startAt)
+                .endAt(endAt)
+                .location(location)
+                .memo(memo)
+                .hasOperationSpace(hasOperationSpace)
+                .build();
+    }
+
+    // 일정을 부분 수정한다 — 인자가 null인 필드는 바꾸지 않는다.
+    // 장소·메모는 선택 항목이라 빈 문자열을 보내면 지운다
+    public void update(ScheduleCategory scheduleCategory, String title, String color, Boolean isAllDay,
+                       LocalDateTime startAt, LocalDateTime endAt, String location, String memo) {
+        if (scheduleCategory != null) {
+            this.scheduleCategory = scheduleCategory;
+        }
+        if (title != null) {
+            this.title = title;
+        }
+        if (color != null) {
+            this.color = color;
+        }
+        if (isAllDay != null) {
+            this.isAllDay = isAllDay;
+        }
+        if (startAt != null) {
+            this.startAt = startAt;
+        }
+        if (endAt != null) {
+            this.endAt = endAt;
+        }
+        if (location != null) {
+            this.location = location.isEmpty() ? null : location;
+        }
+        if (memo != null) {
+            this.memo = memo.isEmpty() ? null : memo;
+        }
+    }
 }
