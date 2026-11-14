@@ -180,6 +180,44 @@ class LedgerEntryRepositoryImplTest {
         assertThat(result).hasSize(2);
     }
 
+    // 장부 엑셀 다운로드(API-075)용 — cursor 없이 그 기수 전체를 한 번에 가져온다
+    @Test
+    void findAllForExport_다른_기수_내역은_포함하지_않는다() {
+        persistEntry(groupTerm, LedgerType.EXPENSE, "이번 기수", 10000, LocalDate.of(2026, 11, 1));
+        GroupTerm otherTerm = persistGroupTerm(groupTerm.getGroup(), "25기");
+        persistEntry(otherTerm, LedgerType.EXPENSE, "다른 기수", 20000, LocalDate.of(2026, 11, 2));
+
+        List<LedgerEntry> result = ledgerEntryRepository.findAllForExport(groupTerm.getId());
+
+        assertThat(result).extracting(LedgerEntry::getItemName).containsExactly("이번 기수");
+    }
+
+    // API-069(search)의 entryDate 내림차순과 방향만 반대다. id를 2차 정렬로 둬서 같은 날짜
+    // 내역의 순서가 재호출해도 항상 같다
+    @Test
+    void findAllForExport_entryDate_오름차순이고_같은_날짜는_id_오름차순이다() {
+        persistEntry(groupTerm, LedgerType.EXPENSE, "최근 지출", 10000, LocalDate.of(2026, 11, 20));
+        LedgerEntry sameDateFirst = persistEntry(groupTerm, LedgerType.EXPENSE, "같은날_먼저입력", 20000, LocalDate.of(2026, 11, 1));
+        LedgerEntry sameDateSecond = persistEntry(groupTerm, LedgerType.EXPENSE, "같은날_나중입력", 30000, LocalDate.of(2026, 11, 1));
+
+        List<LedgerEntry> result = ledgerEntryRepository.findAllForExport(groupTerm.getId());
+
+        assertThat(sameDateFirst.getId()).isLessThan(sameDateSecond.getId());
+        assertThat(result).extracting(LedgerEntry::getItemName)
+                .containsExactly("같은날_먼저입력", "같은날_나중입력", "최근 지출");
+    }
+
+    @Test
+    void findAllForExport_페이지네이션_없이_전체를_반환한다() {
+        for (int i = 1; i <= 25; i++) {
+            persistEntry(groupTerm, LedgerType.EXPENSE, "항목" + i, 1000 * i, LocalDate.of(2026, 11, 1));
+        }
+
+        List<LedgerEntry> result = ledgerEntryRepository.findAllForExport(groupTerm.getId());
+
+        assertThat(result).hasSize(25);
+    }
+
     // 정산 내역 새로고침(API-074) 대상 일정 선정 쿼리 검증
     @Test
     void findAutoScheduleIds_자동기록이_있는_일정을_반환한다() {
