@@ -3,6 +3,8 @@ package com.moimzang.domain.schedule.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -19,6 +21,8 @@ import com.moimzang.domain.schedule.dto.response.ScheduleCategoryListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCreateResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleDetailResponse;
+import com.moimzang.domain.schedule.dto.response.ScheduleListResponse;
+import com.moimzang.domain.schedule.dto.response.UpcomingScheduleListResponse;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.entity.ScheduleCategory;
 import com.moimzang.domain.schedule.enums.ScheduleColor;
@@ -26,6 +30,8 @@ import com.moimzang.domain.schedule.exception.ScheduleErrorCode;
 import com.moimzang.domain.schedule.mapper.ScheduleMapper;
 import com.moimzang.domain.schedule.repository.ScheduleCategoryRepository;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.global.cursor.CursorCodec;
+import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -310,6 +316,109 @@ class ScheduleServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
                 .isEqualTo(ScheduleErrorCode.SCHEDULE_404_NOT_FOUND);
+    }
+
+    private static final LocalDate NOV_1 = LocalDate.of(2026, 11, 1);
+    private static final LocalDate NOV_30 = LocalDate.of(2026, 11, 30);
+
+    @Test
+    void listSchedules_기간을_하루_전체로_넘기고_다음_페이지가_없으면_nextCursor는_null() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
+        Schedule schedule = schedule(10L, mock(GroupTerm.class), null, START, END);
+        given(scheduleRepository.searchCalendar(eq(1L), eq(NOV_1.atStartOfDay()), eq(NOV_30.atTime(23, 59, 59, 999_999_999)),
+                isNull(), isNull(), eq(21))).willReturn(List.of(schedule));
+
+        ScheduleListResponse response = scheduleService.listSchedules(1L, NOV_1, NOV_30, null, null);
+
+        assertThat(response.getSchedules()).hasSize(1);
+        assertThat(response.getSchedules().get(0).getScheduleId()).isEqualTo(10L);
+        assertThat(response.getSchedules().get(0).getColor()).isEqualTo("RED");
+        assertThat(response.getNextCursor()).isNull();
+    }
+
+    @Test
+    void listSchedules_size보다_많으면_마지막_일정으로_다음_cursor를_만든다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
+        List<Schedule> fetched = List.of(
+                schedule(10L, mock(GroupTerm.class), null, START, END),
+                schedule(11L, mock(GroupTerm.class), null, START.plusDays(1), END.plusDays(1)),
+                schedule(12L, mock(GroupTerm.class), null, START.plusDays(2), END.plusDays(2)));
+        given(scheduleRepository.searchCalendar(eq(1L), any(), any(), isNull(), isNull(), eq(3))).willReturn(fetched);
+
+        ScheduleListResponse response = scheduleService.listSchedules(1L, NOV_1, NOV_30, null, 2);
+
+        assertThat(response.getSchedules()).extracting("scheduleId").containsExactly(10L, 11L);
+        CursorCodec next = CursorCodec.decode(response.getNextCursor());
+        assertThat(next.getId()).isEqualTo(11L);
+        assertThat(LocalDateTime.parse(next.getSortValue())).isEqualTo(START.plusDays(1));
+    }
+
+    @Test
+    void listSchedules_cursor를_풀어서_다음_페이지를_조회한다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
+        String cursor = CursorCodec.encode(START.toString(), 10L);
+        given(scheduleRepository.searchCalendar(eq(1L), any(), any(), eq(START), eq(10L), eq(21))).willReturn(List.of());
+
+        ScheduleListResponse response = scheduleService.listSchedules(1L, NOV_1, NOV_30, cursor, null);
+
+        assertThat(response.getSchedules()).isEmpty();
+    }
+
+    @Test
+    void listSchedules_시작일이_종료일보다_늦으면_COMMON_400() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
+
+        assertThatThrownBy(() -> scheduleService.listSchedules(1L, NOV_30, NOV_1, null, null))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void listSchedules_잘못된_cursor면_SCHEDULE_400_INVALID_CURSOR() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
+
+        assertThatThrownBy(() -> scheduleService.listSchedules(1L, NOV_1, NOV_30, "깨진cursor", null))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ScheduleErrorCode.SCHEDULE_400_INVALID_CURSOR);
+    }
+
+    @Test
+    void listSchedules_없는_기수면_SCHEDULE_404_GROUP_TERM_NOT_FOUND() {
+        given(groupTermRepository.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> scheduleService.listSchedules(99L, NOV_1, NOV_30, null, null))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ScheduleErrorCode.SCHEDULE_404_GROUP_TERM_NOT_FOUND);
+    }
+
+    @Test
+    void listUpcomingSchedules_기본_5개를_조회하고_운영_메뉴_수는_4다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(scheduleRepository.findUpcomingOperationSchedules(eq(1L), any(LocalDateTime.class), eq(5)))
+                .willReturn(List.of(schedule(10L, groupTerm, category(3L, groupTerm, "공연"), START, END)));
+
+        UpcomingScheduleListResponse response = scheduleService.listUpcomingSchedules(1L, null);
+
+        assertThat(response.getSchedules()).hasSize(1);
+        assertThat(response.getSchedules().get(0).getScheduleId()).isEqualTo(10L);
+        assertThat(response.getSchedules().get(0).getCategoryName()).isEqualTo("공연");
+        assertThat(response.getSchedules().get(0).getLocation()).isEqualTo("얼라이브홀");
+        assertThat(response.getSchedules().get(0).getOperationMenuCount()).isEqualTo(4);
+    }
+
+    @Test
+    void listUpcomingSchedules_limit은_최대_20으로_자른다() {
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(mock(GroupTerm.class)));
+        given(scheduleRepository.findUpcomingOperationSchedules(eq(1L), any(LocalDateTime.class), eq(20)))
+                .willReturn(List.of());
+
+        UpcomingScheduleListResponse response = scheduleService.listUpcomingSchedules(1L, 100);
+
+        assertThat(response.getSchedules()).isEmpty();
     }
 
     private ScheduleCreateRequest.ScheduleCreateRequestBuilder createRequest(Long categoryId, boolean operationSpace) {

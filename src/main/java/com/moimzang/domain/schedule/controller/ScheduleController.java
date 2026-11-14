@@ -7,10 +7,13 @@ import com.moimzang.domain.schedule.dto.response.ScheduleCategoryListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCreateResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleDetailResponse;
+import com.moimzang.domain.schedule.dto.response.ScheduleListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleUpdateResponse;
+import com.moimzang.domain.schedule.dto.response.UpcomingScheduleListResponse;
 import com.moimzang.domain.schedule.service.ScheduleService;
 import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -34,6 +38,31 @@ public class ScheduleController implements ScheduleApi {
             @Valid @RequestBody ScheduleCreateRequest request
     ) {
         ScheduleCreateResponse response = scheduleService.createSchedule(termId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 캘린더 기간과 겹치는 일정을 조회한다
+    @Override
+    @GetMapping("/api/terms/{termId}/schedules")
+    public ResponseEntity<BaseResponse<ScheduleListResponse>> listSchedules(
+            @PathVariable Long termId,
+            @RequestParam LocalDate from,
+            @RequestParam LocalDate to,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer size
+    ) {
+        ScheduleListResponse response = scheduleService.listSchedules(termId, from, to, cursor, size);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 다가오는 운영 일정을 조회한다
+    @Override
+    @GetMapping("/api/terms/{termId}/schedules/upcoming")
+    public ResponseEntity<BaseResponse<UpcomingScheduleListResponse>> listUpcomingSchedules(
+            @PathVariable Long termId,
+            @RequestParam(required = false) Integer limit
+    ) {
+        UpcomingScheduleListResponse response = scheduleService.listUpcomingSchedules(termId, limit);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 
