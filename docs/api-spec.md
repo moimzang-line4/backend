@@ -685,20 +685,19 @@ studentId/part/grade(수집 안 한 항목은 null), nextCursor. 등록한 순�
 #### API-028 · POST /api/schedules/{scheduleId}/rounds · 차수 추가
 인증: 불필요. **Response data**: roundId, roundNo, label. **에러**: COMMON_404
 
-> **미확정**: 새 차수 생성 시 기존 일정 참가자를 자동으로 미출석 상태로 넣을지, 빈 차수로 시작할지는
-> 구현 시점에 정한다.
+**Logics**: 그 일정의 기존 참가자 전원을 이 차수에 미출석 상태로 함께 포함한다.
 
 ---
 
 #### API-029 · GET /api/rounds/{roundId}/attendees · 차수 출석 현황 조회
-인증: 불필요. **Query**: status(UNCHECKED|CHECKED|ALL, 기본 UNCHECKED), keyword(이름·초성 검색, 선택),
-cursor(선택), size(선택, 기본 20)
+인증: 불필요. **Query**: status(UNCHECKED|CHECKED|ALL, 기본 UNCHECKED), keyword(이름 검색, 선택 —
+초성 검색은 이번 범위 보류), cursor(선택), size(선택, 기본 20)
 
 **Response data**: scheduleTitle, progress.checkedCount/totalCount/rate(이 progress.totalCount는
 전체 참가자 수이지 페이지네이션 totalCount가 아니다 — 그대로 유지), attendees[].attendeeId/name/
 affiliation/phoneLast4/isCheckedIn/checkedInAt, nextCursor
 
-cursor 페이지네이션(정렬 기준: createdAt).
+cursor 페이지네이션(정렬 기준: round_attendee.createdAt — 그 차수에 합류한 순서).
 
 **에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
@@ -714,16 +713,23 @@ false)
 기존 인원 카드를 보여준다. "다른 사람으로 새로 추가"를 누르면 allowSameName=true로 재요청.
 
 **Response data**: attendeeId, name, affiliation, phoneLast4, isCheckedIn
-**에러**: COMMON_400, ATTENDANCE_409_DUPLICATE_NAME
+**에러**: COMMON_400, COMMON_404, ATTENDANCE_409_DUPLICATE_NAME
 
 ---
 
 #### API-031 · PATCH /api/rounds/{roundId}/attendees/{attendeeId} · 출석 처리·되돌리기
 인증: 불필요. **Request**: isCheckedIn(boolean). **Response data**: attendeeId, name, isCheckedIn,
-checkedInAt, progress. **에러**: COMMON_404
+checkedInAt, progress. **에러**: COMMON_400(isCheckedIn 누락), COMMON_404
+
+**Logics**: 토글이 아니라 isCheckedIn 값으로 상태를 지정한다. 이미 같은 상태로 재요청하면 멱등하게
+처리하고 기존 checkedInAt을 그대로 반환한다(상태가 실제로 바뀔 때만 checkedInAt을 갱신).
 
 #### API-032 · DELETE /api/rounds/{roundId}/attendees/{attendeeId} · 차수에서 참가자 제외
-인증: 불필요. **에러**: COMMON_404
+인증: 불필요. **에러**: COMMON_404, SETTLEMENT_423_PAID_MEMBER_LOCKED
+
+**Logics**: 제외 대상이 입금 완료(PAID) 상태면 제외 자체를 423으로 거부한다(round_attendee도 지우지
+않는다). 미입금 상태면 round_attendee와 함께 settlement_target도 삭제하고, 남은 인원으로 1인
+청구액을 재계산한다.
 
 ### 정산
 
