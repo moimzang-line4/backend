@@ -840,3 +840,24 @@ RECEIPT")은 #63 이후로 더 이상 성립하지 않는다 — 자동기록도
 공회전하기 때문이다. 기존 조건은 과거 "차수 단위" 설계에서 생겼을 수 있는 레거시 데이터를 대비해
 그대로 남겼다. `ScheduleCascadeDeleter`(schedule 도메인) 등 다른 파트 파일은 수정하지 않았다 —
 이미 `deleteChildren`이 `clearScheduleReference`를 호출하고 있어 그대로 두면 된다.
+
+## 67. API-070~073 구현 전 미확정 사항 4건
+`docs/api-spec.md`에 명시되지 않은 세부 사항을 구현 전에 확인했다(사용자 결정, 2026-11-15).
+
+- **API-072 PATCH 방식**: 보낸 필드만 반영하는 **부분 수정**(null이면 기존 값 유지)이다.
+  `Schedule.update()`와 같은 관례다. `type`(INCOME/EXPENSE) 변경도 **허용**한다 — 자동 기록
+  보호는 이미 `LEDGER_409_AUTO_ENTRY_LOCKED`로 막혀 있어 직접 입력 내역의 `type` 변경을 추가로
+  제한할 이유가 없다.
+- **API-071 origin의 고아 표현**: 자동 기록이면서 출처 일정(`schedule`)이 살아있을 때만 `origin`
+  (`scheduleId`, `title`)을 채우고, **직접 입력과 고아가 된 자동 기록은 둘 다 `origin = null`**
+  이다. `source`(RECEIPT|MANUAL)로 이미 "자동 기록이었는지"를 구분할 수 있어, `origin`에 고아
+  여부를 나타내는 별도 플래그를 두지 않았다.
+- **필수값 누락·금액 0 이하 검증**: Service가 아니라 **요청 DTO의 Bean Validation**
+  (`@NotNull`/`@NotBlank`/`@Positive`)으로 검증한다 — `settlement`의 `AccountSetRequestTest`와
+  같은 관례로, Spring 컨텍스트 없이 `jakarta.validation.Validator`만으로 검증하는 별도 DTO
+  테스트를 둔다. `LedgerEntryUpdateRequest`(API-072, 부분 수정)는 전부 선택 필드라 `@NotNull`을
+  달지 않고, `amount`는 `@Positive`만(null은 Bean Validation 표준 동작대로 통과), `itemName`은
+  null은 허용하되 공백·빈 문자열은 `@Pattern(regexp = ".*\\S.*")`로 막는다(`@NotBlank`는 null도
+  위반으로 처리해 "생략" 의미를 낼 수 없어 쓰지 않았다).
+- **존재하지 않는 termId·entryId**: 다른 도메인과 같은 관례로 `CommonErrorCode.NOT_FOUND`
+  (COMMON_404)를 쓴다. 전용 코드를 만들지 않았다.
