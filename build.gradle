@@ -54,6 +54,10 @@ dependencies {
     implementation platform("software.amazon.awssdk:bom:${awsSdkVersion}")
     implementation 'software.amazon.awssdk:s3'
 
+    // 장부 엑셀 다운로드(API-075) — xlsx 생성. 5.x 계열 중 가장 최근 안정 버전(5.5.1)을 쓴다.
+    // 막 나온 6.0.0은 JDK 17+ 요구·deprecated API 제거 등 메이저 변경이라 더 검증된 5.x를 택했다
+    implementation 'org.apache.poi:poi-ooxml:5.5.1'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 

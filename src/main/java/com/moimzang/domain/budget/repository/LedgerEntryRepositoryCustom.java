@@ -20,4 +20,9 @@ public interface LedgerEntryRepositoryCustom {
 
     // 기수의 장부 내역을 cursor 페이지네이션으로 조회한다(API-069, 정렬: entryDate desc, id desc)
     List<LedgerEntry> search(Long groupTermId, LedgerType type, LocalDate cursorEntryDate, Long cursorId, int limit);
+
+    // 장부 엑셀 다운로드(API-075)용 — 그 기수 전체 내역을 페이지네이션 없이 한 번에 가져온다.
+    // 정렬: entryDate asc, id asc(API-069의 내림차순과 방향만 반대이고, id를 2차 정렬로 둬서
+    // 같은 날짜 내역의 순서가 재호출해도 항상 같다)
+    List<LedgerEntry> findAllForExport(Long groupTermId);
 }
