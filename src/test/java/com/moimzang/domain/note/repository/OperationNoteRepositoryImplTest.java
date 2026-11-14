@@ -138,7 +138,7 @@ class OperationNoteRepositoryImplTest {
     private OperationNote persistNote(Schedule target, String title, String content, String assignee) {
         OperationNote note = BeanUtils.instantiateClass(OperationNote.class);
         ReflectionTestUtils.setField(note, "schedule", target);
-        ReflectionTestUtils.setField(note, "type", NoteType.MEMO);
+        ReflectionTestUtils.setField(note, "type", NoteType.GENERAL);
         ReflectionTestUtils.setField(note, "title", title);
         ReflectionTestUtils.setField(note, "content", content);
         ReflectionTestUtils.setField(note, "assignee", assignee);

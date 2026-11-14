@@ -55,7 +55,7 @@ class NoteSearchToolTest {
     @Test
     void execute_일반_메모는_완료_여부가_비어_있다() throws Exception {
         given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), isNull(), anyInt()))
-                .willReturn(List.of(note(601L, NoteType.MEMO, "대관 확인", "대강당 예약 완료", null, null)));
+                .willReturn(List.of(note(601L, NoteType.GENERAL, "대관 확인", "대강당 예약 완료", null, null)));
 
         JsonNode note = execute("{}").get("notes").get(0);
 
@@ -79,7 +79,7 @@ class NoteSearchToolTest {
     @Test
     void execute_상한을_넘으면_잘라내고_전체_건수를_알려준다() throws Exception {
         List<OperationNote> many = IntStream.rangeClosed(1, 51)
-                .mapToObj(i -> note((long) i, NoteType.MEMO, "메모" + i, "내용", null, null))
+                .mapToObj(i -> note((long) i, NoteType.GENERAL, "메모" + i, "내용", null, null))
                 .toList();
         given(operationNoteRepository.searchForAssistant(eq(1L), isNull(), isNull(), isNull(), anyInt())).willReturn(many);
         given(operationNoteRepository.countForAssistant(eq(1L), isNull(), isNull(), isNull())).willReturn(51L);
