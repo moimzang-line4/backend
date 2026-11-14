@@ -2,7 +2,7 @@ package com.moimzang.domain.memberlist.dto.response;
 
 import com.moimzang.domain.memberlist.enums.MemberListStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,6 +25,6 @@ public class MemberListSummaryResponse {
     @Schema(description = "등록중(RECRUITING)/등록완료(COMPLETED). 마감일이 지나면 등록완료", example = "RECRUITING")
     private final MemberListStatus status;
 
-    @Schema(description = "등록 마감일", example = "2026-11-30")
-    private final LocalDate registerDeadline;
+    @Schema(description = "등록 마감 일시", example = "2026-11-30T23:59:00")
+    private final LocalDateTime registerDeadline;
 }

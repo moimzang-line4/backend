@@ -3,7 +3,7 @@ package com.moimzang.domain.memberlist.dto.request;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,8 +22,8 @@ public class MemberListUpdateRequest {
     @Pattern(regexp = "(?s).*\\S.*", message = "공백일 수 없습니다")
     private String name;
 
-    @Schema(description = "등록 마감일(선택)", example = "2026-12-07")
-    private LocalDate registerDeadline;
+    @Schema(description = "등록 마감 일시(선택)", example = "2026-12-05T23:59:00")
+    private LocalDateTime registerDeadline;
 
     @Schema(description = "학교 수집(선택)", example = "true")
     private Boolean collectSchool;

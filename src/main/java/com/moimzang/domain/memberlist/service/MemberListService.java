@@ -19,9 +19,7 @@ import com.moimzang.domain.memberlist.repository.MemberRepository;
 import com.moimzang.domain.settlement.repository.SettlementTargetRepository;
 import com.moimzang.global.exception.CustomException;
 import java.security.SecureRandom;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Base64;
 import java.util.List;
@@ -29,6 +27,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,8 +40,6 @@ public class MemberListService {
     // 마감 여부는 한국 시간 기준으로 판단한다
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
 
-    // 등록 링크 경로. 서버는 프론트 도메인을 모르므로 경로만 내려주고 프론트가 도메인을 붙인다
-    private static final String JOIN_PATH_PREFIX = "/join/";
 
     // 토큰은 링크를 아는 사람만 등록할 수 있게 하는 값이라 추측하기 어려운 난수로 만든다
     private static final int JOIN_TOKEN_BYTES = 12;
@@ -56,6 +53,10 @@ public class MemberListService {
     private final RoundAttendeeRepository roundAttendeeRepository;
     private final SettlementTargetRepository settlementTargetRepository;
 
+    // 등록 링크 앞부분. 배포 도메인이 바뀌면 설정값만 바꾼다
+    @Value("${moimzang.join-base-url:moimjang.app/join/}")
+    private String joinBaseUrl;
+
     // 명단방을 만들고 등록 링크 토큰을 발급한다
     @Transactional
     public MemberListCreateResponse createMemberList(Long termId, MemberListCreateRequest request) {
@@ -68,7 +69,7 @@ public class MemberListService {
                 });
 
         MemberList memberList = memberListRepository.save(MemberList.create(groupTerm, request.getName().strip(),
-                endOfDay(request.getRegisterDeadline()), defaultOn(request.getCollectSchool()),
+                request.getRegisterDeadline(), defaultOn(request.getCollectSchool()),
                 defaultOn(request.getCollectStudentId()), defaultOn(request.getCollectPart()),
                 defaultOn(request.getCollectGrade()), defaultOn(request.getCollectPhone()), issueJoinToken()));
 
@@ -76,11 +77,11 @@ public class MemberListService {
         return MemberListCreateResponse.builder()
                 .memberListId(memberList.getId())
                 .joinToken(memberList.getJoinToken())
-                .joinUrl(JOIN_PATH_PREFIX + memberList.getJoinToken())
+                .joinUrl(joinBaseUrl + memberList.getJoinToken())
                 .build();
     }
 
-    // 기수의 명단방 목록을 등록 인원과 함께 조회한다
+    // 기수의 명단방 목록을 등록 인원과 함께 최근에 만든 순서로 조회한다
     public MemberListListResponse listMemberLists(Long termId) {
         log.info("[명단방 목록 조회] 조회를 시작합니다. termId = {}", termId);
 
@@ -88,7 +89,7 @@ public class MemberListService {
             log.warn("[명단방 목록 조회] 존재하지 않는 기수입니다. termId = {}", termId);
             throw new CustomException(MemberListErrorCode.MEMBER_LIST_404_GROUP_TERM_NOT_FOUND);
         }
-        List<MemberList> memberLists = memberListRepository.findByGroupTermIdOrderByIdAsc(termId);
+        List<MemberList> memberLists = memberListRepository.findByGroupTermIdOrderByIdDesc(termId);
         Map<Long, Long> counts = memberLists.isEmpty() ? Map.of()
                 : memberRepository.countByMemberListIds(memberLists.stream().map(MemberList::getId).toList())
                         .stream()
@@ -102,7 +103,7 @@ public class MemberListService {
                         .name(list.getName())
                         .memberCount(counts.getOrDefault(list.getId(), 0L))
                         .status(list.effectiveStatus(now))
-                        .registerDeadline(toDate(list.getRegisterDeadline()))
+                        .registerDeadline(list.getRegisterDeadline())
                         .build())
                 .toList();
 
@@ -123,10 +124,10 @@ public class MemberListService {
         return MemberListDetailResponse.builder()
                 .memberListId(memberList.getId())
                 .name(memberList.getName())
-                .registerDeadline(toDate(memberList.getRegisterDeadline()))
+                .registerDeadline(memberList.getRegisterDeadline())
                 .status(memberList.effectiveStatus(LocalDateTime.now(SERVICE_ZONE)))
                 .memberCount(memberCount)
-                .joinUrl(JOIN_PATH_PREFIX + memberList.getJoinToken())
+                .joinUrl(joinBaseUrl + memberList.getJoinToken())
                 .isLinkClosed(memberList.getIsLinkClosed())
                 .fields(MemberListFieldsResponse.builder()
                         .school(memberList.getCollectSchool())
@@ -145,7 +146,7 @@ public class MemberListService {
 
         MemberList memberList = findMemberList(memberListId, "명단방 수정");
         memberList.update(request.getName() == null ? null : request.getName().strip(),
-                request.getRegisterDeadline() == null ? null : endOfDay(request.getRegisterDeadline()),
+                request.getRegisterDeadline(),
                 request.getCollectSchool(), request.getCollectStudentId(), request.getCollectPart(),
                 request.getCollectGrade(), request.getCollectPhone());
 
@@ -190,14 +191,6 @@ public class MemberListService {
         }
         // 96비트 난수가 다섯 번 연속 겹치는 건 사실상 불가능해 여기까지 오면 서버 문제로 본다
         throw new IllegalStateException("등록 링크 토큰을 발급하지 못했습니다.");
-    }
-
-    private LocalDateTime endOfDay(LocalDate date) {
-        return date.atTime(LocalTime.of(23, 59, 59));
-    }
-
-    private LocalDate toDate(LocalDateTime dateTime) {
-        return dateTime == null ? null : dateTime.toLocalDate();
     }
 
     private boolean defaultOn(Boolean value) {
