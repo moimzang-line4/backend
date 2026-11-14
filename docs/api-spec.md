@@ -200,10 +200,11 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ### 일정 (ScheduleErrorCode) — API-004~011
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
+| SCHEDULE_400_INVALID_CURSOR | 400 | cursor 형식이 올바르지 않습니다. | API-005 |
 | SCHEDULE_400_END_BEFORE_START | 400 | 종료 시간이 시작 시간보다 빠릅니다. | API-004, API-007 |
 | SCHEDULE_404_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-006, API-007 |
 | SCHEDULE_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 일정 카테고리입니다. | API-004, API-007 |
-| SCHEDULE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-004, API-010, API-011 |
+| SCHEDULE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-004, API-005, API-009, API-010, API-011 |
 | SCHEDULE_409_CATEGORY_DUPLICATED | 409 | 이미 있는 카테고리입니다. | API-010 |
 
 ### 정산 (SettlementErrorCode) — API-034~045
@@ -378,7 +379,10 @@ SCHEDULE_404_GROUP_TERM_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND(없거나 다
 
 cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 
-**에러**: COMMON_400(기간 파라미터 누락 시, 잘못된 cursor)
+**Logics**: 시작 시각이 아니라 from~to 기간과 **겹치는** 일정을 내려준다(startAt ≤ to 23:59:59 그리고 endAt ≥ from
+00:00) — 여러 날에 걸친 일정도 캘린더 칸마다 보여야 하기 때문이다.
+
+**에러**: COMMON_400(기간 누락·from이 to보다 늦음), SCHEDULE_400_INVALID_CURSOR, SCHEDULE_404_GROUP_TERM_NOT_FOUND
 
 ---
 
@@ -421,7 +425,9 @@ location·memo에 빈 문자열을 보내면 지운다. 시작·종료 중 하�
 인증: 불필요. `has_operation_space = true`인 일정만 대상(운영 공간이 아닌 일정은 제외),
 종료되지 않은 것만 시작 시간순.
 
-**Query**: limit(선택, 기본 5)
+**Query**: limit(선택, 기본 5, 최대 20)
+
+종료되지 않은 것 = endAt이 현재(한국 시간)보다 뒤 — 진행 중인 일정도 포함한다.
 
 **Response data**: schedules[].scheduleId/categoryName/startAt/title/location/operationMenuCount
 

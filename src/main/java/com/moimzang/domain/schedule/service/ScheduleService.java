@@ -11,16 +11,22 @@ import com.moimzang.domain.schedule.dto.response.ScheduleCategoryListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleCreateResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleDetailResponse;
+import com.moimzang.domain.schedule.dto.response.ScheduleListResponse;
 import com.moimzang.domain.schedule.dto.response.ScheduleUpdateResponse;
+import com.moimzang.domain.schedule.dto.response.UpcomingScheduleListResponse;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.entity.ScheduleCategory;
 import com.moimzang.domain.schedule.exception.ScheduleErrorCode;
 import com.moimzang.domain.schedule.mapper.ScheduleMapper;
 import com.moimzang.domain.schedule.repository.ScheduleCategoryRepository;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.global.cursor.CursorCodec;
+import com.moimzang.global.cursor.CursorPageConstants;
+import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -43,6 +49,10 @@ public class ScheduleService {
 
     // 동아리 일정은 전부 한국 시간 기준이라 서버 시간대와 상관없이 D-day를 한국 날짜로 센다
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
+
+    // 홈 카드에 보여줄 다가오는 일정 수의 기본값·상한
+    private static final int UPCOMING_DEFAULT_LIMIT = 5;
+    private static final int UPCOMING_MAX_LIMIT = 20;
 
     // 일정을 등록한다. 운영 공간을 함께 만들면 출석·정산이 차수 단위로 동작해서 1차 차수도 같이 만든다
     @Transactional
@@ -68,6 +78,65 @@ public class ScheduleService {
         return ScheduleCreateResponse.builder()
                 .scheduleId(schedule.getId())
                 .hasOperationSpace(schedule.getHasOperationSpace())
+                .build();
+    }
+
+    // 캘린더에 띄울 일정을 조회한다. from~to 기간과 하루라도 겹치는 일정을 시작 시각순으로 내려준다
+    public ScheduleListResponse listSchedules(Long termId, LocalDate from, LocalDate to, String cursor, Integer size) {
+        log.info("[일정 목록 조회] 조회를 시작합니다. termId = {}, from = {}, to = {}, cursor = {}", termId, from, to, cursor);
+
+        findGroupTerm(termId, "일정 목록 조회");
+        if (from.isAfter(to)) {
+            log.warn("[일정 목록 조회] 조회 시작일이 종료일보다 늦습니다. from = {}, to = {}", from, to);
+            throw new CustomException(CommonErrorCode.BAD_REQUEST);
+        }
+        int limit = CursorPageConstants.resolveSize(size);
+
+        // cursor의 정렬 값은 시작 시각을 ISO-8601 문자열로 직렬화한 것이다
+        LocalDateTime cursorStartAt = null;
+        Long cursorId = null;
+        if (cursor != null) {
+            try {
+                CursorCodec decoded = CursorCodec.decode(cursor);
+                cursorStartAt = LocalDateTime.parse(decoded.getSortValue());
+                cursorId = decoded.getId();
+            } catch (RuntimeException e) {
+                log.warn("[일정 목록 조회] cursor 형식이 올바르지 않습니다. termId = {}, cursor = {}", termId, cursor);
+                throw new CustomException(ScheduleErrorCode.SCHEDULE_400_INVALID_CURSOR);
+            }
+        }
+
+        // to는 그날 전체를 포함해야 해서 하루의 마지막 시각까지 본다
+        List<Schedule> fetched = scheduleRepository.searchCalendar(termId, from.atStartOfDay(), to.atTime(LocalTime.MAX),
+                cursorStartAt, cursorId, limit + 1);
+        boolean hasNext = fetched.size() > limit;
+        List<Schedule> page = hasNext ? fetched.subList(0, limit) : fetched;
+
+        String nextCursor = null;
+        if (hasNext) {
+            Schedule last = page.get(page.size() - 1);
+            nextCursor = CursorCodec.encode(last.getStartAt().toString(), last.getId());
+        }
+
+        log.info("[일정 목록 조회] 조회를 완료했습니다. termId = {}, count = {}, hasNext = {}", termId, page.size(), hasNext);
+        return ScheduleListResponse.builder()
+                .schedules(scheduleMapper.toSummaryResponses(page))
+                .nextCursor(nextCursor)
+                .build();
+    }
+
+    // 홈 '다가오는 운영 일정' 카드에 띄울 일정을 조회한다
+    public UpcomingScheduleListResponse listUpcomingSchedules(Long termId, Integer limit) {
+        log.info("[다가오는 일정 조회] 조회를 시작합니다. termId = {}, limit = {}", termId, limit);
+
+        findGroupTerm(termId, "다가오는 일정 조회");
+        int resolvedLimit = limit == null || limit <= 0 ? UPCOMING_DEFAULT_LIMIT : Math.min(limit, UPCOMING_MAX_LIMIT);
+        List<Schedule> schedules = scheduleRepository.findUpcomingOperationSchedules(
+                termId, LocalDateTime.now(SERVICE_ZONE), resolvedLimit);
+
+        log.info("[다가오는 일정 조회] 조회를 완료했습니다. termId = {}, count = {}", termId, schedules.size());
+        return UpcomingScheduleListResponse.builder()
+                .schedules(scheduleMapper.toUpcomingResponses(schedules))
                 .build();
     }
 
