@@ -212,11 +212,11 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | SETTLEMENT_400_AMOUNT_NOT_POSITIVE | 400 | 금액은 양의 정수여야 합니다. | API-034 |
 | SETTLEMENT_400_SUBSIDY_OUT_OF_RANGE | 400 | 지원금은 0원 이상이며 영수증 금액 이하여야 합니다. | API-034 |
-| SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED | 409 | 이미 영수증이 등록된 차수입니다. | API-034 |
+| SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED | 409 | 이미 영수증이 등록된 차수입니다. | (미사용, decisions #41) |
 | SETTLEMENT_423_RECEIPT_LOCKED_BY_PAYMENT | 423 | 입금 내역이 있어 영수증을 수정할 수 없습니다. | API-034 |
 | SETTLEMENT_423_PAID_CANNOT_DELETE | 423 | 입금 완료 상태는 삭제할 수 없습니다. | API-041 |
 | SETTLEMENT_409_RECEIPT_NOT_REGISTERED | 409 | 영수증이 등록되지 않았습니다. | API-038, API-039 |
-| SETTLEMENT_423_PAID_MEMBER_LOCKED | 423 | 입금 완료된 인원이 포함되어 있어 명단을 수정할 수 없습니다. | API-038 |
+| SETTLEMENT_423_PAID_MEMBER_LOCKED | 423 | 입금 완료된 인원이 포함되어 있어 명단을 수정할 수 없습니다. | API-032, API-038 |
 | SETTLEMENT_423_ROUND_LOCKED_BY_PAYMENT | 423 | 차수에 연결된 입금 내역이 있어 삭제할 수 없습니다. | API-035 |
 | SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED | 409 | 영수증이 등록되지 않은 차수가 포함되어 있습니다. | API-044 |
 | SETTLEMENT_409_ACCOUNT_NOT_SET | 409 | 입금 안내 계좌가 설정되지 않았습니다. | API-044 |
@@ -745,15 +745,16 @@ registeredAt, isLocked. **에러**: COMMON_404
 #### API-034 · PUT /api/rounds/{roundId}/receipt · 영수증 등록
 인증: 불필요. 차수당 영수증 1개, schedule_round의 영수증 컬럼에 저장.
 
-**Request**: storeName, transactedAt, totalAmount(양의 정수), clubSubsidyAmount(0 이상·총액 이하),
+**Request**: storeName(선택), transactedAt(선택), totalAmount(양의 정수), clubSubsidyAmount(0 이상·총액 이하),
 imageKey(사진 없이 등록 시 생략)
 
 **Logics**: 금액(totalAmount/clubSubsidyAmount)이 바뀌면 그 차수에 이미 저장된 정산 명단의 1인
 청구액도 API-038과 같은 공식으로 재계산한다. 입금 완료자가 있으면 SETTLEMENT_423_RECEIPT_LOCKED_BY_PAYMENT로 수정 자체가
-막히므로 재계산은 아직 아무도 입금하지 않은 상태에서만 일어난다.
+막히므로 재계산은 아직 아무도 입금하지 않은 상태에서만 일어난다. imageKey를 생략하면 기존에 저장된
+이미지 URL을 그대로 유지한다.
 
 **Response data**: roundId, label, totalAmount, clubSubsidyAmount
-**에러**: COMMON_400, SETTLEMENT_400_AMOUNT_NOT_POSITIVE, SETTLEMENT_400_SUBSIDY_OUT_OF_RANGE, COMMON_404, SETTLEMENT_409_RECEIPT_ALREADY_REGISTERED, SETTLEMENT_423_RECEIPT_LOCKED_BY_PAYMENT
+**에러**: COMMON_400, SETTLEMENT_400_AMOUNT_NOT_POSITIVE, SETTLEMENT_400_SUBSIDY_OUT_OF_RANGE, COMMON_404, SETTLEMENT_423_RECEIPT_LOCKED_BY_PAYMENT
 
 ---
 
@@ -766,17 +767,25 @@ imageKey(사진 없이 등록 시 생략)
 **장부(ledger_entry)는 영향받지 않는다** — 이미 생성된 내역·잔액은 유지되고 `schedule_round_id` 참조만
 NULL로 전환된다(고아 상태). 상세 근거는 `docs/decisions.md` #4.
 
-**Response**: 204. **에러**: COMMON_404, SETTLEMENT_423_ROUND_LOCKED_BY_PAYMENT
+**Response**: 200 + `BaseResponse.success()`(COMMON_200). **에러**: COMMON_404, SETTLEMENT_423_ROUND_LOCKED_BY_PAYMENT
 
 ---
 
 #### API-036 · POST /api/rounds/{roundId}/receipt/ocr · 영수증 AI 인식
-인증: 불필요. 외부 AI(OCR)로 영수증 이미지를 분석해 인식 결과만 반환(저장 안 함). 인식 실패 항목은
-null. "다시 촬영하기"는 이 API 재호출.
+인증: 불필요. Gemini 멀티모달로 영수증 이미지를 직접 분석해 인식 결과만 반환한다. "저장 안 함"은
+영수증 레코드(schedule_round의 영수증 컬럼)를 저장하지 않는다는 뜻이고, 이미지 파일 자체는 인식이
+성공했을 때만 저장해 그 스토리지 키를 `imageKey`로 돌려준다(API-034 등록 시 그대로 전달). 인식 실패
+항목은 null. "다시 촬영하기"는 이 API 재호출.
 
-**Request**: image(multipart/form-data)
-**Response data**: storeName, transactedAt, totalAmount, imageKey
-**에러**: COMMON_400(이미지 없음/형식 오류), RECEIPT_502_RECOGNITION_FAILED
+**Request**: image(multipart/form-data, jpg/jpeg/png/webp만 허용)
+**Response data**: storeName, transactedAt, totalAmount, imageKey(저장된 이미지의 스토리지 키)
+
+**Logics**: 502는 호출 실패(네트워크·타임아웃·HTTP 오류)·응답 파싱 실패·API 키 미설정에만 던진다.
+storeName/transactedAt/totalAmount 세 필드가 전부 null이어도 인식 자체는 성공으로 보고 200과 함께
+null 필드를 내려준다.
+
+**에러**: COMMON_400(이미지 없음·빈 파일·허용되지 않는 확장자), COMMON_404(존재하지 않는 roundId —
+api-spec 원문에는 없었으나 다른 차수 API와의 일관성을 위해 추가, 문서 누락으로 간주), RECEIPT_502_RECOGNITION_FAILED
 
 ---
 
@@ -801,7 +810,8 @@ cursor 페이지네이션(정렬 기준: createdAt).
 
 **Request**: attendeeIds(number[])
 **Response data**: label, targetCount, billedAmount
-**에러**: COMMON_400(명단 비어있음), COMMON_404, SETTLEMENT_409_RECEIPT_NOT_REGISTERED, SETTLEMENT_423_PAID_MEMBER_LOCKED
+**에러**: COMMON_400(명단 비어있음, 그 차수가 속한 일정 소속이 아니거나 존재하지 않는 attendeeId 포함),
+COMMON_404, SETTLEMENT_409_RECEIPT_NOT_REGISTERED, SETTLEMENT_423_PAID_MEMBER_LOCKED
 
 ---
 
@@ -818,25 +828,34 @@ cursor 페이지네이션(정렬 기준: createdAt).
 갱신. AI 비서 결과 카드의 "입금 확인"도 이 API 호출. 장부 반영은 API-074(정산 내역 새로고침)에서 처리.
 
 **Request**: paid(boolean)
+
+**Logics**: 토글이 아니라 paid 값으로 상태를 지정한다. 이미 같은 상태로 재요청하면 멱등하게 처리하고
+그 차수의 기존 paidAt을 그대로 유지한다(상태가 실제로 바뀔 때만 paidAt을 갱신). 한 사람이 일정 내
+여러 차수에 걸쳐 있으면 차수별로 독립적으로 적용하고, 응답의 대표 paidAt은 입금 확인이면 그중 가장
+최근 값을, 되돌리기면 null을 내려준다.
+
 **Response data**: attendeeId, name, paymentStatus, paidAt
-**에러**: COMMON_404
+**에러**: COMMON_400(paid 누락), COMMON_404(그 일정에 정산 대상이 없는 참가자)
 
 ---
 
 #### API-041 · DELETE /api/schedules/{scheduleId}/payments/{attendeeId} · 입금 명단에서 삭제
 인증: 불필요. 미입금 카드 스와이프 "삭제하기". URL에 roundId가 없으므로 scheduleId 기준으로 그
-일정의 **모든 차수**에서 그 사람을 제외한다(특정 차수 1개만 빼는 게 아니다). 각 차수는 남은
-인원으로 청구액 재계산.
-**에러**: COMMON_404, SETTLEMENT_423_PAID_CANNOT_DELETE
+일정의 **모든 차수**에서 그 사람의 settlement_target만 삭제한다(특정 차수 1개만 빼는 게 아니고,
+API-032와 달리 round_attendee는 건드리지 않는다 — "입금 명단에서 뺀다"는 출석 사실과는 별개
+결정이다). 각 차수는 남은 인원으로 청구액 재계산(남은 인원이 0명이면 재계산을 건너뛴다).
+**에러**: COMMON_404(그 일정에 정산 대상이 없는 참가자), SETTLEMENT_423_PAID_CANNOT_DELETE
 
 #### API-042 · GET /api/schedules/{scheduleId}/payments · 입금 현황 조회
 인증: 불필요. **Query**: status(UNPAID|PAID|ALL, 기본 UNPAID), keyword(선택), cursor(선택),
 size(선택, 기본 20)
 
 **Response data**: payments[].attendeeId/name/affiliation/phoneLast4/totalBilledAmount(여러
-차수 합산)/paymentStatus, nextCursor
+차수 합산)/paymentStatus(그 사람의 일정 내 모든 차수가 PAID여야 PAID, 한 차수라도 미납이면 UNPAID),
+nextCursor
 
-cursor 페이지네이션(정렬 기준: createdAt).
+cursor 페이지네이션(정렬 기준: `schedule_attendee.createdAt` — 사람 단위로 묶은 목록이라
+`settlement_target.createdAt`은 쓸 수 없다).
 
 **에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
@@ -852,29 +871,57 @@ cursor 페이지네이션(정렬 기준: createdAt).
 ---
 
 #### API-044 · POST /api/schedules/{scheduleId}/settlement-notice · 정산 공지 생성
-인증: 불필요. 선택된 차수 중 영수증 미등록/계좌 미설정이 있으면 409.
+인증: 불필요. 선택된 차수 중 영수증 미등록(또는 영수증은 등록됐지만 정산 명단을 아직 저장하지
+않은 차수 포함, 둘 다 같은 409)/계좌 미설정이 있으면 409.
 
 **Request**: roundIds(number[], 1개 이상)
+
+**Logics**: 선택한 차수를 roundNo 오름차순으로 정렬해 공지 문구에 나열하고, 그중 roundNo가 가장
+작은 차수의 계좌를 공지 전체의 대표 계좌로 쓴다(요청 roundIds 배열 순서와 무관하게 항상 같은
+결과). noticeText는 다음 형식으로 고정 생성한다(금액은 천 단위 콤마 표기):
+
+```
+[{scheduleTitle}] 정산 안내
+
+{label1}: {billedAmount1}원
+{label2}: {billedAmount2}원
+
+총 입금액: {combinedAmount}원
+{bankName} {accountNumber} ({accountHolder})
+
+확인 후 입금해주세요!
+```
+
 **Response data**: scheduleTitle, rounds[].label/billedAmount, combinedAmount, account.bankName/
 accountNumber/accountHolder, noticeText
 
-**에러**: SETTLEMENT_400_ROUND_SELECTION_REQUIRED, COMMON_404, SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED, SETTLEMENT_409_ACCOUNT_NOT_SET
-
-> **미확정**: 선택한 차수들의 계좌가 서로 다를 때 공지에 어느 계좌를 쓸지는 구현 시점에 정한다.
+**에러**: SETTLEMENT_400_ROUND_SELECTION_REQUIRED, COMMON_400(그 일정 소속이 아니거나 존재하지
+않는 roundId 포함), COMMON_404, SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED, SETTLEMENT_409_ACCOUNT_NOT_SET
 
 ---
 
 #### API-045 · GET /api/schedules/{scheduleId}/settlement · 정산 홈 조회
-인증: 불필요. settlementStatus는 그 차수 전원이 입금완료면 "정산 완료", 아니면 "정산중".
+인증: 불필요. 조회 전용이라 아무것도 저장하지 않는다.
 
-**Response data**: scheduleTitle, status, progress.paidCount/totalCount/rate, receipts[].roundId/label/
-storeName/totalAmount/registeredAt/settlementStatus, account.bankName/accountNumber/accountHolder
+**Logics**:
+- `progress`는 **사람 수** 기준이다(차수 수 아님). 그 사람의 일정 내 모든 차수가 PAID여야
+  `paidCount`에 포함한다(API-042의 사람 단위 집계와 같은 기준).
+- 최상위 `status`는 `progress.totalCount > 0 && progress.paidCount == progress.totalCount`면
+  "정산 완료", 그 외(전체 인원 0명 포함)는 "정산중"이다 — `rate`가 반올림으로 100%가 될 수 있어
+  `rate`가 아니라 인원수를 직접 비교한다. 이 `status`는 일정 전체 정산 대상 기준으로 계산하고,
+  `receipts[]` 필터(아래)와는 범위가 다르다.
+- `receipts[]`는 **영수증이 등록된 차수만** 포함한다(미등록 차수는 storeName/totalAmount가 없어
+  섞으면 null 항목이 생기기 때문). 각 항목의 `settlementStatus`는 그 차수 단위로 따로 계산한다 —
+  정산 명단(settlement_target)이 하나도 없으면(API-038 미실행) "정산중", 명단이 있으면 미입금이
+  하나도 없어야 "정산 완료"다.
+- `account`는 계좌가 설정된 차수 중 roundNo가 가장 작은 차수의 계좌를 대표로 쓴다(API-044와 같은
+  기준). 계좌가 설정된 차수가 하나도 없으면 `account`는 null이다(에러로 막지 않는다).
+
+**Response data**: scheduleTitle, status(일정 전체 정산 상태), progress.paidCount/totalCount/rate,
+receipts[].roundId/label/storeName/totalAmount/registeredAt/settlementStatus(차수별 정산 상태),
+account.bankName/accountNumber/accountHolder(설정된 계좌가 없으면 account 자체가 null)
 
 **에러**: COMMON_404
-
-> **미확정**: `progress`의 단위가 "사람 수"인지 "차수 수"인지는 화면 예시만으로 확정하지 못했다.
-> 선택된 차수들의 계좌가 서로 다를 때 `account`에 어느 계좌를 대표로 보여줄지도 함께 정해야
-> 한다(API-044의 동일 미확정 항목 참고). 구현 시점에 결정한다.
 
 ### 운영 메모
 
