@@ -7,6 +7,7 @@ import com.moimzang.domain.note.entity.OperationNote;
 import com.moimzang.domain.note.enums.NoteType;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
@@ -15,6 +16,18 @@ import org.springframework.util.StringUtils;
 public class OperationNoteRepositoryImpl implements OperationNoteRepositoryCustom {
 
     private final JPAQueryFactory queryFactory;
+
+    // 메모장 화면은 방금 쓴 메모가 맨 위에 와야 해서 작성 시각 내림차순으로 보여준다
+    @Override
+    public List<OperationNote> search(Long scheduleId, NoteType type, String keyword,
+                                      LocalDateTime cursorCreatedAt, Long cursorId, int limit) {
+        return queryFactory.selectFrom(operationNote)
+                .where(operationNote.schedule.id.eq(scheduleId))
+                .where(typeEq(type), keywordContains(keyword), cursorCondition(cursorCreatedAt, cursorId))
+                .orderBy(operationNote.createdAt.desc(), operationNote.id.desc())
+                .limit(limit)
+                .fetch();
+    }
 
     // 메모는 일정에 딸려 있어 기수 조건이 일정을 거쳐야 걸린다. 어느 일정의 메모인지도
     // 응답에 써야 해서 schedule을 fetch join한다
@@ -53,6 +66,15 @@ public class OperationNoteRepositoryImpl implements OperationNoteRepositoryCusto
 
     private BooleanExpression scheduleIdEq(Long scheduleId) {
         return scheduleId == null ? null : operationNote.schedule.id.eq(scheduleId);
+    }
+
+    // (createdAt, id) 복합 비교. 내림차순이라 lt를 쓰고, 같은 초에 만든 메모는 id로 순서를 가른다
+    private BooleanExpression cursorCondition(LocalDateTime cursorCreatedAt, Long cursorId) {
+        if (cursorId == null) {
+            return null;
+        }
+        return operationNote.createdAt.lt(cursorCreatedAt)
+                .or(operationNote.createdAt.eq(cursorCreatedAt).and(operationNote.id.lt(cursorId)));
     }
 
     private BooleanExpression typeEq(NoteType type) {

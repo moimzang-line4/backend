@@ -110,6 +110,64 @@ class OperationNoteRepositoryImplTest {
         assertThat(operationNoteRepository.countForAssistant(groupTerm.getId(), "티켓", null, null)).isEqualTo(1);
     }
 
+    @Test
+    void search_그_일정의_메모만_최신_작성순으로_반환한다() {
+        OperationNote first = persistNote(schedule, "티켓 인쇄", "150장", "김서경");
+        OperationNote second = persistNote(schedule, "대관 확인", "대강당", "이수민");
+        persistNote(persistSchedule(groupTerm, "가을 MT"), "버스 예약", "45인승", "홍길동");
+        setCreatedAt(first, LocalDateTime.of(2026, 11, 1, 10, 0));
+        setCreatedAt(second, LocalDateTime.of(2026, 11, 2, 10, 0));
+
+        List<OperationNote> result = operationNoteRepository.search(schedule.getId(), null, null, null, null, 10);
+
+        assertThat(result).extracting(OperationNote::getId).containsExactly(second.getId(), first.getId());
+    }
+
+    @Test
+    void search_유형과_검색어_조건을_함께_건다() {
+        OperationNote todo = persistNote(schedule, "포스터 인쇄", "A2 30장", "김가은");
+        ReflectionTestUtils.setField(todo, "type", NoteType.TODO);
+        em.persistAndFlush(todo);
+        persistNote(schedule, "포스터 시안", "색감 결정", "김가은");
+        OperationNote otherTodo = persistNote(schedule, "대관 확인", "대강당", "이수민");
+        ReflectionTestUtils.setField(otherTodo, "type", NoteType.TODO);
+        em.persistAndFlush(otherTodo);
+
+        List<OperationNote> result =
+                operationNoteRepository.search(schedule.getId(), NoteType.TODO, "포스터", null, null, 10);
+
+        assertThat(result).extracting(OperationNote::getId).containsExactly(todo.getId());
+    }
+
+    @Test
+    void search_cursor는_그_지점_이후부터_반환하고_같은_시각이면_id로_가른다() {
+        LocalDateTime sameTime = LocalDateTime.of(2026, 11, 3, 10, 0);
+        OperationNote a = persistNote(schedule, "A", "내용", null);
+        OperationNote b = persistNote(schedule, "B", "내용", null);
+        OperationNote c = persistNote(schedule, "C", "내용", null);
+        setCreatedAt(a, sameTime);
+        setCreatedAt(b, sameTime);
+        setCreatedAt(c, sameTime.plusHours(1));
+
+        // cursor는 서비스가 DB에서 읽어온 값으로 만들기 때문에 테스트도 다시 조회한 값을 쓴다
+        OperationNote reloadedB = operationNoteRepository.findById(b.getId()).orElseThrow();
+
+        List<OperationNote> result = operationNoteRepository.search(
+                schedule.getId(), null, null, reloadedB.getCreatedAt(), reloadedB.getId(), 10);
+
+        assertThat(result).extracting(OperationNote::getId).containsExactly(a.getId());
+    }
+
+    // 작성 시각은 감사 기능이 자동으로 넣어서, 정렬을 확인하려면 저장 후 직접 덮어쓴다
+    private void setCreatedAt(OperationNote note, LocalDateTime createdAt) {
+        em.getEntityManager()
+                .createNativeQuery("UPDATE operation_note SET created_at = ? WHERE id = ?")
+                .setParameter(1, createdAt)
+                .setParameter(2, note.getId())
+                .executeUpdate();
+        em.clear();
+    }
+
     private ClubGroup persistClubGroup(String name) {
         ClubGroup group = BeanUtils.instantiateClass(ClubGroup.class);
         ReflectionTestUtils.setField(group, "name", name);
