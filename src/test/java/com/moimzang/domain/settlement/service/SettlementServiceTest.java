@@ -30,6 +30,7 @@ import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementHomeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementNoticeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetListResponse;
@@ -1158,5 +1159,172 @@ class SettlementServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(SettlementErrorCode.SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED);
+    }
+
+    @Test
+    void getSettlementHome_전원_입금완료_차수는_정산_완료로_표시한다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round = roundWithId(10L, 100L, 1, "1차");
+        setReceiptAndAccount(round, 40000, 0, "국민은행", "111-111", "김모임");
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of(round));
+        given(settlementTargetRepository.countByScheduleRoundId(10L)).willReturn(2L);
+        given(settlementTargetRepository.existsByScheduleRoundIdAndPaymentStatus(10L, PaymentStatus.UNPAID)).willReturn(false);
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null)).willReturn(List.of());
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getReceipts()).hasSize(1);
+        assertThat(response.getReceipts().get(0).getSettlementStatus()).isEqualTo("정산 완료");
+    }
+
+    @Test
+    void getSettlementHome_일부_미입금_차수는_정산중으로_표시한다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round = roundWithId(10L, 100L, 1, "1차");
+        setReceiptAndAccount(round, 40000, 0, "국민은행", "111-111", "김모임");
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of(round));
+        given(settlementTargetRepository.countByScheduleRoundId(10L)).willReturn(2L);
+        given(settlementTargetRepository.existsByScheduleRoundIdAndPaymentStatus(10L, PaymentStatus.UNPAID)).willReturn(true);
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null)).willReturn(List.of());
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getReceipts().get(0).getSettlementStatus()).isEqualTo("정산중");
+    }
+
+    @Test
+    void getSettlementHome_정산_대상이_0명이면_rate_0을_반환한다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of());
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null)).willReturn(List.of());
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getProgress().getTotalCount()).isEqualTo(0L);
+        assertThat(response.getProgress().getPaidCount()).isEqualTo(0L);
+        assertThat(response.getProgress().getRate()).isEqualTo(0);
+        assertThat(response.getStatus()).isEqualTo("정산중");
+    }
+
+    @Test
+    void getSettlementHome_계좌가_다른_차수_중_roundNo가_가장_작은_차수의_계좌를_대표로_쓴다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round1 = roundWithId(10L, 100L, 1, "1차");
+        ScheduleRound round2 = roundWithId(11L, 100L, 2, "2차");
+        setReceiptAndAccount(round1, 40000, 0, "국민은행", "111-111", "1차계좌주");
+        setReceiptAndAccount(round2, 30000, 0, "신한은행", "222-222", "2차계좌주");
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        // 리포지토리가 반환하는 순서를 일부러 뒤섞어도 대표 계좌는 roundNo 기준으로 고정된다
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of(round2, round1));
+        given(settlementTargetRepository.countByScheduleRoundId(any())).willReturn(0L);
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null)).willReturn(List.of());
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getAccount().getBankName()).isEqualTo("국민은행");
+        assertThat(response.getAccount().getAccountHolder()).isEqualTo("1차계좌주");
+    }
+
+    @Test
+    void getSettlementHome_존재하지_않는_일정이면_CommonErrorCode_NOT_FOUND를_던진다() {
+        given(scheduleRepository.findById(100L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> settlementService.getSettlementHome(100L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void getSettlementHome_정산_명단이_없는_차수는_정산중으로_표시한다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round = roundWithId(10L, 100L, 1, "1차");
+        setReceiptAndAccount(round, 40000, 0, "국민은행", "111-111", "김모임");
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of(round));
+        given(settlementTargetRepository.countByScheduleRoundId(10L)).willReturn(0L);
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null)).willReturn(List.of());
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getReceipts().get(0).getSettlementStatus()).isEqualTo("정산중");
+        verify(settlementTargetRepository, never()).existsByScheduleRoundIdAndPaymentStatus(any(), any());
+    }
+
+    @Test
+    void getSettlementHome_영수증_미등록_차수는_receipts에서_제외한다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound registeredRound = roundWithId(10L, 100L, 1, "1차");
+        setReceiptAndAccount(registeredRound, 40000, 0, "국민은행", "111-111", "김모임");
+        ScheduleRound unregisteredRound = roundWithId(11L, 100L, 2, "2차");
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of(registeredRound, unregisteredRound));
+        given(settlementTargetRepository.countByScheduleRoundId(10L)).willReturn(0L);
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null)).willReturn(List.of());
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getReceipts()).hasSize(1);
+        assertThat(response.getReceipts().get(0).getRoundId()).isEqualTo(10L);
+    }
+
+    @Test
+    void getSettlementHome_사람_단위로_집계해_모든_차수가_PAID여야_완료로_센다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleAttendee attendee1 = attendeeWithId(200L, 100L, "김모임");
+        ScheduleAttendee attendee2 = attendeeWithId(201L, 100L, "박모임");
+        SettlementTarget a1r1 = settlementTargetWithAttendee(1L, attendee1, 20000, PaymentStatus.PAID, LocalDateTime.now());
+        SettlementTarget a1r2 = settlementTargetWithAttendee(2L, attendee1, 15000, PaymentStatus.PAID, LocalDateTime.now());
+        SettlementTarget a2r1 = settlementTargetWithAttendee(3L, attendee2, 20000, PaymentStatus.PAID, LocalDateTime.now());
+        SettlementTarget a2r2 = settlementTargetWithAttendee(4L, attendee2, 15000, PaymentStatus.UNPAID, LocalDateTime.now());
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of());
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null))
+                .willReturn(List.of(a1r1, a1r2, a2r1, a2r2));
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getProgress().getTotalCount()).isEqualTo(2L);
+        assertThat(response.getProgress().getPaidCount()).isEqualTo(1L);
+        assertThat(response.getProgress().getRate()).isEqualTo(50);
+    }
+
+    @Test
+    void getSettlementHome_전체가_정산_완료면_상위_status도_정산_완료를_반환한다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleAttendee attendee = attendeeWithId(200L, 100L, "김모임");
+        SettlementTarget target = settlementTargetWithAttendee(1L, attendee, 20000, PaymentStatus.PAID, LocalDateTime.now());
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of());
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null)).willReturn(List.of(target));
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getStatus()).isEqualTo("정산 완료");
+    }
+
+    @Test
+    void getSettlementHome_설정된_계좌가_없으면_account에_null을_반환한다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round = roundWithId(10L, 100L, 1, "1차");
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findOrderedRounds(100L)).willReturn(List.of(round));
+        given(settlementTargetRepository.findByScheduleForAssistant(100L, null)).willReturn(List.of());
+
+        SettlementHomeResponse response = settlementService.getSettlementHome(100L);
+
+        assertThat(response.getAccount()).isNull();
     }
 }
