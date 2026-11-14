@@ -14,11 +14,14 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long>,
     @Query("update LedgerEntry e set e.scheduleRound = null where e.scheduleRound.id = :scheduleRoundId")
     void clearScheduleRoundReference(@Param("scheduleRoundId") Long scheduleRoundId);
 
-    // 일정 삭제 시 그 일정의 모든 차수를 가리키던 자동기록의 참조만 끊는다. 장부 금액·잔액은 그대로 둔다
+    // 일정 삭제 시 그 일정을 가리키던 자동기록의 참조만 끊는다. 자동기록은 이제 schedule_id로
+    // 연결되므로(일정 단위 합산) e.schedule을 직접 조건·대상으로 삼는다. e.scheduleRound 조건은
+    // 과거 "차수 단위" 설계에서 생긴 레거시 데이터를 대비해 함께 둔다. 장부 금액·잔액은 그대로 둔다
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
-            update LedgerEntry e set e.scheduleRound = null
-            where e.scheduleRound.id in (select r.id from ScheduleRound r where r.schedule.id = :scheduleId)
+            update LedgerEntry e set e.schedule = null, e.scheduleRound = null
+            where e.schedule.id = :scheduleId
+               or e.scheduleRound.id in (select r.id from ScheduleRound r where r.schedule.id = :scheduleId)
             """)
     void clearScheduleReference(@Param("scheduleId") Long scheduleId);
 }
