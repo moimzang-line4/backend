@@ -693,3 +693,59 @@ AI 비서용 `SettlementStatusTool.aggregateByAttendee`가 이미 쓰고 있는 
 `groupBy(scheduleAttendee.id)` + `CaseBuilder` 기반 조건부 합산으로 사람 단위 미납 차수 수를
 세어, `status=PAID`면 미납 차수 0건, `status=UNPAID`면 1건 이상을 `having`으로 거른다.
 `findByScheduleForAssistant`는 전혀 수정하지 않았다.
+
+## 55. API-044 선택 차수들의 계좌가 다를 때는 roundNo가 가장 작은 차수의 계좌를 대표로 쓴다
+`docs/api-spec.md`에 "미확정"으로 남아 있던 항목이다(API-045 정산 홈의 대표 계좌 표시도 같은
+문제로 묶여 있었다). 구현 전에 확인했다(사용자 결정, 2026-11-15) — 선택한 차수 중 **roundNo가
+가장 작은 차수의 계좌**를 공지 전체의 대표 계좌로 쓴다.
+
+요청 `roundIds` 배열에 온 순서를 그대로 쓰거나(배열 첫 번째) 계좌가 전부 같아야 한다고
+강제하는(불일치 시 새 409) 대안도 검토했지만, 전자는 FE가 배열을 어떤 순서로 보내는지에 따라
+결과가 달라져 결정적이지 않고, 후자는 지금 12개 코드 안에 맞는 게 없어 새 코드가 필요해 범위를
+키운다. roundNo 기준은 요청 순서와 무관하게 항상 같은 결과가 나오고 기존 에러 코드만으로
+충분하다. 구현은 선택한 차수를 `roundNo` 오름차순으로 정렬해 그 첫 번째 차수를 대표로 쓴다
+— 이 정렬이 공지 문구의 차수별 나열 순서(#56)도 함께 고정한다.
+
+## 56. noticeText 형식을 "차수별 나열 + 합산"으로 새로 정한다
+`docs/prd.md`·`docs/api-spec.md` 어디에도 `noticeText`의 문구 형식이 없어 구현 전에 새로
+정했다(사용자 결정, 2026-11-15).
+
+```
+[{scheduleTitle}] 정산 안내
+
+{label1}: {billedAmount1}원
+{label2}: {billedAmount2}원
+
+총 입금액: {combinedAmount}원
+{bankName} {accountNumber} ({accountHolder})
+
+확인 후 입금해주세요!
+```
+
+차수는 roundNo 오름차순(#55)으로 나열하고, 금액은 천 단위 콤마를 넣어 표기한다(`String.format(
+Locale.US, "%,d", amount)` — 서버 로케일에 따라 구분자가 달라지지 않도록 로케일을 명시로
+고정했다). `billedAmount`·`combinedAmount` 등 구조화된 숫자 필드는 기존 관례대로 숫자 그대로
+내려주고(§1 "금액은 숫자로 직렬화"), 콤마 포맷은 사람이 복사해 붙여넣는 `noticeText` 문자열
+안에서만 적용한다 — 두 규칙은 서로 다른 필드를 가리켜 충돌하지 않는다.
+
+## 57. 영수증은 등록됐지만 정산 명단이 없는 차수는 SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED로 거부한다
+API-038(정산 명단 저장)을 아직 돌리지 않은 차수는 영수증(`hasReceipt()`)은 있어도
+`settlement_target`이 하나도 없어 1인 청구액을 계산할 수 없다. 이런 차수를 API-044에 포함시키면
+어떻게 처리할지 구현 전에 확인했다(사용자 결정, 2026-11-15) — **영수증 미등록과 같은
+`SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED`로 거부**한다. 둘 다 "정산 준비가 안 끝난
+차수"라는 같은 의미라 새 에러 코드를 만들지 않는다.
+
+`billedAmount`를 0으로 채워 공지에 포함시키는 대안도 검토했지만, 실제로는 아직 금액이 확정되지
+않은 차수를 "0원"으로 보여주면 오해를 줄 수 있어 거부 쪽을 택했다. 구현은
+`SettlementTargetRepository.findFirstByScheduleRoundId`(API-037에서 쓰던 메서드, 그 차수
+전원이 같은 금액이라 1건만 봐도 된다)가 비어있으면 이 코드로 던진다.
+
+영수증은 등록됐지만 명단이 없는 경우에도 메시지가 "영수증이 등록되지 않은 차수"로 나가 상황과
+다소 맞지 않음. FE가 서버 메시지를 그대로 노출하면 전용 코드 신설 검토.
+
+## 58. API-044 roundIds는 decisions #49와 같은 기준으로 검증하고 중복을 제거한다
+API-038(#49)에서 이미 정한 기준을 그대로 따른다(사용자 결정, 2026-11-15) — `roundIds`에 그
+일정 소속이 아니거나 존재하지 않는 id가 섞이면 전용 코드 없이 `COMMON_400`으로 거부하고,
+중복된 id는 `distinct()`로 정리한 뒤 처리한다. 같은 검증 로직이 두 API(API-038, API-044)에서
+반복되지만, 검증 대상이 다른 엔티티(`schedule_attendee` vs `schedule_round`)라 공통 헬퍼로
+묶지 않고 각 Service에 그대로 둔다.
