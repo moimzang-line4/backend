@@ -1,7 +1,72 @@
 package com.moimzang.domain.budget.controller;
 
+import com.moimzang.domain.budget.dto.request.LedgerEntryCreateRequest;
+import com.moimzang.domain.budget.dto.request.LedgerEntryUpdateRequest;
+import com.moimzang.domain.budget.dto.response.LedgerEntryCreateResponse;
+import com.moimzang.domain.budget.dto.response.LedgerEntryDetailResponse;
+import com.moimzang.domain.budget.dto.response.LedgerEntryUpdateResponse;
+import com.moimzang.global.response.BaseResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 
 @Tag(name = "예산", description = "장부·수입·지출 관리 API")
 public interface BudgetApi {
+
+    @Operation(summary = "장부 직접 입력", description = "장부에 직접 입력한다. auto_category·schedule·scheduleRound는 "
+            + "전부 null로 생성된다(자동 기록과 구분).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "입력 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<LedgerEntryCreateResponse>> createLedgerEntry(
+            @Parameter(description = "기수 ID", example = "1") Long termId,
+            @Valid LedgerEntryCreateRequest request);
+
+    @Operation(summary = "장부 내역 상세 조회", description = "source는 auto_category 유무로 판별한다(자동 기록이면 "
+            + "RECEIPT, 직접 입력이면 MANUAL). origin은 자동 기록이면서 출처 일정이 살아있을 때만 채워지고, 직접 입력과 "
+            + "출처 일정이 삭제된 고아 자동 기록은 둘 다 null이다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<LedgerEntryDetailResponse>> getLedgerEntry(
+            @Parameter(description = "장부 항목 ID", example = "1") Long entryId);
+
+    @Operation(summary = "장부 내역 수정", description = "직접 입력 내역만 수정 가능하다. 보낸 필드만 반영하는 부분 수정이고, "
+            + "생략한 필드는 기존 값을 유지한다. 자동 기록은 고아 여부와 무관하게 항상 거부한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "수정 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "LEDGER_409_AUTO_ENTRY_LOCKED",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<LedgerEntryUpdateResponse>> updateLedgerEntry(
+            @Parameter(description = "장부 항목 ID", example = "1") Long entryId,
+            @Valid LedgerEntryUpdateRequest request);
+
+    @Operation(summary = "장부 내역 삭제", description = "직접 입력은 항상 삭제 가능하다. 자동 기록은 출처 일정이 살아있으면 "
+            + "409로 거부하고, 일정이 삭제되어 고아가 된 뒤에는 일반 항목처럼 삭제할 수 있다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "삭제 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "LEDGER_409_AUTO_ENTRY_LOCKED(원본이 살아있는 경우)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> deleteLedgerEntry(
+            @Parameter(description = "장부 항목 ID", example = "1") Long entryId);
 }

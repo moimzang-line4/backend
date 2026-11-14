@@ -794,3 +794,70 @@ API-044(#55)에서 정한 "계좌가 설정된 차수 중 roundNo가 가장 작�
 API-045는 조회 전용이라 그런 검증이 없다 — 그래서 후보를 "계좌가 설정된 차수"로 먼저 거른
 뒤 그중 roundNo가 가장 작은 차수를 고르고, 계좌가 설정된 차수가 하나도 없으면 `account`를
 `null`로 내려준다(API-043으로 계좌를 설정하기 전 기본 상태와 동일— 에러로 막지 않는다).
+
+## 63. 장부 자동기록은 차수 단위가 아니라 일정 단위로 합산한다 — decisions #2를 대체한다
+`ledger_entry`의 자동기록 기준을 구현 전에 다시 확인했다(사용자 결정, 2026-11-16) — **#2("차수
+단위 1건")를 대체**하고, **일정(`schedule`) 단위로 최대 4줄**을 생성한다: `RECEIPT_EXPENSE`(영수증
+지출, 지원금 제외), `CLUB_SUBSIDY_EXPENSE`(동아리 지원금 지출), `ROUNDING_SUBSIDY_EXPENSE`(100원
+버림 차액 "추가 동아리 지원금" 지출), `PAYMENT_INCOME`(부원 납부 수입). 지출 3줄과 수입 1줄 모두
+**API-074(정산 내역 새로고침) 시점에 생성**한다 — API-040(입금 확인) 등 다른 트리거는 두지 않는다.
+
+같은 일정에서 이 4종이 각각 최대 1건만 존재해야 해서 `ledger_entry`에 `auto_category`(enum:
+`LedgerAutoCategory`, 직접 입력이면 null) 컬럼을 추가하고 `UNIQUE(schedule_id, auto_category)`
+제약을 건다. `type`(수입/지출)만으로는 같은 일정의 EXPENSE 3종을 구분할 수 없어 별도 컬럼이
+필요했다. 마이그레이션은 `V6__ledger_entry_auto_category.sql`.
+
+## 64. 자동기록의 보존 앵커가 schedule_round_id에서 schedule_id로 바뀐다 — decisions #4 메커니즘 변경
+#4("영수증 삭제 시 schedule_round_id 참조만 NULL로 전환해 장부 원본을 보존한다")는 "차수 단위"
+설계를 전제로 한 메커니즘이었다. #63으로 자동기록이 일정 단위가 되면서, 새 자동기록은 처음부터
+`schedule_round_id`를 채우지 않고(항상 null) `schedule_id`로만 연결된다 — 그래서 **보존의
+앵커가 `schedule_id`로 옮겨간다**(사용자 결정, 2026-11-16). "장부 원본은 보존한다"는 #4의
+원칙 자체는 바뀌지 않는다.
+
+한 일정에 차수가 여러 개 있고 그중 하나의 영수증만 삭제되는 경우, 이미 일정 단위로 합산해 만든
+4줄의 금액이 더 이상 실제와 맞지 않게 된다. 이런 **사후 변경에 따른 장부 재동기화는 데모 범위에서
+제외**한다(이슈 #120 1번 "기획 확정 사항"과 같은 결정) — 필요하면 운영진이 API-074를 다시 호출해
+전체를 재계산하는 것으로 충분하다고 본다.
+
+## 65. API-069 source 판별은 schedule_round_id 대신 auto_category로 한다
+`docs/api-spec.md` API-069의 `source`(RECEIPT|MANUAL) 판별 기준("schedule_round_id 있으면
+RECEIPT")은 #63 이후로 더 이상 성립하지 않는다 — 자동기록도 이 컬럼이 항상 null이기 때문이다.
+**`auto_category IS NOT NULL`이면 자동기록(RECEIPT), null이면 MANUAL**로 판별하기로 확정했다
+(사용자 결정, 2026-11-16). 이번 이슈는 스키마·enum 기반만 다루므로 실제 구현은 API-069를
+구현하는 이슈에서 한다 — 여기서는 기준만 정해 둔다.
+
+## 66. API-071 origin·API-072/073 "원본"의 기준이 일정으로 바뀌고, 일정 삭제 시 참조를 함께 끊는다
+#63으로 자동기록이 일정 단위가 되면서, API-071의 `origin`(자동기록 출처 상세)과 API-072/073의
+"원본이 살아있는지" 판단 기준이 **차수(`schedule_round`)에서 일정(`schedule`)으로 바뀐다**(사용자
+결정, 2026-11-16). API-073의 기존 문구가 말하는 "원본 차수가 삭제되어 고아가 된 자동기록"이라는
+시나리오는 더 이상 성립하지 않는다 — 차수 하나를 지워도 `schedule_id`는 영향받지 않기 때문이다.
+고아가 되는 시점은 **그 일정 자체가 삭제될 때**로 바뀐다.
+
+이 결정에 맞춰 `LedgerEntryRepository.clearScheduleReference`(일정 삭제 시 호출)가
+`e.scheduleRound`만 null로 바꾸던 것을 **`e.schedule`도 함께 null로 바꾸도록** 수정했다. WHERE
+조건도 `e.schedule.id = :scheduleId`를 추가했다 — 기존 조건(`e.scheduleRound.id in (그 일정의
+차수들)`)만으로는 새 설계의 자동기록(처음부터 `scheduleRound`가 null)을 전혀 찾지 못해 수정이
+공회전하기 때문이다. 기존 조건은 과거 "차수 단위" 설계에서 생겼을 수 있는 레거시 데이터를 대비해
+그대로 남겼다. `ScheduleCascadeDeleter`(schedule 도메인) 등 다른 파트 파일은 수정하지 않았다 —
+이미 `deleteChildren`이 `clearScheduleReference`를 호출하고 있어 그대로 두면 된다.
+
+## 67. API-070~073 구현 전 미확정 사항 4건
+`docs/api-spec.md`에 명시되지 않은 세부 사항을 구현 전에 확인했다(사용자 결정, 2026-11-15).
+
+- **API-072 PATCH 방식**: 보낸 필드만 반영하는 **부분 수정**(null이면 기존 값 유지)이다.
+  `Schedule.update()`와 같은 관례다. `type`(INCOME/EXPENSE) 변경도 **허용**한다 — 자동 기록
+  보호는 이미 `LEDGER_409_AUTO_ENTRY_LOCKED`로 막혀 있어 직접 입력 내역의 `type` 변경을 추가로
+  제한할 이유가 없다.
+- **API-071 origin의 고아 표현**: 자동 기록이면서 출처 일정(`schedule`)이 살아있을 때만 `origin`
+  (`scheduleId`, `title`)을 채우고, **직접 입력과 고아가 된 자동 기록은 둘 다 `origin = null`**
+  이다. `source`(RECEIPT|MANUAL)로 이미 "자동 기록이었는지"를 구분할 수 있어, `origin`에 고아
+  여부를 나타내는 별도 플래그를 두지 않았다.
+- **필수값 누락·금액 0 이하 검증**: Service가 아니라 **요청 DTO의 Bean Validation**
+  (`@NotNull`/`@NotBlank`/`@Positive`)으로 검증한다 — `settlement`의 `AccountSetRequestTest`와
+  같은 관례로, Spring 컨텍스트 없이 `jakarta.validation.Validator`만으로 검증하는 별도 DTO
+  테스트를 둔다. `LedgerEntryUpdateRequest`(API-072, 부분 수정)는 전부 선택 필드라 `@NotNull`을
+  달지 않고, `amount`는 `@Positive`만(null은 Bean Validation 표준 동작대로 통과), `itemName`은
+  null은 허용하되 공백·빈 문자열은 `@Pattern(regexp = ".*\\S.*")`로 막는다(`@NotBlank`는 null도
+  위반으로 처리해 "생략" 의미를 낼 수 없어 쓰지 않았다).
+- **존재하지 않는 termId·entryId**: 다른 도메인과 같은 관례로 `CommonErrorCode.NOT_FOUND`
+  (COMMON_404)를 쓴다. 전용 코드를 만들지 않았다.
