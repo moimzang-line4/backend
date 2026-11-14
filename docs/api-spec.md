@@ -503,7 +503,8 @@ cursor 페이지네이션(정렬 기준: 회의 ID 내림차순 + 안건 ID 오�
 **Query**: status(ONGOING|PAST, 필수), type(ALL|SCHEDULE|MEETING, 기본 ALL), keyword(선택),
 sort(UPCOMING|LATEST|OLDEST|NAME, 기본 LATEST), cursor(선택), size(선택, 기본 20)
 
-**Response data**: items[].type/id/title/date/status, nextCursor
+**Response data**: totalCount(status·type·keyword 조건에 맞는 일정·회의록 전체 수, 화면의 '운영 기록 N개'),
+items[].type/id/title/date/status, nextCursor
 
 cursor 페이지네이션. `file`(API-064)과 같은 다중 정렬 패턴 — sort별로 cursor 키가 다르다:
 UPCOMING/LATEST/OLDEST는 그 항목의 날짜(date, 즉 schedule.start_at 또는 meeting.meeting_date),
