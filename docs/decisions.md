@@ -988,3 +988,61 @@ Gemini 멀티모달로 영수증 이미지를 직접 분석하도록 구현했�
   도메인 파일은 건드리지 않고, 기존 `ScheduleRepository.findById`(읽기 전용)만 재사용했다.
 - **서비스 분리**: `BudgetService`가 아니라 신규 `LedgerSyncService`에 둔다. 동기화 전체(일정
   여러 개 순회)는 `sync()` 메서드 하나에 걸린 단일 트랜잭션이다.
+
+## 71. API-075(장부 엑셀 다운로드) 구현 시점에 정한 세부 사항
+
+구현 전에 확인했다(사용자 결정, 2026-11-15).
+
+- **행 범위는 기수, 요약 범위는 그룹 전체 누적**: API-069와 완전히 같은 경계다 — 내역 행은
+  `LedgerEntryRepositoryCustom.findAllForExport(termId)`로 이 기수 것만, 상단 요약(누적 수입·
+  누적 지출·잔액)은 `aggregateByTypeForGroup(groupId)`로 그룹 전체(기수가 바뀌어도 이월,
+  decisions #68과 동일)를 그대로 재사용한다. API-069가 하는 집계 쿼리·합산 로직을 새로
+  작성하지 않고 동일한 레포지토리 메서드를 호출하는 것만으로 숫자 불일치를 원천적으로 막는다.
+- **요약 라벨에 범위를 명시하고, 기수 범위 합계를 한 줄 더 보여준다**: 1~3행은 "누적 수입(전체
+  기수)"/"누적 지출(전체 기수)"/"잔액(전체 기수)"으로 그룹 전체 누적임을 라벨에 적어 사람이
+  기수 집계로 착각하지 않게 한다. 4행은 "이번 기수 수입 합계"/"이번 기수 지출 합계"를 한 행에
+  같이 적는다(2컬럼씩 4셀). 이 값은 별도 쿼리로 다시 계산하지 않고 `LedgerExportExcelGenerator`
+  가 자신이 찍는 `entries`에서 직접 더해서 만든다 — 그래야 "내역 행 합계와 항상 일치"가 쿼리
+  두 번 호출 사이의 우연이 아니라 코드 구조로 보장된다.
+- **전체 행 조회는 새 레포지토리 메서드**: `LedgerEntryRepositoryCustom.findAllForExport`를
+  추가했다(QueryDSL, `LedgerEntryRepositoryImpl`). API-069의 `search`(cursor+limit)를 억지로
+  재사용하지 않고 별도로 뺐다 — 커서 없이 전체를 가져오는 용도 자체가 다르다. 정렬은
+  `entryDate asc, id asc`(API-069의 `desc, desc`와 방향만 반대, id를 2차 정렬로 둬서 같은
+  날짜 내역의 순서가 재호출해도 항상 같다).
+- **엑셀 라이브러리**: `org.apache.poi:poi-ooxml:5.5.1`(XSSFWorkbook, 비스트리밍). 이 프로젝트에
+  처음 추가하는 의존성이다. 6.0.0(2026-10-23 출시)도 있었지만 출시 한 달이 채 안 돼 검증이
+  더 될 5.x 계열의 최신 안정판(5.5.1)을 택했다 — 6.0.0은 JDK 17+ 요구(이 프로젝트는 21이라
+  문제없음)·deprecated API 완전 제거 등 메이저 변경이 있어 굳이 지금 올라탈 이유가 없다.
+  `build.gradle`에 의존성 한 줄만 추가했고, 다른 설정(로깅 브리지 등)은 손대지 않았다 — POI
+  5.x가 내부적으로 끌어오는 log4j-api가 구현체 없이 기동 시 경고 로그 한 줄을 남길 수 있지만
+  기능에는 영향이 없어 무시했다. 동아리 장부 규모(수백~수천 행)에서 스트리밍(SXSSF)까지는
+  필요 없다고 판단해 구현이 더 단순한 `XSSFWorkbook`을 썼다.
+- **저장은 `FileStorage` 직접 사용, `File` 엔티티·문서함에 등록하지 않는다**: 저장 키는
+  `"ledger-exports/{연}/{월}/{UUID}.xlsx"`(`LedgerExportKeyGenerator`, settlement 도메인의
+  `ReceiptImageKeyGenerator`와 같은 패턴). `fileName`(응답에 내려주는 사람이 읽는 이름)은
+  `"{그룹명}_{기수명}_장부_{yyyyMMdd}.xlsx"`로 확정했다 — file 도메인의 ZIP 다운로드(API-068)가
+  쓰는 `"{기수}자료{N}개.zip"`처럼 구분자 없는 한글 결합도 검토했지만, 그건 "기수명+고정
+  문구+개수" 2~3개 조각이라 띄어쓰기 없이도 읽히는 반면 이번엔 그룹명·기수명·고정 라벨·날짜
+  4조각이라 구분자(`_`) 없이 붙이면 어디서 끊어 읽어야 할지 모호해진다. 호출마다 새로 생성하고
+  캐시하지 않으며, 이전에 생성된 파일을 정리하는 배치는 두지 않는다(데모 범위 밖, 사용자 결정).
+- **행 0건이어도 200으로 정상 생성**: 요약 4행(그룹 전체 누적은 0건이어도 0이 아닐 수 있고,
+  이번 기수 합계는 0건이면 0)과 헤더만 있는 엑셀을 돌려준다. API-069도 0건 `entries`를 에러로
+  보지 않는 것과 같은 기준이라 별도 에러 코드를 만들지 않았다.
+- **행별 누적 잔액 열은 추가하지 않는다**: 행 범위는 기수 단위인데 요약(잔액)은 그룹 전체
+  누적이라, 기수 중간부터 시작하는 행에 "그 시점의 잔액"을 매기려면 이 기수 시작 시점의
+  기초 잔액이 필요하다. 그 값을 정의하는 문제는 장부 초기 잔액 자동 인식 보류(decisions #10)
+  와 같은 미해결 영역이라 이번 범위에서 다루지 않는다.
+- **원본 업로드 엑셀(API-063 `LEDGER_FILE`)과는 무관**: 그건 운영진이 손으로 올린 은행
+  거래내역 등 원본 파일로 `File` 엔티티·문서함에 저장된다. API-075는 `ledger_entry`로 서버가
+  새로 만드는 집계 엑셀이라 완전히 별개 자원이고, `File`·`file` 테이블을 전혀 건드리지 않는다
+  (API-069 응답의 `ledgerFile`이 가리키는 것도 이 원본 업로드 파일이다).
+- **없는 기수는 기존 `CommonErrorCode.NOT_FOUND`(COMMON_404)**: api-spec.md 원문과 일치해
+  전용 코드를 만들지 않았다.
+- **테스트 분담**: `LedgerExportExcelGenerator`는 Spring 컨텍스트 없는 순수 단위 테스트로,
+  생성한 바이트를 `XSSFWorkbook`으로 다시 읽어 요약·이번 기수 합계·헤더·행 순서·구분(수입/지출
+  한글)·출처(직접 입력/정산 자동) 라벨·0건 케이스를 검증한다. `LedgerExportKeyGenerator`도 같은
+  방식(`ReceiptImageKeyGeneratorTest`와 동일 패턴). `LedgerExportService`는 Mockito로 404·응답
+  필드·`FileStorage.store` 호출 키·`aggregateByTypeForGroup` 결과가 그대로 엑셀에 들어가는지를
+  검증한다(생성기는 목하지 않고 실제 인스턴스를 써서 바이트까지 만들어본다). `LedgerEntryRepository
+  Impl`에는 `findAllForExport`가 기수 경계를 지키고 정렬이 안정적인지(entryDate asc, id asc)를
+  Testcontainers로 검증하는 테스트를 추가했다.

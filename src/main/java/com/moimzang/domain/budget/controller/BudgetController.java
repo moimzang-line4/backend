@@ -5,9 +5,11 @@ import com.moimzang.domain.budget.dto.request.LedgerEntryUpdateRequest;
 import com.moimzang.domain.budget.dto.response.LedgerEntryCreateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryDetailResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryUpdateResponse;
+import com.moimzang.domain.budget.dto.response.LedgerExportResponse;
 import com.moimzang.domain.budget.dto.response.LedgerSummaryResponse;
 import com.moimzang.domain.budget.dto.response.LedgerSyncResponse;
 import com.moimzang.domain.budget.service.BudgetService;
+import com.moimzang.domain.budget.service.LedgerExportService;
 import com.moimzang.domain.budget.service.LedgerSyncService;
 import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.Valid;
@@ -28,6 +30,7 @@ public class BudgetController implements BudgetApi {
 
     private final BudgetService budgetService;
     private final LedgerSyncService ledgerSyncService;
+    private final LedgerExportService ledgerExportService;
 
     // 예산 요약·내역을 조회한다
     @Override
@@ -85,6 +88,14 @@ public class BudgetController implements BudgetApi {
     @PostMapping("/api/terms/{termId}/ledger/sync")
     public ResponseEntity<BaseResponse<LedgerSyncResponse>> syncLedger(@PathVariable Long termId) {
         LedgerSyncResponse response = ledgerSyncService.sync(termId);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 장부 엑셀을 생성해 다운로드 URL을 내려준다
+    @Override
+    @GetMapping("/api/terms/{termId}/ledger/export")
+    public ResponseEntity<BaseResponse<LedgerExportResponse>> exportLedger(@PathVariable Long termId) {
+        LedgerExportResponse response = ledgerExportService.export(termId);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }

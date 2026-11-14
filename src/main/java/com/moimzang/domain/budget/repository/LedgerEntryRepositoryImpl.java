@@ -64,6 +64,14 @@ public class LedgerEntryRepositoryImpl implements LedgerEntryRepositoryCustom {
                 .fetch();
     }
 
+    @Override
+    public List<LedgerEntry> findAllForExport(Long groupTermId) {
+        return queryFactory.selectFrom(ledgerEntry)
+                .where(ledgerEntry.groupTerm.id.eq(groupTermId))
+                .orderBy(ledgerEntry.entryDate.asc(), ledgerEntry.id.asc())
+                .fetch();
+    }
+
     // type 필터 조건을 만든다. 값이 없으면(ALL) 조건을 걸지 않는다
     private BooleanExpression typeEq(LedgerType type) {
         return type == null ? null : ledgerEntry.type.eq(type);

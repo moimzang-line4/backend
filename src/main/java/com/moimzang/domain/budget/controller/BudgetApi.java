@@ -5,6 +5,7 @@ import com.moimzang.domain.budget.dto.request.LedgerEntryUpdateRequest;
 import com.moimzang.domain.budget.dto.response.LedgerEntryCreateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryDetailResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryUpdateResponse;
+import com.moimzang.domain.budget.dto.response.LedgerExportResponse;
 import com.moimzang.domain.budget.dto.response.LedgerSummaryResponse;
 import com.moimzang.domain.budget.dto.response.LedgerSyncResponse;
 import com.moimzang.global.response.BaseResponse;
@@ -98,5 +99,16 @@ public interface BudgetApi {
                      content = @Content(schema = @Schema(implementation = BaseResponse.class)))
     })
     ResponseEntity<BaseResponse<LedgerSyncResponse>> syncLedger(
+            @Parameter(description = "기수 ID", example = "1") Long termId);
+
+    @Operation(summary = "장부 엑셀 다운로드", description = "원본 업로드 엑셀(LEDGER_FILE)과 별개로, 서비스 장부(입출금 "
+            + "내역·누적 수입·누적 지출·잔액)를 새 엑셀로 매번 새로 만든다. 행은 이 기수 내역만, 요약은 그룹 전체 누적이다 "
+            + "(API-069와 같은 범위). File 엔티티·문서함에는 등록하지 않는다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "생성 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<LedgerExportResponse>> exportLedger(
             @Parameter(description = "기수 ID", example = "1") Long termId);
 }
