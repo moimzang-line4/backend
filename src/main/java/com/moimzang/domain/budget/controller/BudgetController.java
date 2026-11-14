@@ -5,6 +5,7 @@ import com.moimzang.domain.budget.dto.request.LedgerEntryUpdateRequest;
 import com.moimzang.domain.budget.dto.response.LedgerEntryCreateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryDetailResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryUpdateResponse;
+import com.moimzang.domain.budget.dto.response.LedgerSummaryResponse;
 import com.moimzang.domain.budget.service.BudgetService;
 import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.Valid;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -23,6 +25,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class BudgetController implements BudgetApi {
 
     private final BudgetService budgetService;
+
+    // 예산 요약·내역을 조회한다
+    @Override
+    @GetMapping("/api/terms/{termId}/ledger")
+    public ResponseEntity<BaseResponse<LedgerSummaryResponse>> getLedgerSummary(
+            @PathVariable Long termId,
+            @RequestParam(defaultValue = "ALL") String type,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer size
+    ) {
+        LedgerSummaryResponse response = budgetService.getLedgerSummary(termId, type, cursor, size);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
 
     // 장부에 직접 입력한다
     @Override

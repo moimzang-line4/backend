@@ -5,6 +5,7 @@ import com.moimzang.domain.budget.dto.request.LedgerEntryUpdateRequest;
 import com.moimzang.domain.budget.dto.response.LedgerEntryCreateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryDetailResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryUpdateResponse;
+import com.moimzang.domain.budget.dto.response.LedgerSummaryResponse;
 import com.moimzang.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -18,6 +19,22 @@ import org.springframework.http.ResponseEntity;
 
 @Tag(name = "예산", description = "장부·수입·지출 관리 API")
 public interface BudgetApi {
+
+    @Operation(summary = "예산 요약·내역 조회", description = "currentBalance·totalIncome·totalExpense는 그룹 전체(모든 "
+            + "기수) 누적이고(기수가 바뀌어도 이월), entries는 이 기수 내역만 cursor 페이지네이션으로 조회한다(정렬: "
+            + "entryDate 내림차순). 고아가 된 자동 기록도 둘 다에 그대로 포함된다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(잘못된 type·cursor)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<LedgerSummaryResponse>> getLedgerSummary(
+            @Parameter(description = "기수 ID", example = "1") Long termId,
+            @Parameter(description = "항목 유형 필터(기본 ALL)", example = "ALL") String type,
+            @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지") String cursor,
+            @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
 
     @Operation(summary = "장부 직접 입력", description = "장부에 직접 입력한다. auto_category·schedule·scheduleRound는 "
             + "전부 null로 생성된다(자동 기록과 구분).")
