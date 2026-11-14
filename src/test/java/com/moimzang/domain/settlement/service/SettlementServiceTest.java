@@ -3,8 +3,11 @@ package com.moimzang.domain.settlement.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -28,6 +31,7 @@ import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
 import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
+import com.moimzang.domain.settlement.dto.response.ReceiptOcrResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementHomeResponse;
@@ -42,6 +46,9 @@ import com.moimzang.domain.settlement.exception.SettlementErrorCode;
 import com.moimzang.domain.settlement.mapper.SettlementMapper;
 import com.moimzang.domain.settlement.repository.PaymentSummary;
 import com.moimzang.domain.settlement.repository.SettlementTargetRepository;
+import com.moimzang.global.ai.ReceiptOcrClient;
+import com.moimzang.global.ai.ReceiptOcrException;
+import com.moimzang.global.ai.ReceiptOcrResult;
 import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
@@ -58,6 +65,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.BeanUtils;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -87,9 +95,17 @@ class SettlementServiceTest {
     @Mock
     private BilledAmountCalculator billedAmountCalculator;
 
+    @Mock
+    private ReceiptOcrClient receiptOcrClient;
+
+    @Mock
+    private ReceiptImageKeyGenerator receiptImageKeyGenerator;
+
     // mapper는 mock하지 않는다 — 매핑 누락을 테스트에서도 실제 생성 코드로 검증한다
     private final SettlementMapper settlementMapper = Mappers.getMapper(SettlementMapper.class);
     private final ReceiptAmountValidator receiptAmountValidator = new ReceiptAmountValidator();
+    private final ReceiptImageValidator receiptImageValidator = new ReceiptImageValidator();
+    private final ReceiptOcrResultNormalizer receiptOcrResultNormalizer = new ReceiptOcrResultNormalizer();
 
     private SettlementService settlementService;
 
@@ -97,7 +113,8 @@ class SettlementServiceTest {
     void setUp() {
         settlementService = new SettlementService(
                 settlementTargetRepository, scheduleRoundRepository, roundAttendeeRepository, scheduleAttendeeRepository,
-                scheduleRepository, ledgerEntryRepository, settlementMapper, receiptAmountValidator, billedAmountCalculator, fileStorage);
+                scheduleRepository, ledgerEntryRepository, settlementMapper, receiptAmountValidator, billedAmountCalculator,
+                fileStorage, receiptOcrClient, receiptImageValidator, receiptImageKeyGenerator, receiptOcrResultNormalizer);
     }
 
     private ScheduleRound roundWithId(Long id) {
@@ -400,6 +417,114 @@ class SettlementServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    private MockMultipartFile receiptImage() {
+        return new MockMultipartFile("image", "receipt.jpg", "image/jpeg", new byte[] {1, 2, 3});
+    }
+
+    @Test
+    void recognizeReceipt_정상_인식하면_정규화된_필드와_imageKey를_반환한다() {
+        given(scheduleRoundRepository.existsById(1L)).willReturn(true);
+        given(receiptOcrClient.recognize(any(), eq("image/jpeg")))
+                .willReturn(new ReceiptOcrResult("스타벅스 신촌점", "2026-11-13T19:00:00", 50000));
+        given(receiptImageKeyGenerator.generate("jpg")).willReturn("receipts/2026/11/abc.jpg");
+
+        ReceiptOcrResponse response = settlementService.recognizeReceipt(1L, receiptImage());
+
+        assertThat(response.getStoreName()).isEqualTo("스타벅스 신촌점");
+        assertThat(response.getTransactedAt()).isEqualTo(LocalDateTime.of(2026, 11, 13, 19, 0, 0));
+        assertThat(response.getTotalAmount()).isEqualTo(50000);
+        assertThat(response.getImageKey()).isEqualTo("receipts/2026/11/abc.jpg");
+        verify(fileStorage).store(eq("receipts/2026/11/abc.jpg"), any(), anyLong(), eq("image/jpeg"));
+    }
+
+    @Test
+    void recognizeReceipt_일부_항목만_인식하면_그_항목만_null로_응답한다() {
+        given(scheduleRoundRepository.existsById(1L)).willReturn(true);
+        given(receiptOcrClient.recognize(any(), any()))
+                .willReturn(new ReceiptOcrResult(null, "2026-11-13T19:00:00", 50000));
+        given(receiptImageKeyGenerator.generate("jpg")).willReturn("receipts/2026/11/abc.jpg");
+
+        ReceiptOcrResponse response = settlementService.recognizeReceipt(1L, receiptImage());
+
+        assertThat(response.getStoreName()).isNull();
+        assertThat(response.getTransactedAt()).isEqualTo(LocalDateTime.of(2026, 11, 13, 19, 0, 0));
+        assertThat(response.getTotalAmount()).isEqualTo(50000);
+    }
+
+    @Test
+    void recognizeReceipt_세_필드_모두_null이어도_200으로_응답하고_이미지는_저장한다() {
+        given(scheduleRoundRepository.existsById(1L)).willReturn(true);
+        given(receiptOcrClient.recognize(any(), any())).willReturn(new ReceiptOcrResult(null, null, null));
+        given(receiptImageKeyGenerator.generate("jpg")).willReturn("receipts/2026/11/abc.jpg");
+
+        ReceiptOcrResponse response = settlementService.recognizeReceipt(1L, receiptImage());
+
+        assertThat(response.getStoreName()).isNull();
+        assertThat(response.getTransactedAt()).isNull();
+        assertThat(response.getTotalAmount()).isNull();
+        assertThat(response.getImageKey()).isEqualTo("receipts/2026/11/abc.jpg");
+        verify(fileStorage).store(eq("receipts/2026/11/abc.jpg"), any(), anyLong(), any());
+    }
+
+    @Test
+    void recognizeReceipt_AI_호출이_실패하면_RECEIPT_502_RECOGNITION_FAILED를_던지고_이미지를_저장하지_않는다() {
+        given(scheduleRoundRepository.existsById(1L)).willReturn(true);
+        willThrow(new ReceiptOcrException("Gemini 호출에 실패했습니다."))
+                .given(receiptOcrClient).recognize(any(), any());
+
+        assertThatThrownBy(() -> settlementService.recognizeReceipt(1L, receiptImage()))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(SettlementErrorCode.RECEIPT_502_RECOGNITION_FAILED);
+        verify(fileStorage, never()).store(any(), any(), anyLong(), any());
+    }
+
+    @Test
+    void recognizeReceipt_이미지가_없으면_COMMON_400을_던진다() {
+        given(scheduleRoundRepository.existsById(1L)).willReturn(true);
+
+        assertThatThrownBy(() -> settlementService.recognizeReceipt(1L, null))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+        verify(receiptOcrClient, never()).recognize(any(), any());
+    }
+
+    @Test
+    void recognizeReceipt_빈_파일이면_COMMON_400을_던진다() {
+        given(scheduleRoundRepository.existsById(1L)).willReturn(true);
+        MockMultipartFile emptyImage = new MockMultipartFile("image", "receipt.jpg", "image/jpeg", new byte[0]);
+
+        assertThatThrownBy(() -> settlementService.recognizeReceipt(1L, emptyImage))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+        verify(receiptOcrClient, never()).recognize(any(), any());
+    }
+
+    @Test
+    void recognizeReceipt_허용되지_않는_확장자면_COMMON_400을_던진다() {
+        given(scheduleRoundRepository.existsById(1L)).willReturn(true);
+        MockMultipartFile textFile = new MockMultipartFile("image", "receipt.txt", "text/plain", new byte[] {1});
+
+        assertThatThrownBy(() -> settlementService.recognizeReceipt(1L, textFile))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+        verify(receiptOcrClient, never()).recognize(any(), any());
+    }
+
+    @Test
+    void recognizeReceipt_존재하지_않는_차수면_CommonErrorCode_NOT_FOUND를_던진다() {
+        given(scheduleRoundRepository.existsById(1L)).willReturn(false);
+
+        assertThatThrownBy(() -> settlementService.recognizeReceipt(1L, receiptImage()))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+        verify(receiptOcrClient, never()).recognize(any(), any());
     }
 
     @Test

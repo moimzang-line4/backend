@@ -18,6 +18,7 @@ import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryResponse;
+import com.moimzang.domain.settlement.dto.response.ReceiptOcrResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementHomeProgressResponse;
@@ -37,11 +38,17 @@ import com.moimzang.domain.settlement.exception.SettlementErrorCode;
 import com.moimzang.domain.settlement.mapper.SettlementMapper;
 import com.moimzang.domain.settlement.repository.PaymentSummary;
 import com.moimzang.domain.settlement.repository.SettlementTargetRepository;
+import com.moimzang.global.ai.ReceiptOcrClient;
+import com.moimzang.global.ai.ReceiptOcrException;
+import com.moimzang.global.ai.ReceiptOcrResult;
 import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
 import com.moimzang.global.storage.FileStorage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -60,7 +67,9 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @Service
@@ -78,6 +87,10 @@ public class SettlementService {
     private final ReceiptAmountValidator receiptAmountValidator;
     private final BilledAmountCalculator billedAmountCalculator;
     private final FileStorage fileStorage;
+    private final ReceiptOcrClient receiptOcrClient;
+    private final ReceiptImageValidator receiptImageValidator;
+    private final ReceiptImageKeyGenerator receiptImageKeyGenerator;
+    private final ReceiptOcrResultNormalizer receiptOcrResultNormalizer;
 
     // 영수증을 조회한다. isLocked는 그 차수에 입금 완료가 1명이라도 있으면 true다
     public ReceiptResponse getReceipt(Long roundId) {
@@ -133,6 +146,58 @@ public class SettlementService {
 
         log.info("[영수증 등록] 등록을 완료했습니다. roundId = {}, amountChanged = {}", roundId, amountChanged);
         return settlementMapper.toReceiptRegisterResponse(round);
+    }
+
+    // 영수증 이미지를 AI로 인식한다(영수증 레코드 저장 없음 — 이미지 자체만 저장). 인식 호출·응답
+    // 파싱 자체가 실패하면 502로 올리고, 개별 항목을 못 찾은 경우는 그 항목만 null인 정상 응답이다.
+    // AI 호출은 수 초가 걸리므로 클래스 레벨 @Transactional에서 뺀다(ChatService.sendMessage와 동일한 이유) —
+    // roundId 존재 확인은 짧은 조회라 트랜잭션 밖에서도 그대로 동작한다
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public ReceiptOcrResponse recognizeReceipt(Long roundId, MultipartFile image) {
+        log.info("[영수증 AI 인식] 인식을 시작합니다. roundId = {}", roundId);
+
+        if (!scheduleRoundRepository.existsById(roundId)) {
+            log.warn("[영수증 AI 인식] 존재하지 않는 차수입니다. roundId = {}", roundId);
+            throw new CustomException(CommonErrorCode.NOT_FOUND);
+        }
+
+        String extension = receiptImageValidator.validate(image);
+
+        ReceiptOcrResult recognized;
+        try {
+            recognized = receiptOcrClient.recognize(readBytes(image), image.getContentType());
+        } catch (ReceiptOcrException e) {
+            log.warn("[영수증 AI 인식] AI 호출에 실패했습니다. roundId = {}", roundId, e);
+            throw new CustomException(SettlementErrorCode.RECEIPT_502_RECOGNITION_FAILED);
+        }
+        NormalizedReceiptOcrResult normalized = receiptOcrResultNormalizer.normalize(recognized);
+
+        // 인식 자체가 성공한 뒤에만 이미지를 저장한다 — AI 호출이 실패하면 저장도 안 해서
+        // 고아 파일이 쌓이지 않는다
+        String storageKey = receiptImageKeyGenerator.generate(extension);
+        try (InputStream content = image.getInputStream()) {
+            fileStorage.store(storageKey, content, image.getSize(), image.getContentType());
+        } catch (IOException e) {
+            log.error("[영수증 AI 인식] 이미지 저장 중 입출력 오류가 발생했습니다. roundId = {}, storageKey = {}",
+                    roundId, storageKey, e);
+            throw new UncheckedIOException("영수증 이미지 저장 중 입출력 오류가 발생했다", e);
+        }
+
+        log.info("[영수증 AI 인식] 인식을 완료했습니다. roundId = {}, storageKey = {}", roundId, storageKey);
+        return ReceiptOcrResponse.builder()
+                .storeName(normalized.storeName())
+                .transactedAt(normalized.transactedAt())
+                .totalAmount(normalized.totalAmount())
+                .imageKey(storageKey)
+                .build();
+    }
+
+    private byte[] readBytes(MultipartFile image) {
+        try {
+            return image.getBytes();
+        } catch (IOException e) {
+            throw new UncheckedIOException("영수증 이미지를 읽는 중 입출력 오류가 발생했다", e);
+        }
     }
 
     // 영수증을 삭제한다(사실상 그 차수 자체를 cascade 삭제). 입금 완료자가 있으면 423으로 거부하고,

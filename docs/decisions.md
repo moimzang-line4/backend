@@ -883,3 +883,54 @@ RECEIPT")은 #63 이후로 더 이상 성립하지 않는다 — 자동기록도
   반환·같은 날짜 내역의 id 내림차순·limit 적용을 검증한다. `BudgetServiceTest`(Mockito)는
   존재하지 않는 기수(COMMON_404), 잘못된 cursor·type(COMMON_400), source 매핑, ledgerFile
   유무, nextCursor 생성 여부처럼 레포지토리를 모킹해도 되는 로직만 검증한다.
+
+## 69. API-036(영수증 AI 인식) 구현 시점에 정한 세부 사항
+Gemini 멀티모달로 영수증 이미지를 직접 분석하도록 구현했다(사용자 결정, 2026-11-15).
+
+- **벤더·호출 방식**: 별도 OCR·텍스트 파서 없이 Gemini `generateContent`에 이미지를 inline
+  base64로 실어 보내고, `responseMimeType=application/json` + `responseSchema`로 JSON 모드를
+  강제해 `storeName`/`transactedAt`/`totalAmount`를 받는다. `global/ai/AiClient`(텍스트 전용,
+  #26)를 확장하지 않고 `global/ai/ReceiptOcrClient`(인터페이스)를 새로 만들었다 — `AiClient`에
+  이미지 입력을 얹으면 `MeetingService`가 쓰는 기존 계약이 흔들리고, 애초에 #26 마지막 줄이
+  "영수증 인식이 AiClient를 재사용할지는 구현 시점에 별도로 정한다"고 열어둔 사항이었다.
+  구현체 `global/ai/gemini/GeminiReceiptOcrClient`는 기존 `GeminiProperties`(api-key/model/
+  base-url/timeout)를 그대로 재사용해 `GEMINI_MODEL`을 공유한다 — OCR 전용 모델 환경변수를
+  따로 만들지 않았다. `AiClient`·`GeminiClient`·`OpenAiClient`·`MeetingService`는 손대지 않았다.
+- **Bean 등록 방식이 #26 관례와 다르다**: `GeminiClient`/`OpenAiClient`는
+  `@ConditionalOnProperty(app.ai.provider=...)`로 벤더 중 하나만 빈으로 뜨지만,
+  `GeminiReceiptOcrClient`는 조건 없이 항상 등록한다 — 영수증 인식은 `app.ai.provider` 전환
+  대상이 아니라 Gemini로 고정이기 때문이다. 같은 이유로 생성자에서 키를 검사하지 않고(항상
+  만들어지는 빈이 키 때문에 기동을 막으면 안 된다) `recognize()` 호출 시점에 `apiKey`가
+  비어 있으면 `ReceiptOcrException`을 던진다 — 호출 시점 검사라 네트워크 모킹 없이
+  `GeminiReceiptOcrClientTest`에서 직접 검증했다.
+- **"저장 없음"의 해석**: api-spec의 "저장 없음"은 **영수증 DB 레코드(schedule_round의 영수증
+  컬럼)를 저장하지 않는다**는 뜻으로 좁게 해석했다. 이미지 파일 자체는 저장해서 그 키를
+  `imageKey`로 응답한다 — 프론트가 "다시 촬영하기"로 여러 번 호출할 걸 감안하면 이미지를 아예
+  안 저장하면 등록(API-034) 단계에서 쓸 `imageKey`가 없어진다. `receipt` 테이블(행) 자체를
+  만드는 건 API-034 담당이고 이번 구현에서 건드리지 않았다.
+- **저장 순서**: AI 인식을 먼저 호출하고, 성공(502가 아닌 경우)했을 때만
+  `SettlementService`의 기존 `FileStorage`로 이미지를 저장한다. 인식이 실패하면 저장 자체를
+  하지 않아 "다시 촬영하기"로 여러 번 실패해도 고아 파일이 쌓이지 않는다. 저장 키는
+  `"receipts/%d/%02d/%s.%s"`(연/월/UUID/확장자) 패턴으로, file 도메인의
+  `FileService.buildStorageKey`와 같은 형식이지만 File 엔티티를 만들지 않으므로 file 패키지를
+  호출하지 않고 `domain.settlement.service.ReceiptImageKeyGenerator`를 새로 뒀다. 저장 중
+  IO 오류는 `FileService`와 동일하게 `UncheckedIOException`을 그대로 던진다(전용 ErrorCode
+  없음).
+- **502 판단 기준**: `RECEIPT_502_RECOGNITION_FAILED`는 Gemini 호출 자체(네트워크·타임아웃·
+  HTTP 오류·키 미설정)나 응답 JSON 파싱 실패에만 던진다. `storeName`/`transactedAt`/
+  `totalAmount` 세 필드가 전부 null이어도 인식 자체는 성공으로 보고 200과 함께 null 필드를
+  내려준다 — api-spec이 "인식 실패 항목은 null"이라고 명시한 대상이 필드 단위이기 때문이다.
+  AI가 돌려준 원시 값의 형식·범위 검증(정규화)은 `domain.settlement.service.
+  ReceiptOcrResultNormalizer`로 분리했다: `storeName`은 빈 문자열이면 null, `transactedAt`은
+  ISO-8601 파싱 실패 시 null, `totalAmount`는 null이거나 0 이하면 null.
+- **이미지 검증**: 이미지 파트 자체가 없는 요청은 `MissingServletRequestPartException`을 이미
+  공통으로 처리하는 `GlobalExceptionHandler`가 COMMON_400으로 끊는다. 파트는 있지만 빈
+  파일(size 0)이거나 확장자가 `jpg/jpeg/png/webp`가 아니면
+  `domain.settlement.service.ReceiptImageValidator`가 COMMON_400을 던진다. 용량 검증은
+  추가하지 않았다 — `spring.servlet.multipart.max-file-size`(20MB)에만 맡긴다.
+- **roundId 존재 확인과 에러 코드**: 다른 모든 메서드 호출보다 먼저 `roundId` 존재를
+  확인하고, 없으면 API-033/034/035와 같은 `CommonErrorCode.NOT_FOUND`(COMMON_404)를 던진다.
+  **api-spec.md 원문의 API-036 에러 목록에는 COMMON_404가 없다** — `COMMON_400`,
+  `RECEIPT_502_RECOGNITION_FAILED`만 적혀 있다. decisions #29·#30과 같은 선례(존재하지 않는
+  리소스를 막지 않을 이유가 없고, 같은 리소스를 다루는 다른 API가 전부 404를 포함)로 문서
+  누락으로 간주하고 구현했다.

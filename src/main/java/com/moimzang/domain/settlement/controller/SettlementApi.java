@@ -8,6 +8,7 @@ import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
 import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
+import com.moimzang.domain.settlement.dto.response.ReceiptOcrResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementHomeResponse;
@@ -24,7 +25,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "정산", description = "영수증·정산·입금 관리 API")
 public interface SettlementApi {
@@ -55,6 +58,24 @@ public interface SettlementApi {
     ResponseEntity<BaseResponse<ReceiptRegisterResponse>> registerReceipt(
             @Parameter(description = "차수 ID", example = "1") Long roundId,
             @Valid ReceiptRegisterRequest request);
+
+    @Operation(summary = "영수증 AI 인식", description = "영수증 이미지를 AI로 분석해 인식 결과만 반환한다(영수증 레코드는 "
+            + "저장하지 않고, 이미지 자체만 저장해 그 키를 imageKey로 돌려준다). 못 찾은 항목은 null이다. \"다시 촬영하기\"는 "
+            + "이 API 재호출로 처리한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "인식 성공(개별 항목이 null일 수 있음)"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(이미지 없음·빈 파일·허용되지 않는 확장자)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404(api-spec 원문에는 없으나 다른 차수 API와의 "
+                + "일관성을 위해 추가 — decisions 참고)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "502", description = "RECEIPT_502_RECOGNITION_FAILED(AI 호출·응답 파싱 실패)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<ReceiptOcrResponse>> recognizeReceipt(
+            @Parameter(description = "차수 ID", example = "1") Long roundId,
+            @Parameter(description = "영수증 이미지(jpg/jpeg/png/webp)", content = @Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE))
+                    MultipartFile image);
 
     @Operation(summary = "영수증 삭제", description = "그 차수(schedule_round) 행과 연결된 settlement_target·round_attendee를 "
             + "함께 삭제한다. 입금 완료 내역이 1건이라도 있으면 423으로 거부한다. ledger_entry는 삭제하지 않고 "

@@ -8,6 +8,7 @@ import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
 import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
+import com.moimzang.domain.settlement.dto.response.ReceiptOcrResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementHomeResponse;
@@ -26,9 +27,11 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
@@ -52,6 +55,17 @@ public class SettlementController implements SettlementApi {
             @Valid @RequestBody ReceiptRegisterRequest request
     ) {
         ReceiptRegisterResponse response = settlementService.registerReceipt(roundId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 그 차수의 영수증 이미지를 AI로 인식한다(영수증 레코드는 저장하지 않고 이미지만 저장)
+    @Override
+    @PostMapping(value = "/api/rounds/{roundId}/receipt/ocr", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<BaseResponse<ReceiptOcrResponse>> recognizeReceipt(
+            @PathVariable Long roundId,
+            @RequestParam("image") MultipartFile image
+    ) {
+        ReceiptOcrResponse response = settlementService.recognizeReceipt(roundId, image);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 
