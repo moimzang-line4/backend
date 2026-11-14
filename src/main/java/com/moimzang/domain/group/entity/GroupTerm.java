@@ -38,4 +38,11 @@ public class GroupTerm extends BaseEntity {
     // 기수명(예: 26기)
     @Column(name = "name", nullable = false, length = 100)
     private String name;
+
+    public static GroupTerm create(ClubGroup group, String name) {
+        return GroupTerm.builder()
+                .group(group)
+                .name(name)
+                .build();
+    }
 }

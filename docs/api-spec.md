@@ -192,6 +192,11 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | COMMON_413 | 413 | 요청 용량이 허용 범위를 초과했습니다. |
 | COMMON_500 | 500 | 서버 오류가 발생했습니다. |
 
+### 그룹 (GroupErrorCode) — API-002, API-003
+| 코드 | HTTP | 메시지 | 발생 API |
+|---|---|---|---|
+| GROUP_404_NOT_FOUND | 404 | 존재하지 않는 그룹입니다. | API-002, API-003 |
+
 ### 정산 (SettlementErrorCode) — API-034~045
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
@@ -304,7 +309,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ```json
 { "success": true, "code": "COMMON_200", "message": "요청에 성공했습니다.", "data": { "groupId": 1, "name": "음샘", "terms": [ { "termId": 1, "name": "26기 (2026)" } ] } }
 ```
-**에러**: COMMON_404(그룹 없음)
+**에러**: GROUP_404_NOT_FOUND(그룹 없음)
 
 ---
 
@@ -317,9 +322,9 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | name | string | N | 그룹명 |
 | termName | string | N | 새 기수명(지정 시 새 기수 생성) |
 
-**Response data**: groupId, name, termId, termName
+**Response data**: groupId, name, termId, termName(termName을 보내지 않으면 가장 최근 기수)
 
-**에러**: COMMON_400, COMMON_404
+**에러**: COMMON_400, GROUP_404_NOT_FOUND
 
 ### 일정
 
