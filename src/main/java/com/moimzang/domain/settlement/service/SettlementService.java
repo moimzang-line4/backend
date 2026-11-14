@@ -7,8 +7,13 @@ import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.budget.repository.LedgerEntryRepository;
+import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.domain.settlement.dto.request.PaymentConfirmRequest;
 import com.moimzang.domain.settlement.dto.request.ReceiptRegisterRequest;
 import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
+import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
+import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
+import com.moimzang.domain.settlement.dto.response.PaymentSummaryResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
@@ -17,8 +22,10 @@ import com.moimzang.domain.settlement.dto.response.SettlementTargetResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetSaveResponse;
 import com.moimzang.domain.settlement.entity.SettlementTarget;
 import com.moimzang.domain.settlement.enums.PaymentStatus;
+import com.moimzang.domain.settlement.enums.PaymentStatusFilter;
 import com.moimzang.domain.settlement.exception.SettlementErrorCode;
 import com.moimzang.domain.settlement.mapper.SettlementMapper;
+import com.moimzang.domain.settlement.repository.PaymentSummary;
 import com.moimzang.domain.settlement.repository.SettlementTargetRepository;
 import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.cursor.CursorPageConstants;
@@ -28,6 +35,8 @@ import com.moimzang.global.storage.FileStorage;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +59,7 @@ public class SettlementService {
     private final ScheduleRoundRepository scheduleRoundRepository;
     private final RoundAttendeeRepository roundAttendeeRepository;
     private final ScheduleAttendeeRepository scheduleAttendeeRepository;
+    private final ScheduleRepository scheduleRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final SettlementMapper settlementMapper;
     private final ReceiptAmountValidator receiptAmountValidator;
@@ -297,5 +307,145 @@ public class SettlementService {
                 .attendees(checkedInAttendees.stream().map(settlementMapper::toImportAttendeeResponse).toList())
                 .expectedBilledAmount(expectedBilledAmount)
                 .build();
+    }
+
+    // 그 사람의 일정 내 모든 차수 settlement_target을 함께 갱신한다(장부 반영은 API-074 담당).
+    // 이미 같은 상태인 차수는 멱등하게 건드리지 않아 그 차수의 기존 paidAt이 유지된다
+    // (RoundAttendee.updateCheckedIn과 같은 기준)
+    @Transactional
+    public PaymentStatusResponse updatePaymentStatus(Long scheduleId, Long attendeeId, PaymentConfirmRequest request) {
+        log.info("[입금 확인·되돌리기] 처리를 시작합니다. scheduleId = {}, attendeeId = {}, paid = {}",
+                scheduleId, attendeeId, request.getPaid());
+
+        List<SettlementTarget> targets = settlementTargetRepository.findByScheduleAndAttendee(scheduleId, attendeeId);
+        if (targets.isEmpty()) {
+            log.warn("[입금 확인·되돌리기] 그 일정에 정산 대상이 없는 참가자입니다. scheduleId = {}, attendeeId = {}", scheduleId, attendeeId);
+            throw new CustomException(CommonErrorCode.NOT_FOUND);
+        }
+
+        boolean paid = request.getPaid();
+        targets.forEach(target -> target.updatePaymentStatus(paid));
+
+        ScheduleAttendee attendee = targets.get(0).getScheduleAttendee();
+        PaymentStatus paymentStatus = paid ? PaymentStatus.PAID : PaymentStatus.UNPAID;
+        // 여러 차수 중 일부는 이전부터 이미 그 상태였을 수 있어(멱등) paidAt이 차수마다 다를 수
+        // 있다 — 가장 최근 시각을 대표로 내려준다. 되돌리기는 전 차수가 null이라 자연히 null이다
+        LocalDateTime paidAt = paid
+                ? targets.stream().map(SettlementTarget::getPaidAt).filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null)
+                : null;
+
+        log.info("[입금 확인·되돌리기] 처리를 완료했습니다. scheduleId = {}, attendeeId = {}, paymentStatus = {}",
+                scheduleId, attendeeId, paymentStatus);
+        return settlementMapper.toPaymentStatusResponse(attendee, paymentStatus, paidAt);
+    }
+
+    // 일정의 모든 차수에서 그 사람의 정산 대상을 삭제하고, 각 차수의 남은 인원으로 1인 청구액을
+    // 재계산한다. 한 차수라도 PAID면 423으로 거부한다
+    @Transactional
+    public void removeFromPayments(Long scheduleId, Long attendeeId) {
+        log.info("[입금 명단 삭제] 삭제를 시작합니다. scheduleId = {}, attendeeId = {}", scheduleId, attendeeId);
+
+        List<SettlementTarget> targets = settlementTargetRepository.findByScheduleAndAttendee(scheduleId, attendeeId);
+        if (targets.isEmpty()) {
+            log.warn("[입금 명단 삭제] 그 일정에 정산 대상이 없는 참가자입니다. scheduleId = {}, attendeeId = {}", scheduleId, attendeeId);
+            throw new CustomException(CommonErrorCode.NOT_FOUND);
+        }
+
+        boolean hasPaidRound = targets.stream().anyMatch(target -> target.getPaymentStatus() == PaymentStatus.PAID);
+        if (hasPaidRound) {
+            log.warn("[입금 명단 삭제] 입금 완료된 차수가 있어 삭제할 수 없습니다. scheduleId = {}, attendeeId = {}", scheduleId, attendeeId);
+            throw new CustomException(SettlementErrorCode.SETTLEMENT_423_PAID_CANNOT_DELETE);
+        }
+
+        // 삭제 후 조회하면 flush 시점에 따라 결과가 꼬일 수 있어, 차수별 남은 인원을 삭제 전에
+        // 먼저 계산해 둔다(decisions #31: 남은 인원이 0명이면 계산기를 호출하지 않는다)
+        Map<Long, List<SettlementTarget>> remainingByRoundId = new HashMap<>();
+        for (SettlementTarget target : targets) {
+            Long roundId = target.getScheduleRound().getId();
+            List<SettlementTarget> remaining = settlementTargetRepository.findByScheduleRoundId(roundId).stream()
+                    .filter(roundTarget -> !roundTarget.getId().equals(target.getId()))
+                    .toList();
+            remainingByRoundId.put(roundId, remaining);
+        }
+
+        settlementTargetRepository.deleteAll(targets);
+
+        for (SettlementTarget target : targets) {
+            List<SettlementTarget> remaining = remainingByRoundId.get(target.getScheduleRound().getId());
+            if (remaining.isEmpty()) {
+                continue;
+            }
+            ScheduleRound round = target.getScheduleRound();
+            int billedAmount = billedAmountCalculator.calculate(round.getTotalAmount(), round.getClubSubsidyAmount(), remaining.size());
+            remaining.forEach(remainingTarget -> remainingTarget.updateBilledAmount(billedAmount));
+        }
+
+        log.info("[입금 명단 삭제] 삭제를 완료했습니다. scheduleId = {}, attendeeId = {}, roundCount = {}",
+                scheduleId, attendeeId, targets.size());
+    }
+
+    // 일정의 입금 현황을 조회한다. status는 사람 단위 집계(모든 차수가 PAID여야 PAID) 기준이고,
+    // totalBilledAmount는 그 사람의 일정 내 모든 차수 billedAmount 합산이다
+    public PaymentSummaryListResponse getPaymentSummaries(Long scheduleId, String status, String keyword, String cursor, Integer size) {
+        log.info("[입금 현황 조회] 조회를 시작합니다. scheduleId = {}, status = {}, keyword = {}, cursor = {}",
+                scheduleId, status, keyword, cursor);
+
+        scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> {
+                    log.warn("[입금 현황 조회] 존재하지 않는 일정입니다. scheduleId = {}", scheduleId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        PaymentStatusFilter resolvedStatus = parseStatus(status);
+        int limit = CursorPageConstants.resolveSize(size);
+
+        LocalDateTime cursorCreatedAt = null;
+        Long cursorId = null;
+        if (cursor != null) {
+            try {
+                CursorCodec decoded = CursorCodec.decode(cursor);
+                cursorId = decoded.getId();
+                cursorCreatedAt = Instant.ofEpochMilli(Long.parseLong(decoded.getSortValue()))
+                        .atZone(ZoneId.systemDefault()).toLocalDateTime();
+            } catch (RuntimeException e) {
+                log.warn("[입금 현황 조회] cursor 형식이 올바르지 않습니다. scheduleId = {}, cursor = {}", scheduleId, cursor);
+                throw new CustomException(CommonErrorCode.BAD_REQUEST);
+            }
+        }
+
+        // size + 1건을 조회해서 그중 마지막 1건이 있으면 "다음 페이지가 있다"는 뜻이다
+        List<PaymentSummary> fetched = settlementTargetRepository.searchPaymentSummaries(
+                scheduleId, resolvedStatus, keyword, cursorCreatedAt, cursorId, limit + 1);
+        boolean hasNext = fetched.size() > limit;
+        List<PaymentSummary> page = hasNext ? fetched.subList(0, limit) : fetched;
+
+        List<PaymentSummaryResponse> payments = page.stream()
+                .map(settlementMapper::toPaymentSummaryResponse)
+                .toList();
+        String nextCursor = hasNext ? buildPaymentCursor(page.get(page.size() - 1)) : null;
+
+        log.info("[입금 현황 조회] 조회를 완료했습니다. scheduleId = {}, count = {}, hasNext = {}", scheduleId, payments.size(), hasNext);
+        return PaymentSummaryListResponse.builder()
+                .payments(payments)
+                .nextCursor(nextCursor)
+                .build();
+    }
+
+    private PaymentStatusFilter parseStatus(String status) {
+        if (status == null) {
+            return PaymentStatusFilter.UNPAID;
+        }
+        try {
+            return PaymentStatusFilter.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            log.warn("[입금 현황 조회] status 값이 올바르지 않습니다. status = {}", status);
+            throw new CustomException(CommonErrorCode.BAD_REQUEST);
+        }
+    }
+
+    private String buildPaymentCursor(PaymentSummary last) {
+        LocalDateTime createdAt = last.attendee().getCreatedAt();
+        String sortValue = String.valueOf(createdAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        return CursorCodec.encode(sortValue, last.attendee().getId());
     }
 }
