@@ -549,37 +549,60 @@ agendaOrderNo는 meeting_agenda.order_no 원래 값(회의 상세 API-053과 같
 #### API-017 · POST /api/terms/{termId}/member-lists · 명단방 생성
 인증: 불필요.
 
-**Request**: name, registerDeadline(선택), collectSchool/collectStudentId/collectPart/collectGrade/
-collectPhone(boolean, 각 기본 true)
+**Request**: name(필수, 100자 이하), registerDeadline(필수, `yyyy-MM-dd`),
+collectSchool/collectStudentId/collectPart/collectGrade/collectPhone(boolean, 선택, 안 보내면 true)
 
 **Logics**: 이름·학과는 토글과 무관하게 항상 필수. 나머지 항목(학교·전화번호·학번·파트·학년)은
 토글 ON이면 필수 입력, OFF면 입력 자체를 받지 않는다(수집 여부 자체를 토글이 결정, decisions #7).
-서버가 `joinToken`을 생성한다.
+등록 마감일은 날짜로 받아 그날 23:59:59(한국 시간)까지 등록을 받는다.
+서버가 추측하기 어려운 난수로 `joinToken`을 생성하고, 이미 쓰이는 토큰이면 다시 만든다.
+`joinUrl`은 `/join/{joinToken}` 형태의 경로만 내려주고 도메인은 FE가 붙인다.
 
-**Response data**: memberListId, joinToken, joinUrl. **에러**: COMMON_400
+**Response data**: memberListId, joinToken, joinUrl.
+**에러**: COMMON_400(이름·마감일 누락, 길이 초과), MEMBER_LIST_404_GROUP_TERM_NOT_FOUND
 
 ---
 
 #### API-018 · GET /api/terms/{termId}/member-lists · 명단방 목록 조회
-인증: 불필요. **Response data**: memberLists[].memberListId/name/memberCount/status/registerDeadline
-(status: RECRUITING|COMPLETED)
+인증: 불필요. 만든 순서대로 내려준다. **Response data**: memberLists[].memberListId/name/memberCount/
+status/registerDeadline(`yyyy-MM-dd`)
+
+**Logics**: status는 RECRUITING|COMPLETED. 링크를 닫았거나 마감일이 지나면 COMPLETED로 계산해서 내려준다.
+부원이 없는 명단방의 memberCount는 0.
+
+**에러**: MEMBER_LIST_404_GROUP_TERM_NOT_FOUND
 
 ---
 
 #### API-019 · GET /api/member-lists/{memberListId} · 명단방 상세(링크 관리) 조회
 인증: 불필요.
 
-**Response data**: memberListId, name, registerDeadline, status, memberCount, joinUrl, isLinkClosed,
-fields.school/studentId/part/grade/phone(boolean)
+**Response data**: memberListId, name, registerDeadline(`yyyy-MM-dd`), status, memberCount, joinUrl,
+isLinkClosed, fields.school/studentId/part/grade/phone(boolean). status 계산은 API-018과 같다.
 
-**에러**: COMMON_404
+**에러**: MEMBER_LIST_404_NOT_FOUND
+
+---
+
+#### PATCH /api/member-lists/{memberListId} · 명단방 수정
+인증: 불필요.
+
+**Request**: name, registerDeadline(`yyyy-MM-dd`), collectSchool/collectStudentId/collectPart/collectGrade/
+collectPhone — 전부 선택, 보낸 필드만 수정한다. name은 보낼 경우 공백 불가·100자 이하.
+
+**Logics**: 같은 명단방과 등록 링크(joinToken)를 그대로 유지한다. 수집 항목을 바꾸면 이후 등록하는
+사람부터 적용되고, 이미 등록된 부원 정보는 바뀌지 않는다. 마감일을 미래로 늘리면 다시 RECRUITING이 된다.
+
+**Response data**: memberListId. **에러**: COMMON_400, MEMBER_LIST_404_NOT_FOUND
 
 ---
 
 #### API-020 · DELETE /api/member-lists/{memberListId} · 명단방 삭제
 인증: 불필요. 명단방·부원 삭제, 링크 닫힘. 연결된 출석·정산 기록(그 부원이 속한 schedule_attendee와
-그 round_attendee·settlement_target)도 함께 삭제한다. 장부(ledger_entry)의 수입 기록은 차수 단위라
-이 삭제로 영향받지 않는다(decisions #2, #4 참고). **에러**: COMMON_404
+그 round_attendee·settlement_target)도 함께 삭제한다. 부원과 연결되지 않은 현장 참가자는 남는다.
+FK가 RESTRICT라 round_attendee → settlement_target → schedule_attendee → member → member_list 순서로
+지운다. 장부(ledger_entry)의 수입 기록은 차수 단위라 이 삭제로 영향받지 않는다(decisions #2, #4 참고).
+**에러**: MEMBER_LIST_404_NOT_FOUND
 
 ---
 
