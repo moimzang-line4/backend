@@ -90,6 +90,15 @@ public class OperationNote extends BaseEntity {
         }
     }
 
+    public boolean isTodo() {
+        return this.type == NoteType.TODO;
+    }
+
+    // 할 일의 완료 여부를 바꾼다. 할 일인지 확인은 호출하는 쪽에서 먼저 한다
+    public void changeTodoDone(boolean isTodoDone) {
+        this.isTodoDone = isTodoDone;
+    }
+
     // 다른 유형에서 할 일로 바뀌면 미완료로 시작하고, 할 일에서 벗어나면 완료 여부를 비운다.
     // 할 일을 할 일로 다시 보내는 경우는 기존 완료 여부를 그대로 둔다
     private void changeType(NoteType newType) {
