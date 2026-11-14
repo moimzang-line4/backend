@@ -69,16 +69,20 @@ public class OperationSpaceService {
         int limit = CursorPageConstants.resolveSize(size);
         OperationSpaceCursor decoded = decodeCursor(cursor, termId);
 
+        LocalDateTime now = LocalDateTime.now(SERVICE_ZONE);
         List<Entry> entries = new ArrayList<>();
+        long totalCount = 0;
         if (resolvedType != OperationSpaceType.MEETING) {
             List<Schedule> schedules = operationSpaceQueryRepository.findSchedules(termId, status,
-                    LocalDateTime.now(SERVICE_ZONE), keyword, resolvedSort, decoded, limit + 1);
+                    now, keyword, resolvedSort, decoded, limit + 1);
             schedules.forEach(s -> entries.add(Entry.of(s, status, resolvedSort)));
+            totalCount += operationSpaceQueryRepository.countSchedules(termId, status, now, keyword);
         }
         if (resolvedType != OperationSpaceType.SCHEDULE) {
             List<Meeting> meetings = operationSpaceQueryRepository.findMeetings(termId, status, keyword,
                     resolvedSort, decoded, limit + 1);
             meetings.forEach(m -> entries.add(Entry.of(m, status, resolvedSort)));
+            totalCount += operationSpaceQueryRepository.countMeetings(termId, status, keyword);
         }
         entries.sort(comparator(resolvedSort));
 
@@ -86,9 +90,10 @@ public class OperationSpaceService {
         List<Entry> page = hasNext ? entries.subList(0, limit) : entries;
         String nextCursor = hasNext ? encodeCursor(page.get(page.size() - 1)) : null;
 
-        log.info("[운영 공간 목록 조회] 조회를 완료했습니다. termId = {}, count = {}, hasNext = {}",
-                termId, page.size(), hasNext);
+        log.info("[운영 공간 목록 조회] 조회를 완료했습니다. termId = {}, count = {}, totalCount = {}, hasNext = {}",
+                termId, page.size(), totalCount, hasNext);
         return OperationSpaceListResponse.builder()
+                .totalCount(totalCount)
                 .items(page.stream().map(Entry::item).toList())
                 .nextCursor(nextCursor)
                 .build();

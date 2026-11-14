@@ -36,28 +36,60 @@ public class OperationSpaceQueryRepository {
                                         String keyword, OperationSpaceSort sort, OperationSpaceCursor cursor,
                                         int limit) {
         return queryFactory.selectFrom(schedule)
-                .where(schedule.groupTerm.id.eq(groupTermId),
-                        schedule.hasOperationSpace.isTrue(),
-                        status == OperationSpaceStatus.PAST ? schedule.endAt.loe(now) : schedule.endAt.gt(now),
-                        StringUtils.hasText(keyword) ? schedule.title.containsIgnoreCase(keyword) : null,
-                        scheduleCursor(sort, cursor))
+                .where(scheduleFilter(groupTermId, status, now, keyword))
+                .where(scheduleCursor(sort, cursor))
                 .orderBy(scheduleOrder(sort))
                 .limit(limit)
                 .fetch();
+    }
+
+    // 위 목록과 같은 조건의 일정 수('운영 기록 N개'에 합산)
+    public long countSchedules(Long groupTermId, OperationSpaceStatus status, LocalDateTime now, String keyword) {
+        Long count = queryFactory.select(schedule.count())
+                .from(schedule)
+                .where(scheduleFilter(groupTermId, status, now, keyword))
+                .fetchOne();
+        return count == null ? 0 : count;
     }
 
     // 회의록은 토글 개념이 없어 일정 소속 회의록까지 전부 대상이다
     public List<Meeting> findMeetings(Long groupTermId, OperationSpaceStatus status, String keyword,
                                       OperationSpaceSort sort, OperationSpaceCursor cursor, int limit) {
         return queryFactory.selectFrom(meeting)
-                .where(meeting.groupTerm.id.eq(groupTermId),
-                        meeting.status.eq(status == OperationSpaceStatus.PAST
-                                ? MeetingStatus.COMPLETED : MeetingStatus.IN_PROGRESS),
-                        StringUtils.hasText(keyword) ? meeting.title.containsIgnoreCase(keyword) : null,
-                        meetingCursor(sort, cursor))
+                .where(meetingFilter(groupTermId, status, keyword))
+                .where(meetingCursor(sort, cursor))
                 .orderBy(meetingOrder(sort))
                 .limit(limit)
                 .fetch();
+    }
+
+    // 위 목록과 같은 조건의 회의록 수('운영 기록 N개'에 합산)
+    public long countMeetings(Long groupTermId, OperationSpaceStatus status, String keyword) {
+        Long count = queryFactory.select(meeting.count())
+                .from(meeting)
+                .where(meetingFilter(groupTermId, status, keyword))
+                .fetchOne();
+        return count == null ? 0 : count;
+    }
+
+    // 목록과 개수가 같은 조건을 쓰도록 cursor를 뺀 조건을 한곳에 모은다
+    private BooleanExpression[] scheduleFilter(Long groupTermId, OperationSpaceStatus status, LocalDateTime now,
+                                               String keyword) {
+        return new BooleanExpression[]{
+                schedule.groupTerm.id.eq(groupTermId),
+                schedule.hasOperationSpace.isTrue(),
+                status == OperationSpaceStatus.PAST ? schedule.endAt.loe(now) : schedule.endAt.gt(now),
+                StringUtils.hasText(keyword) ? schedule.title.containsIgnoreCase(keyword) : null
+        };
+    }
+
+    private BooleanExpression[] meetingFilter(Long groupTermId, OperationSpaceStatus status, String keyword) {
+        return new BooleanExpression[]{
+                meeting.groupTerm.id.eq(groupTermId),
+                meeting.status.eq(status == OperationSpaceStatus.PAST
+                        ? MeetingStatus.COMPLETED : MeetingStatus.IN_PROGRESS),
+                StringUtils.hasText(keyword) ? meeting.title.containsIgnoreCase(keyword) : null
+        };
     }
 
     private OrderSpecifier<?>[] scheduleOrder(OperationSpaceSort sort) {

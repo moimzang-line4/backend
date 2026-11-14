@@ -86,10 +86,15 @@ class OperationSpaceServiceTest {
         given(operationSpaceQueryRepository.findMeetings(eq(1L), eq(OperationSpaceStatus.ONGOING), isNull(),
                 eq(OperationSpaceSort.LATEST), isNull(), eq(3)))
                 .willReturn(List.of(meeting(3L, "운영진 회의", LocalDate.of(2026, 11, 7))));
+        given(operationSpaceQueryRepository.countSchedules(eq(1L), eq(OperationSpaceStatus.ONGOING), any(), isNull()))
+                .willReturn(2L);
+        given(operationSpaceQueryRepository.countMeetings(1L, OperationSpaceStatus.ONGOING, null)).willReturn(1L);
 
         OperationSpaceListResponse response = operationSpaceService.listOperationSpaces(
                 1L, OperationSpaceStatus.ONGOING, null, null, null, null, 2);
 
+        // 이번 페이지는 2건이어도 '운영 기록 N개'에는 일정과 회의록을 합친 전체 수가 나와야 한다
+        assertThat(response.getTotalCount()).isEqualTo(3L);
         assertThat(response.getItems()).extracting("type")
                 .containsExactly(OperationSpaceType.SCHEDULE, OperationSpaceType.MEETING);
         assertThat(response.getItems()).extracting("id").containsExactly(10L, 3L);
@@ -122,6 +127,7 @@ class OperationSpaceServiceTest {
         assertThat(response.getItems()).isEmpty();
         assertThat(response.getNextCursor()).isNull();
         verify(operationSpaceQueryRepository, never()).findMeetings(any(), any(), any(), any(), any(), anyInt());
+        verify(operationSpaceQueryRepository, never()).countMeetings(any(), any(), any());
     }
 
     @Test

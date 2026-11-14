@@ -70,11 +70,12 @@ class OperationSpaceQueryRepositoryTest {
         persistOtherTermSchedule();
         em.flush();
 
-        List<OperationSpaceItemResponse> items = operationSpaceService.listOperationSpaces(groupTerm.getId(),
-                OperationSpaceStatus.ONGOING, null, null, null, null, null).getItems();
+        OperationSpaceListResponse response = operationSpaceService.listOperationSpaces(groupTerm.getId(),
+                OperationSpaceStatus.ONGOING, null, null, null, null, null);
 
-        assertThat(items).extracting(OperationSpaceItemResponse::getId)
+        assertThat(response.getItems()).extracting(OperationSpaceItemResponse::getId)
                 .containsExactlyInAnyOrder(ongoing.getId(), ongoingMeeting.getId());
+        assertThat(response.getTotalCount()).isEqualTo(2L);
     }
 
     @Test
@@ -85,10 +86,12 @@ class OperationSpaceQueryRepositoryTest {
         persistMeeting("공연 회의", LocalDate.now(), MeetingStatus.COMPLETED);
         em.flush();
 
-        List<OperationSpaceItemResponse> items = operationSpaceService.listOperationSpaces(groupTerm.getId(),
-                OperationSpaceStatus.PAST, OperationSpaceType.SCHEDULE, "공연", null, null, null).getItems();
+        OperationSpaceListResponse response = operationSpaceService.listOperationSpaces(groupTerm.getId(),
+                OperationSpaceStatus.PAST, OperationSpaceType.SCHEDULE, "공연", null, null, null);
 
-        assertThat(items).extracting(OperationSpaceItemResponse::getId).containsExactly(pastConcert.getId());
+        assertThat(response.getItems()).extracting(OperationSpaceItemResponse::getId)
+                .containsExactly(pastConcert.getId());
+        assertThat(response.getTotalCount()).isEqualTo(1L);
     }
 
     @Test
@@ -104,7 +107,11 @@ class OperationSpaceQueryRepositoryTest {
         em.flush();
 
         List<String> titles = pageThrough(OperationSpaceSort.LATEST, 2);
+        OperationSpaceListResponse firstPage = operationSpaceService.listOperationSpaces(groupTerm.getId(),
+                OperationSpaceStatus.ONGOING, null, null, OperationSpaceSort.LATEST, null, 2);
 
+        // 첫 페이지가 2건이어도 전체 수는 6
+        assertThat(firstPage.getTotalCount()).isEqualTo(6L);
         // 날짜 키 내림차순, 키가 같으면 회의(유형 순서 1)가 일정(0)보다 먼저
         assertThat(titles).containsExactly("회의 F", "일정 A", "회의 C", "일정 B", "일정 E", "회의 D");
     }
