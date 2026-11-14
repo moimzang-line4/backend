@@ -4,6 +4,9 @@ import com.moimzang.domain.settlement.entity.SettlementTarget;
 import com.moimzang.domain.settlement.enums.PaymentStatus;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface SettlementTargetRepository extends JpaRepository<SettlementTarget, Long>,
         SettlementTargetRepositoryCustom {
@@ -16,4 +19,12 @@ public interface SettlementTargetRepository extends JpaRepository<SettlementTarg
 
     // 영수증 삭제(API-035)로 차수가 사라질 때 그 차수의 청구 내역을 함께 삭제한다
     void deleteByScheduleRoundId(Long scheduleRoundId);
+
+    // 일정 삭제 시 그 일정의 모든 차수의 정산 대상을 지운다 — 차수·참가자보다 먼저 지워야 한다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from SettlementTarget t
+            where t.scheduleRound.id in (select r.id from ScheduleRound r where r.schedule.id = :scheduleId)
+            """)
+    void deleteAllByScheduleId(@Param("scheduleId") Long scheduleId);
 }

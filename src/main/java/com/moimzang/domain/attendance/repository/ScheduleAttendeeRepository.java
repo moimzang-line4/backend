@@ -3,6 +3,9 @@ package com.moimzang.domain.attendance.repository;
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ScheduleAttendeeRepository extends JpaRepository<ScheduleAttendee, Long> {
 
@@ -14,4 +17,9 @@ public interface ScheduleAttendeeRepository extends JpaRepository<ScheduleAttend
 
     // 일정의 참가자를 이름순으로 조회한다(AI 비서 조회용, 읽기 전용)
     List<ScheduleAttendee> findByScheduleIdOrderByNameAsc(Long scheduleId);
+
+    // 일정 삭제 시 그 일정의 참가자를 지운다 — 출석·정산 대상을 먼저 지운 뒤 호출한다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from ScheduleAttendee a where a.schedule.id = :scheduleId")
+    void deleteAllByScheduleId(@Param("scheduleId") Long scheduleId);
 }

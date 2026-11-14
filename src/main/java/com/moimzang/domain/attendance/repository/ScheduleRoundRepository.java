@@ -4,6 +4,7 @@ import com.moimzang.domain.attendance.entity.ScheduleRound;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -25,4 +26,9 @@ public interface ScheduleRoundRepository extends JpaRepository<ScheduleRound, Lo
             order by r.roundNo desc
             """)
     List<ScheduleRound> findLastRounds(@Param("scheduleId") Long scheduleId, Pageable pageable);
+
+    // 일정 삭제 시 그 일정의 차수를 지운다 — 출석·정산 대상·장부 참조를 먼저 정리한 뒤 호출한다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from ScheduleRound r where r.schedule.id = :scheduleId")
+    void deleteAllByScheduleId(@Param("scheduleId") Long scheduleId);
 }

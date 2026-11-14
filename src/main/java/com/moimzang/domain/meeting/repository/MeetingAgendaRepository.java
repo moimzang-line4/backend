@@ -5,6 +5,7 @@ import com.moimzang.domain.meeting.enums.AgendaStatus;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,6 +22,14 @@ public interface MeetingAgendaRepository extends JpaRepository<MeetingAgenda, Lo
     // 회의 삭제 전 해당 회의의 안건을 전부 지운다 — meeting_agenda.meeting_id FK가 RESTRICT라
     // Meeting보다 먼저 지워야 한다
     void deleteAllByMeetingId(Long meetingId);
+
+    // 일정 삭제 시 그 일정에서 만든 회의록의 안건을 전부 지운다 — 회의록보다 먼저 지워야 한다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from MeetingAgenda a
+            where a.meeting.id in (select m.id from Meeting m where m.schedule.id = :scheduleId)
+            """)
+    void deleteAllByMeetingScheduleId(@Param("scheduleId") Long scheduleId);
 
     // 새 안건의 orderNo(마지막+1)를 계산하기 위해 가장 뒤 안건부터 내림차순으로 조회한다.
     // orderNo에 유니크 제약이 없어 동시 추가 시 중복이 생길 수 있는데, LIMIT으로 1건만

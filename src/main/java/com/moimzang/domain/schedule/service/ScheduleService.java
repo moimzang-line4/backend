@@ -46,6 +46,7 @@ public class ScheduleService {
     private final GroupTermRepository groupTermRepository;
     private final ScheduleRoundRepository scheduleRoundRepository;
     private final ScheduleMapper scheduleMapper;
+    private final ScheduleCascadeDeleter scheduleCascadeDeleter;
 
     // 동아리 일정은 전부 한국 시간 기준이라 서버 시간대와 상관없이 D-day를 한국 날짜로 센다
     private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
@@ -205,6 +206,19 @@ public class ScheduleService {
         return ScheduleCategoryListResponse.builder()
                 .categories(scheduleMapper.toCategoryResponses(categories))
                 .build();
+    }
+
+    // 일정을 삭제한다. 운영 메모·차수·출석·정산·자료·안건 연결과 이 일정에서 만든 회의록까지 한 번에 지운다
+    @Transactional
+    public void deleteSchedule(Long scheduleId) {
+        log.info("[일정 삭제] 삭제를 시작합니다. scheduleId = {}", scheduleId);
+
+        Schedule schedule = findSchedule(scheduleId, "일정 삭제");
+        scheduleCascadeDeleter.deleteChildren(scheduleId);
+        // 하위 삭제가 영속성 컨텍스트를 비우므로 엔티티 대신 ID로 지운다
+        scheduleRepository.deleteById(schedule.getId());
+
+        log.info("[일정 삭제] 삭제를 완료했습니다. scheduleId = {}", scheduleId);
     }
 
     private Schedule findSchedule(Long scheduleId, String action) {

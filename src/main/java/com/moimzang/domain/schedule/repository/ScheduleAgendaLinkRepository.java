@@ -23,4 +23,16 @@ public interface ScheduleAgendaLinkRepository
             )
             """)
     void deleteAllByMeetingId(@Param("meetingId") Long meetingId);
+
+    // 일정 삭제 시 그 일정에 걸린 연결과, 그 일정에서 만든 회의록의 안건에 걸린 연결을 함께 지운다.
+    // 안건·회의록을 지우기 전에 먼저 사라져야 meeting_agenda_id FK에 막히지 않는다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from ScheduleAgendaLink l
+            where l.schedule.id = :scheduleId
+               or l.meetingAgenda.id in (
+                   select a.id from MeetingAgenda a where a.meeting.schedule.id = :scheduleId
+               )
+            """)
+    void deleteAllForScheduleDeletion(@Param("scheduleId") Long scheduleId);
 }
