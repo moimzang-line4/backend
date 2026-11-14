@@ -2,6 +2,7 @@ package com.moimzang.domain.memberlist.repository;
 
 import com.moimzang.domain.memberlist.entity.MemberList;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MemberListRepository extends JpaRepository<MemberList, Long> {
@@ -11,4 +12,7 @@ public interface MemberListRepository extends JpaRepository<MemberList, Long> {
 
     // 등록 링크 토큰이 이미 쓰이고 있는지 확인한다
     boolean existsByJoinToken(String joinToken);
+
+    // 공개 등록 링크로 명단방을 찾는다
+    Optional<MemberList> findByJoinToken(String joinToken);
 }
