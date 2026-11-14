@@ -269,10 +269,10 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | AGENDA_409_AT_LEAST_ONE_REQUIRED | 409 | 안건이 1개만 남아 삭제할 수 없습니다. | API-058 |
 | AGENDA_409_ALREADY_COMPLETED | 409 | 이미 완료된 안건은 상태를 되돌릴 수 없습니다. | API-057 |
 
-### 예산/장부 (LedgerErrorCode) — API-069~075
+### 예산/장부 (BudgetErrorCode) — API-069~075
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
-| LEDGER_409_AUTO_ENTRY_LOCKED | 409 | 자동 기록 내역은 삭제할 수 없습니다(원본이 살아있는 경우) / 수정은 예외 없이 항상 거부. | API-072, API-073 |
+| LEDGER_409_AUTO_ENTRY_LOCKED | 409 | 자동 기록 내역은 수정할 수 없고, 원본이 살아있으면 삭제도 할 수 없습니다. | API-072, API-073 |
 
 ### 문서함 (FileErrorCode) — API-063~068
 | 코드 | HTTP | 메시지 | 발생 API |
@@ -1168,68 +1168,104 @@ cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 
 ### 예산
 
 #### API-069 · GET /api/terms/{termId}/ledger · 예산 요약·내역 조회
-인증: 불필요. currentBalance는 그룹의 모든 ledger_entry 합산(기수가 바뀌어도 이월), entries는 이
-기수 내역만. source는 FK로 판단(schedule_round_id 있으면 RECEIPT, 둘 다 없으면 MANUAL).
+인증: 불필요. currentBalance·totalIncome·totalExpense는 **그룹 전체(모든 기수) 누적**이다(기수가
+바뀌어도 이월, currentBalance = totalIncome − totalExpense). entries는 이 기수 내역만. source는
+`auto_category` 유무로 판단한다(null이 아니면 자동 기록 RECEIPT, null이면 직접 입력 MANUAL —
+`schedule_round_id`로 판단하지 않는다. 자동기록이 일정 단위로 바뀌어 이 컬럼이 항상 null이기
+때문이다).
 
 **Query**: type(ALL|INCOME|EXPENSE, 기본 ALL), cursor(선택), size(선택, 기본 20)
 
 **Response data**: ledgerFile.fileId/name, currentBalance, totalIncome, totalExpense,
 entries[].entryId/type(INCOME|EXPENSE)/itemName/amount/entryDate/source(RECEIPT|MANUAL), nextCursor
 
-cursor 페이지네이션(정렬 기준: entryDate 내림차순).
+cursor 페이지네이션(정렬 기준: entryDate 내림차순, 동일 시 id 내림차순).
 
 **에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 > **미확정**: 내역의 분류(예: "· 공연" 같은 태그) 저장할 컬럼을 `ledger_entry`에 추가할지는 구현
 > 시점에 정한다. 장부 초기 잔액(기초 총액) 자동 인식은 `docs/decisions.md` #10에 따라 보류.
-> `totalIncome`/`totalExpense`("누적 수입·지출")가 `currentBalance`처럼 그룹 전체 기간 누적인지,
-> 아니면 이 기수(`entries`)로 한정인지도 아직 확정하지 못했다 — 화면 예시만으로 판단 불가.
 
 ---
 
 #### API-070 · POST /api/terms/{termId}/ledger · 장부 직접 입력
-인증: 불필요. **Request**: type(INCOME|EXPENSE), itemName, amount, entryDate
-**Response data**: entryId. **에러**: COMMON_400
+인증: 불필요. auto_category·schedule·schedule_round는 전부 null로 생성한다(자동 기록과 구분).
+
+**Request**: type(INCOME|EXPENSE), itemName, amount, entryDate
+**Response data**: entryId. **에러**: COMMON_400, COMMON_404(존재하지 않는 termId)
 
 #### API-071 · GET /api/ledger/{entryId} · 장부 내역 상세 조회
-인증: 불필요. **Response data**: entryId, type, itemName, amount, entryDate, source, origin(자동기록
-출처 상세, 직접 입력이면 null). **에러**: COMMON_404
+인증: 불필요. source는 API-069와 같은 기준(auto_category 유무)으로 판별한다. origin(자동기록
+출처 일정: scheduleId, title)은 **자동 기록이면서 출처 일정(schedule)이 살아있을 때만** 채우고,
+직접 입력과 **출처 일정이 삭제되어 고아가 된 자동 기록**은 둘 다 null이다 — source로 이미 "자동
+기록이었는지"를 구분할 수 있어 고아 여부를 나타내는 별도 플래그를 두지 않는다.
+
+**Response data**: entryId, type, itemName, amount, entryDate, source, origin(scheduleId/title,
+없으면 null). **에러**: COMMON_404
 
 #### API-072 · PATCH /api/ledger/{entryId} · 장부 내역 수정
 인증: 불필요. 직접 입력 내역만 수정 가능. 자동 기록은 고아 여부와 무관하게 항상 수정 불가 — 삭제와
 달리 예외 없음(decisions #5).
 
-**Request**: type, itemName, amount, entryDate
+**Logics**: 보낸 필드만 반영하는 부분 수정이다 — 생략(null)한 필드는 기존 값을 그대로 유지한다.
+`type`(INCOME/EXPENSE) 변경도 허용한다.
+
+**Request**: type(선택), itemName(선택), amount(선택), entryDate(선택)
 **에러**: COMMON_400, COMMON_404, LEDGER_409_AUTO_ENTRY_LOCKED
 
 ---
 
 #### API-073 · DELETE /api/ledger/{entryId} · 장부 내역 삭제
-인증: 불필요. `schedule_round_id`가 아직 연결된 자동 기록은 LEDGER_409_AUTO_ENTRY_LOCKED로 삭제 불가(다음 "정산 내역
-새로고침" 때 재계산과 충돌). 원본 차수가 삭제되어 고아가 된 자동 기록은 일반 항목처럼 삭제 가능.
-직접 입력 내역은 항상 삭제 가능(decisions #5).
+인증: 불필요. 자동 기록은 **출처 일정(schedule)이 살아있으면** LEDGER_409_AUTO_ENTRY_LOCKED로 삭제
+불가(다음 "정산 내역 새로고침" 때 재계산과 충돌). **그 일정 자체가 삭제되어 고아가 된** 자동 기록은
+일반 항목처럼 삭제 가능. 직접 입력 내역은 항상 삭제 가능(decisions #5).
 
-**에러**: COMMON_404, LEDGER_409_AUTO_ENTRY_LOCKED(원본이 살아있는 경우)
+**Response**: 200 + `BaseResponse.success()`(COMMON_200).
+**에러**: COMMON_404, LEDGER_409_AUTO_ENTRY_LOCKED(출처 일정이 살아있는 경우)
 
 ---
 
 #### API-074 · POST /api/terms/{termId}/ledger/sync · 정산 내역 새로고침
-인증: 불필요. 영수증 등록된 차수마다 지출 행 1개(schedule_round_id). 차수 전원 납부 완료 시에만:
-실제 총 납부액 수입 행 1개 + 100원 버림 차액 "추가 동아리 지원금" 지출 행 1개를 자동 생성(둘 다
-schedule_round_id 연결, decisions #2). 부분 납부 중에는 생성 안 함, 차액 0원이면 지원금 행 생성 안
-함. 입금을 되돌리면 두 행 모두 취소, 재완료 시 중복 없이 재반영.
+인증: 불필요. **일정(schedule) 단위로 최대 4종 자동 기록**을 계산해 반영한다(차수 단위가 아니다):
+`RECEIPT_EXPENSE`(영수증 지출, 지원금·버림 차액 제외한 billedAmount 합), `CLUB_SUBSIDY_EXPENSE`
+(동아리 지원금 합), `ROUNDING_SUBSIDY_EXPENSE`(100원 버림 차액 합, "추가 지원금"),
+`PAYMENT_INCOME`(부원 납부 수입). **지출 3줄의 합은 그 일정의 영수증 총액 합과 항상 같다.**
+
+**Logics**:
+- `PAYMENT_INCOME`은 그 일정 전체 정산 대상이 1명 이상이고 전원 PAID일 때만 billedAmount 합이다.
+  일부만 납부했거나 대상이 0명이면 0원(=생성 안 함)이다.
+- 정산 명단이 없거나(API-038 미실행) 영수증이 없는 차수는 그 차수 전체를 계산에서 제외한다.
+- 계산 결과가 0원(이하)인 항목은 생성하지 않고, 이미 있던 자동 기록은 조건이 깨진 것으로 보고
+  **그 항목만 삭제**한다(예: 입금 되돌리기로 전원 납부가 깨짐, 영수증·지원금이 0원이 됨). 삭제
+  대상은 그 일정의 자동 기록(`auto_category IS NOT NULL`)뿐이고, 직접 입력 내역과 다른 일정의
+  자동 기록은 건드리지 않는다.
+- 금액·항목명(`일정 제목 + 라벨`)·거래일(그 일정 `schedule.start_at`의 날짜 부분) 중 하나라도
+  기존 값과 실제로 다를 때만 갱신하고 `updatedCount`에 포함한다. 같은 값으로 재호출하면
+  `updatedCount`는 0이다.
 
 **Response data**: createdCount, updatedCount, deletedCount
-**에러**: COMMON_404
+**에러**: COMMON_404(존재하지 않는 termId)
 
 ---
 
 #### API-075 · GET /api/terms/{termId}/ledger/export · 장부 엑셀 다운로드
-인증: 불필요. 원본 업로드 엑셀과 별개로 서비스 장부(입출금 내역·누적 수입·누적 지출·잔액)를 엑셀로
-다운로드.
+인증: 불필요. 원본 업로드 엑셀(API-063 LEDGER_FILE)과 완전히 별개로, 서버가 `ledger_entry`로 매번
+새 엑셀을 생성한다(File 엔티티·문서함에 등록하지 않음).
 
-**Response data**: downloadUrl, fileName, generatedAt
-**에러**: COMMON_404
+**Logics**:
+- 행 범위는 **이 기수**(API-069의 entries와 같은 범위), 요약(누적 수입·누적 지출·잔액)은 **그룹
+  전체 누적**(API-069의 currentBalance/totalIncome/totalExpense와 같은 범위) — 범위가 서로 다르다.
+  요약 라벨에 "(전체 기수)"처럼 범위를 명시하고, 이와 별도로 "이번 기수 수입 합계"/"이번 기수 지출
+  합계" 한 행을 더 보여준다(해당 기수 entries 합).
+- 행 정렬은 entryDate 오름차순, 동일 시 id 오름차순이다(API-069의 내림차순과 방향만 반대).
+- 내역이 0건이어도 에러 없이 200으로 헤더만 있는 엑셀을 생성한다.
+- 행별 누적 잔액 열은 없다(기수 중간부터 시작하는 행의 기초 잔액을 정의할 수 없어서, decisions #10
+  미해결 영역과 연결).
+- 프론트는 응답 `fileName`을 다운로드 파일명으로 지정한다(`downloadUrl` 자체의 저장 키는 사람이
+  읽는 이름이 아니다).
+
+**Response data**: downloadUrl, fileName("{그룹명}_{기수명}_장부_{yyyyMMdd}.xlsx"), generatedAt
+**에러**: COMMON_404(존재하지 않는 termId)
 
 ### AI 비서
 
@@ -1315,7 +1351,8 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 14. ~~API-014 자동 매칭 알고리즘 상세 기준~~ — **해소됨(2026-11-14)**: API-014 자체를 명세에서
     삭제해 정할 기준이 없어졌다. 자동으로 안건을 연결해 주는 화면이 처음부터 없었다(decisions #45).
 15. API-007 일정 수정 시 운영 공간 토글(`hasOperationSpace`) 변경 허용 여부 — 보류(decisions #12)
-16. API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지
+16. ~~API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지~~
+    — **해소됨(decisions #68)**: `currentBalance`와 같은 그룹 전체(모든 기수) 누적이다.
 17. ~~AI 연동 벤더/모델 — 영수증 인식(API-036), 회의 요약(API-060), AI 채팅 응답(API-078)~~ —
     **해소됨(2026-11-12)**: meeting 쪽은 벤더 하나로 확정하지 않고 Gemini/OpenAI를
     `app.ai.provider` 설정값으로 전환하는 구조로 구현(decisions #26). 영수증 인식·AI 채팅이
