@@ -132,6 +132,27 @@ public class MemberList extends BaseEntity {
         }
     }
 
+    // 등록 폼에서 받는 항목인지 확인한다. 이름·학과는 항상 받으므로 토글 항목만 묻는다
+    public boolean collectsSchool() {
+        return Boolean.TRUE.equals(collectSchool);
+    }
+
+    public boolean collectsStudentId() {
+        return Boolean.TRUE.equals(collectStudentId);
+    }
+
+    public boolean collectsPart() {
+        return Boolean.TRUE.equals(collectPart);
+    }
+
+    public boolean collectsGrade() {
+        return Boolean.TRUE.equals(collectGrade);
+    }
+
+    public boolean collectsPhone() {
+        return Boolean.TRUE.equals(collectPhone);
+    }
+
     // 링크를 닫았거나 마감일이 지났으면 더 이상 등록을 받지 않는다
     public MemberListStatus effectiveStatus(LocalDateTime now) {
         boolean closed = Boolean.TRUE.equals(isLinkClosed)

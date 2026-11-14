@@ -66,4 +66,37 @@ public class Member extends BaseEntity {
     // 개인정보 수집 동의 여부
     @Column(name = "privacy_consent", nullable = false)
     private Boolean privacyConsent;
+
+    // 부원을 만든다. 명단방에서 수집하지 않는 항목은 호출하는 쪽에서 null로 넘긴다
+    public static Member create(MemberList memberList, String name, String school, String department, String phone,
+                                String studentId, String part, String grade, boolean privacyConsent) {
+        return Member.builder()
+                .memberList(memberList)
+                .name(name)
+                .school(school)
+                .department(department)
+                .phone(phone)
+                .studentId(studentId)
+                .part(part)
+                .grade(grade)
+                .privacyConsent(privacyConsent)
+                .build();
+    }
+
+    // 운영진의 부원 정보 수정. 수정 화면에 있는 이름·학교·학과·전화번호만 바꾸고 null인 항목은 그대로 둔다.
+    // 학교·전화번호는 선택 항목이라 빈 문자열을 보내면 비운다
+    public void update(String name, String school, String department, String phone) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (school != null) {
+            this.school = school.isBlank() ? null : school;
+        }
+        if (department != null) {
+            this.department = department;
+        }
+        if (phone != null) {
+            this.phone = phone.isBlank() ? null : phone;
+        }
+    }
 }

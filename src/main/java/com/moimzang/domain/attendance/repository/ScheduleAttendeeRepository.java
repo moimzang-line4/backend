@@ -30,4 +30,9 @@ public interface ScheduleAttendeeRepository extends JpaRepository<ScheduleAttend
             where a.member.id in (select m.id from Member m where m.memberList.id = :memberListId)
             """)
     void deleteAllByMemberListId(@Param("memberListId") Long memberListId);
+
+    // 부원 삭제 시 그 부원으로 등록된 일정 참가자의 부원 연결만 끊는다 — 참가자 정보는 스냅샷이라 그대로 남긴다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update ScheduleAttendee a set a.member = null where a.member.id = :memberId")
+    void clearMemberReference(@Param("memberId") Long memberId);
 }

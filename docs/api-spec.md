@@ -228,6 +228,18 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | ATTENDANCE_409_DUPLICATE_NAME | 409 | 같은 이름의 사람이 있어요. | API-030 |
 
+### 부원 명단 (MemberListErrorCode) — API-017~026
+| 코드 | HTTP | 메시지 | 발생 API |
+|---|---|---|---|
+| MEMBER_LIST_404_NOT_FOUND | 404 | 존재하지 않는 명단방입니다. | API-019, API-020, 명단방 수정, API-023, API-024 |
+| MEMBER_LIST_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-017, API-018 |
+| MEMBER_404_JOIN_LINK_NOT_FOUND | 404 | 존재하지 않는 등록 링크입니다. | API-021, API-022 |
+| MEMBER_410_JOIN_CLOSED | 410 | 등록이 마감된 명단입니다. | API-021, API-022 |
+| MEMBER_400_PRIVACY_CONSENT_REQUIRED | 400 | 개인정보 수집·이용에 동의해 주세요. | API-022 |
+| MEMBER_400_REQUIRED_FIELD_MISSING | 400 | 필수 항목을 입력해 주세요. | API-022 |
+| MEMBER_400_INVALID_CURSOR | 400 | 잘못된 cursor입니다. | API-023 |
+| MEMBER_404_NOT_FOUND | 404 | 존재하지 않는 부원입니다. | API-025, API-026 |
+
 ### 운영 공간 (ScheduleErrorCode의 SPACE_*) — API-012~016
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
@@ -607,46 +619,62 @@ FK가 RESTRICT라 round_attendee → settlement_target → schedule_attendee →
 ---
 
 #### API-021 · GET /api/public/member-lists/{joinToken} · 부원 등록 폼 조회(공개)
-인증: 불필요(공개 API). **Response data**: groupName, memberListName, registerDeadline, fields(수집 항목)
-**에러**: COMMON_404(링크 없음), 410(마감/닫힌 링크)
+인증: 불필요(공개 API). **Response data**: groupName, memberListName, registerDeadline(`yyyy-MM-dd`),
+fields.school/studentId/part/grade/phone(boolean, true면 폼에 노출하고 필수)
+
+**Logics**: 링크를 닫았거나 마감일이 지났으면 410.
+
+**에러**: MEMBER_404_JOIN_LINK_NOT_FOUND(없는 링크), MEMBER_410_JOIN_CLOSED(닫힌 링크 또는 마감된 명단)
 
 ---
 
 #### API-022 · POST /api/public/member-lists/{joinToken}/members · 부원 등록(공개)
 인증: 불필요(공개 API).
 
-**Request**: name, school(그 명단방 collectSchool=true일 때만), department, phone(collectPhone=true일
-때만), studentId(선택), privacyConsent(boolean, 필수)
+**Request**: name(필수), department(필수), school, phone, studentId, part, grade, privacyConsent(boolean, 필수)
 
-**Logics**: 필수 항목 = 이름·학과(고정) + 그 명단방의 collect_*=true 항목. 토글 OFF 항목은 폼에
-노출되지 않아야 하며 보내도 무시한다. FE는 API-021의 `fields`로 노출·필수 여부를 동적으로 렌더링한다.
+**Logics**: 필수 항목 = 이름·학과(고정) + 그 명단방에서 켠 항목(학교·전화번호·학번·파트·학년).
+토글 OFF 항목은 폼에 노출되지 않아야 하며 보내도 저장하지 않는다. FE는 API-021의 `fields`로 노출·필수 여부를
+동적으로 렌더링한다. 링크 확인(404·410) → 개인정보 동의 확인 → 필수 항목 확인 순서로 검사한다.
 
-**Response data**: memberId. **에러**: COMMON_400(필수 누락, 개인정보 미동의), COMMON_404, 410(마감)
+**Response data**: memberId.
+**에러**: COMMON_400(이름·학과 누락, 길이 초과), MEMBER_400_PRIVACY_CONSENT_REQUIRED(개인정보 미동의),
+MEMBER_400_REQUIRED_FIELD_MISSING(켜진 항목 누락), MEMBER_404_JOIN_LINK_NOT_FOUND, MEMBER_410_JOIN_CLOSED
 
-> **미확정**: 동일인 중복 등록 처리 기준(이름+연락처 일치 시 덮어쓸지 거부할지)은 구현 시점에 정한다.
+> **미확정**: 동일인 중복 등록 처리 기준(이름+연락처 일치 시 덮어쓸지 거부할지)은 팀 확인 후 반영한다.
 
 ---
 
 #### API-023 · GET /api/member-lists/{memberListId}/members · 부원 목록 조회
-인증: 불필요. **Query**: keyword(선택), cursor(선택), size(선택, 기본 20). **Response data**:
-members[].memberId/name/department/phone/school/studentId/part/grade(수집 안 한 항목은 null),
-nextCursor. cursor 페이지네이션(정렬 기준: createdAt). **에러**: COMMON_404, COMMON_400(잘못된 cursor)
+인증: 불필요. **Query**: keyword(선택, 이름·학과·전화번호 부분 일치), cursor(선택), size(선택, 기본 20, 최대 100).
+
+**Response data**: totalCount(검색 조건에 맞는 전체 인원), members[].memberId/name/department/phone/school/
+studentId/part/grade(수집 안 한 항목은 null), nextCursor. 등록한 순서(createdAt, id 오름차순) cursor 페이지네이션.
+
+**에러**: MEMBER_LIST_404_NOT_FOUND, MEMBER_400_INVALID_CURSOR
 
 ---
 
 #### API-024 · POST /api/member-lists/{memberListId}/members · 부원 추가(운영진)
-인증: 불필요. **Request**: name, school, department, phone(API-022와 동일 동적 필수 규칙).
-**Response data**: memberId. **에러**: COMMON_400, COMMON_404
+인증: 불필요. **Request**: name(필수), department(필수), school(선택), phone(선택).
+
+**Logics**: 추가 화면에는 이름·학교·학과·전화번호만 있어 이름·학과만 필수로 받는다. 마감된 명단방에도 추가할 수 있다.
+폼 동의를 거치지 않았으므로 privacy_consent는 FALSE로 저장한다.
+
+**Response data**: memberId. **에러**: COMMON_400(이름·학과 누락), MEMBER_LIST_404_NOT_FOUND
 
 ---
 
 #### API-025 · PATCH /api/members/{memberId} · 부원 수정
-인증: 불필요. **Request**: name, school(선택), department, phone(선택) — 보낸 필드만 수정, 학번·파트·
-학년은 이 화면에 없어 수정 불가. **Response data**: memberId. **에러**: COMMON_400, COMMON_404
+인증: 불필요. **Request**: name, school, department, phone — 전부 선택, 보낸 필드만 수정. 이름·학과는 공백 불가,
+학교·전화번호는 빈 문자열을 보내면 비운다. 학번·파트·학년은 수정 화면에 없어 수정 불가.
+일정 참가자 정보는 스냅샷이라 함께 바뀌지 않는다.
+
+**Response data**: memberId. **에러**: COMMON_400, MEMBER_404_NOT_FOUND
 
 #### API-026 · DELETE /api/members/{memberId} · 부원 삭제
-인증: 불필요. 이 부원이 참여한 `schedule_attendee`는 유지하고 `member_id`만 NULL로 전환(스냅샷이라
-원본 삭제와 무관). **에러**: COMMON_404
+인증: 불필요. 이 부원이 참여한 `schedule_attendee`는 유지하고 `member_id`만 NULL로 전환한 뒤 부원을 삭제한다
+(스냅샷이라 원본 삭제와 무관, 출석·정산 기록도 유지). **에러**: MEMBER_404_NOT_FOUND
 
 ### 출석
 
