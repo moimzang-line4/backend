@@ -12,6 +12,9 @@ import lombok.Getter;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class NoteListResponse {
 
+    @Schema(description = "유형·검색어 조건에 맞는 전체 메모 수", example = "4")
+    private final Long totalCount;
+
     @Schema(description = "메모 목록(최신 작성순)")
     private final List<NoteResponse> notes;
 

@@ -29,6 +29,16 @@ public class OperationNoteRepositoryImpl implements OperationNoteRepositoryCusto
                 .fetch();
     }
 
+    @Override
+    public long countForList(Long scheduleId, NoteType type, String keyword) {
+        Long count = queryFactory.select(operationNote.count())
+                .from(operationNote)
+                .where(operationNote.schedule.id.eq(scheduleId))
+                .where(typeEq(type), keywordContains(keyword))
+                .fetchOne();
+        return count == null ? 0 : count;
+    }
+
     // 메모는 일정에 딸려 있어 기수 조건이 일정을 거쳐야 걸린다. 어느 일정의 메모인지도
     // 응답에 써야 해서 schedule을 fetch join한다
     @Override

@@ -97,10 +97,12 @@ public class NoteService {
             OperationNote last = page.get(page.size() - 1);
             nextCursor = CursorCodec.encode(last.getCreatedAt().toString(), last.getId());
         }
+        long totalCount = operationNoteRepository.countForList(scheduleId, noteType, keyword);
 
-        log.info("[메모 목록 조회] 조회를 완료했습니다. scheduleId = {}, count = {}, hasNext = {}",
-                scheduleId, page.size(), hasNext);
+        log.info("[메모 목록 조회] 조회를 완료했습니다. scheduleId = {}, count = {}, totalCount = {}, hasNext = {}",
+                scheduleId, page.size(), totalCount, hasNext);
         return NoteListResponse.builder()
+                .totalCount(totalCount)
                 .notes(noteMapper.toResponses(page))
                 .nextCursor(nextCursor)
                 .build();

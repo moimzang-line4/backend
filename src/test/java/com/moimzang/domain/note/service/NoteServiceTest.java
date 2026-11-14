@@ -64,9 +64,11 @@ class NoteServiceTest {
         OperationNote todo = note(NoteType.TODO, "포스터", "김가은", "인쇄");
         given(operationNoteRepository.search(eq(10L), eq(NoteType.TODO), eq("포스터"), isNull(), isNull(), eq(21)))
                 .willReturn(List.of(todo));
+        given(operationNoteRepository.countForList(10L, NoteType.TODO, "포스터")).willReturn(1L);
 
         NoteListResponse response = noteService.listNotes(10L, "todo", "포스터", null, null);
 
+        assertThat(response.getTotalCount()).isEqualTo(1L);
         assertThat(response.getNotes()).hasSize(1);
         assertThat(response.getNotes().get(0).getNoteId()).isEqualTo(1L);
         assertThat(response.getNotes().get(0).getType()).isEqualTo(NoteType.TODO);
@@ -99,9 +101,12 @@ class NoteServiceTest {
                 .toList();
         given(operationNoteRepository.search(eq(10L), isNull(), isNull(), isNull(), isNull(), eq(3)))
                 .willReturn(fetched);
+        given(operationNoteRepository.countForList(10L, null, null)).willReturn(25L);
 
         NoteListResponse response = noteService.listNotes(10L, null, null, null, 2);
 
+        // 이번 페이지는 2건이어도 화면의 '메모 목록 N'에는 전체 개수가 나와야 한다
+        assertThat(response.getTotalCount()).isEqualTo(25L);
         assertThat(response.getNotes()).extracting("noteId").containsExactly(9L, 8L);
         CursorCodec next = CursorCodec.decode(response.getNextCursor());
         assertThat(next.getId()).isEqualTo(8L);
