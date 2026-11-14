@@ -3,12 +3,15 @@ package com.moimzang.domain.budget.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.moimzang.domain.budget.entity.LedgerEntry;
+import com.moimzang.domain.budget.enums.LedgerAutoCategory;
 import com.moimzang.domain.budget.enums.LedgerType;
 import com.moimzang.domain.group.entity.ClubGroup;
 import com.moimzang.domain.group.entity.GroupTerm;
+import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.global.config.JpaAuditingConfig;
 import com.moimzang.global.config.QuerydslConfig;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -175,6 +178,78 @@ class LedgerEntryRepositoryImplTest {
         List<LedgerEntry> result = ledgerEntryRepository.search(groupTerm.getId(), null, null, null, 2);
 
         assertThat(result).hasSize(2);
+    }
+
+    // 정산 내역 새로고침(API-074) 대상 일정 선정 쿼리 검증
+    @Test
+    void findAutoScheduleIds_자동기록이_있는_일정을_반환한다() {
+        Schedule schedule = persistSchedule(groupTerm, "가을 공연");
+        persistAutoEntry(groupTerm, schedule, LedgerAutoCategory.RECEIPT_EXPENSE, 30000);
+
+        List<Long> scheduleIds = ledgerEntryRepository.findAutoScheduleIds(groupTerm.getId());
+
+        assertThat(scheduleIds).containsExactly(schedule.getId());
+    }
+
+    @Test
+    void findAutoScheduleIds_직접_입력만_있으면_제외한다() {
+        persistEntry(groupTerm, LedgerType.EXPENSE, "간식비", 15000, LocalDate.of(2026, 11, 1));
+
+        List<Long> scheduleIds = ledgerEntryRepository.findAutoScheduleIds(groupTerm.getId());
+
+        assertThat(scheduleIds).isEmpty();
+    }
+
+    // clearScheduleReference(일정 삭제)로 schedule이 null이 된 고아 자동기록은 e.schedule.id가
+    // 비교 대상 termId와 결코 같아질 수 없어 자연히 제외된다
+    @Test
+    void findAutoScheduleIds_schedule이_null인_고아_자동기록은_제외한다() {
+        Schedule schedule = persistSchedule(groupTerm, "삭제된 일정");
+        LedgerEntry orphan = persistAutoEntry(groupTerm, schedule, LedgerAutoCategory.RECEIPT_EXPENSE, 30000);
+        ReflectionTestUtils.setField(orphan, "schedule", null);
+        em.persistAndFlush(orphan);
+
+        List<Long> scheduleIds = ledgerEntryRepository.findAutoScheduleIds(groupTerm.getId());
+
+        assertThat(scheduleIds).isEmpty();
+    }
+
+    @Test
+    void findAutoScheduleIds_다른_기수의_자동기록은_제외한다() {
+        GroupTerm otherTerm = persistGroupTerm(persistClubGroup("다른 동아리"), "25기");
+        Schedule otherSchedule = persistSchedule(otherTerm, "다른 기수 행사");
+        persistAutoEntry(otherTerm, otherSchedule, LedgerAutoCategory.RECEIPT_EXPENSE, 30000);
+
+        List<Long> scheduleIds = ledgerEntryRepository.findAutoScheduleIds(groupTerm.getId());
+
+        assertThat(scheduleIds).isEmpty();
+    }
+
+    @Test
+    void findByScheduleIdAndAutoCategoryIsNotNull_직접_입력은_제외하고_그_일정의_자동기록만_반환한다() {
+        Schedule schedule = persistSchedule(groupTerm, "가을 공연");
+        persistEntry(groupTerm, LedgerType.EXPENSE, "직접 입력", 5000, LocalDate.of(2026, 11, 1));
+        LedgerEntry receiptExpense = persistAutoEntry(groupTerm, schedule, LedgerAutoCategory.RECEIPT_EXPENSE, 30000);
+        LedgerEntry subsidyExpense = persistAutoEntry(groupTerm, schedule, LedgerAutoCategory.CLUB_SUBSIDY_EXPENSE, 10000);
+        Schedule otherSchedule = persistSchedule(groupTerm, "다른 일정");
+        persistAutoEntry(groupTerm, otherSchedule, LedgerAutoCategory.RECEIPT_EXPENSE, 99999);
+
+        List<LedgerEntry> result = ledgerEntryRepository.findByScheduleIdAndAutoCategoryIsNotNull(schedule.getId());
+
+        assertThat(result).containsExactlyInAnyOrder(receiptExpense, subsidyExpense);
+    }
+
+    private Schedule persistSchedule(GroupTerm term, String title) {
+        Schedule schedule = Schedule.create(term, null, title, "RED", false,
+                LocalDateTime.of(2026, 11, 20, 18, 0), LocalDateTime.of(2026, 11, 20, 21, 0),
+                null, null, false);
+        return em.persistAndFlush(schedule);
+    }
+
+    private LedgerEntry persistAutoEntry(GroupTerm term, Schedule schedule, LedgerAutoCategory category, int amount) {
+        LedgerEntry entry = LedgerEntry.createAuto(term, schedule, category, schedule.getTitle() + " " + category.label(),
+                amount, LocalDate.of(2026, 11, 20));
+        return em.persistAndFlush(entry);
     }
 
     private ClubGroup persistClubGroup(String name) {
