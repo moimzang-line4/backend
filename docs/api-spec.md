@@ -731,6 +731,8 @@ checkedInAt, progress. **에러**: COMMON_400(isCheckedIn 누락), COMMON_404
 않는다). 미입금 상태면 round_attendee와 함께 settlement_target도 삭제하고, 남은 인원으로 1인
 청구액을 재계산한다.
 
+**Response**: 200 + `BaseResponse.success()`(COMMON_200).
+
 ### 정산
 
 #### API-033 · GET /api/rounds/{roundId}/receipt · 영수증 조회
@@ -844,6 +846,8 @@ COMMON_404, SETTLEMENT_409_RECEIPT_NOT_REGISTERED, SETTLEMENT_423_PAID_MEMBER_LO
 일정의 **모든 차수**에서 그 사람의 settlement_target만 삭제한다(특정 차수 1개만 빼는 게 아니고,
 API-032와 달리 round_attendee는 건드리지 않는다 — "입금 명단에서 뺀다"는 출석 사실과는 별개
 결정이다). 각 차수는 남은 인원으로 청구액 재계산(남은 인원이 0명이면 재계산을 건너뛴다).
+
+**Response**: 200 + `BaseResponse.success()`(COMMON_200).
 **에러**: COMMON_404(그 일정에 정산 대상이 없는 참가자), SETTLEMENT_423_PAID_CANNOT_DELETE
 
 #### API-042 · GET /api/schedules/{scheduleId}/payments · 입금 현황 조회
