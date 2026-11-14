@@ -30,4 +30,14 @@ public class ClubGroup extends BaseEntity {
     // 그룹명
     @Column(name = "name", nullable = false, length = 100)
     private String name;
+
+    public static ClubGroup create(String name) {
+        return ClubGroup.builder()
+                .name(name)
+                .build();
+    }
+
+    public void updateName(String name) {
+        this.name = name;
+    }
 }
