@@ -8,4 +8,7 @@ public interface MemberListRepository extends JpaRepository<MemberList, Long> {
 
     // 기수의 명단방을 만든 순서대로 조회한다(AI 비서 조회용, 읽기 전용)
     List<MemberList> findByGroupTermIdOrderByIdAsc(Long groupTermId);
+
+    // 등록 링크 토큰이 이미 쓰이고 있는지 확인한다
+    boolean existsByJoinToken(String joinToken);
 }

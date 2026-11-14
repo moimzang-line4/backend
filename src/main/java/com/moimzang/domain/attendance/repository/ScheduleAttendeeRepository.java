@@ -22,4 +22,12 @@ public interface ScheduleAttendeeRepository extends JpaRepository<ScheduleAttend
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from ScheduleAttendee a where a.schedule.id = :scheduleId")
     void deleteAllByScheduleId(@Param("scheduleId") Long scheduleId);
+
+    // 명단방 삭제 시 그 명단방 부원으로 등록된 일정 참가자를 지운다 — 출석·정산 대상을 먼저 지운 뒤 호출한다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from ScheduleAttendee a
+            where a.member.id in (select m.id from Member m where m.memberList.id = :memberListId)
+            """)
+    void deleteAllByMemberListId(@Param("memberListId") Long memberListId);
 }

@@ -84,4 +84,58 @@ public class MemberList extends BaseEntity {
     // 등록 링크 닫힘 여부
     @Column(name = "is_link_closed", nullable = false)
     private Boolean isLinkClosed;
+
+    // 학과는 이름과 함께 항상 받는 항목이라 토글과 무관하게 수집으로 고정한다
+    public static MemberList create(GroupTerm groupTerm, String name, LocalDateTime registerDeadline,
+                                    boolean collectSchool, boolean collectStudentId, boolean collectPart,
+                                    boolean collectGrade, boolean collectPhone, String joinToken) {
+        return MemberList.builder()
+                .groupTerm(groupTerm)
+                .name(name)
+                .registerDeadline(registerDeadline)
+                .collectSchool(collectSchool)
+                .collectDepartment(Boolean.TRUE)
+                .collectPhone(collectPhone)
+                .collectStudentId(collectStudentId)
+                .collectPart(collectPart)
+                .collectGrade(collectGrade)
+                .status(MemberListStatus.RECRUITING)
+                .joinToken(joinToken)
+                .isLinkClosed(Boolean.FALSE)
+                .build();
+    }
+
+    // 명단방 설정을 부분 수정한다 — 인자가 null인 항목은 바꾸지 않는다.
+    // 수집 토글을 꺼도 이미 받은 부원 정보는 그대로 두고, 이후 등록부터 적용된다
+    public void update(String name, LocalDateTime registerDeadline, Boolean collectSchool, Boolean collectStudentId,
+                       Boolean collectPart, Boolean collectGrade, Boolean collectPhone) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (registerDeadline != null) {
+            this.registerDeadline = registerDeadline;
+        }
+        if (collectSchool != null) {
+            this.collectSchool = collectSchool;
+        }
+        if (collectStudentId != null) {
+            this.collectStudentId = collectStudentId;
+        }
+        if (collectPart != null) {
+            this.collectPart = collectPart;
+        }
+        if (collectGrade != null) {
+            this.collectGrade = collectGrade;
+        }
+        if (collectPhone != null) {
+            this.collectPhone = collectPhone;
+        }
+    }
+
+    // 링크를 닫았거나 마감일이 지났으면 더 이상 등록을 받지 않는다
+    public MemberListStatus effectiveStatus(LocalDateTime now) {
+        boolean closed = Boolean.TRUE.equals(isLinkClosed)
+                || (registerDeadline != null && now.isAfter(registerDeadline));
+        return closed ? MemberListStatus.COMPLETED : MemberListStatus.RECRUITING;
+    }
 }

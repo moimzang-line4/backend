@@ -36,4 +36,14 @@ public interface RoundAttendeeRepository extends JpaRepository<RoundAttendee, Lo
             where ra.scheduleRound.id in (select r.id from ScheduleRound r where r.schedule.id = :scheduleId)
             """)
     void deleteAllByScheduleId(@Param("scheduleId") Long scheduleId);
+
+    // 명단방 삭제 시 그 명단방 부원으로 등록된 참가자의 출석 기록을 지운다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from RoundAttendee ra
+            where ra.scheduleAttendee.id in (
+                select a.id from ScheduleAttendee a where a.member.memberList.id = :memberListId
+            )
+            """)
+    void deleteAllByMemberListId(@Param("memberListId") Long memberListId);
 }
