@@ -73,6 +73,16 @@ public interface ScheduleApi {
     ResponseEntity<BaseResponse<ScheduleDetailResponse>> getSchedule(
             @Parameter(description = "일정 ID", example = "10") Long scheduleId);
 
+    @Operation(summary = "일정 삭제",
+               description = "일정과 운영 메모·차수·출석·정산·자료·안건 연결, 이 일정에서 만든 회의록을 함께 삭제한다. "
+                       + "장부 기록은 남기고 차수 참조만 끊는다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "삭제 성공"),
+        @ApiResponse(responseCode = "404", description = "SCHEDULE_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> deleteSchedule(@Parameter(description = "일정 ID", example = "10") Long scheduleId);
+
     @Operation(summary = "일정 수정", description = "보낸 필드만 수정한다. 운영 공간 토글은 수정하지 않는다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "수정 성공"),

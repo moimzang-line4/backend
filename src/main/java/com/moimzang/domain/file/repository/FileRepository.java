@@ -4,6 +4,7 @@ import com.moimzang.domain.file.entity.File;
 import com.moimzang.domain.file.enums.FileCategory;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,4 +29,9 @@ public interface FileRepository extends JpaRepository<File, Long>, FileRepositor
               and f.deletedAt is null
             """)
     Optional<File> findActiveById(@Param("fileId") Long fileId);
+
+    // 일정 삭제 시 그 일정에서 올린 자료 행을 지운다. 이미 소프트 삭제된 행도 schedule_id FK를 쥐고 있어 함께 지운다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from File f where f.schedule.id = :scheduleId")
+    void deleteAllByScheduleId(@Param("scheduleId") Long scheduleId);
 }

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,6 +44,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -62,6 +64,9 @@ class ScheduleServiceTest {
     @Mock
     private ScheduleRoundRepository scheduleRoundRepository;
 
+    @Mock
+    private ScheduleCascadeDeleter scheduleCascadeDeleter;
+
     // mapper는 mock하지 않는다 — 매핑 누락을 실제 생성 코드로 검증한다
     private final ScheduleMapper scheduleMapper = Mappers.getMapper(ScheduleMapper.class);
 
@@ -70,7 +75,7 @@ class ScheduleServiceTest {
     @BeforeEach
     void setUp() {
         scheduleService = new ScheduleService(scheduleRepository, scheduleCategoryRepository, groupTermRepository,
-                scheduleRoundRepository, scheduleMapper);
+                scheduleRoundRepository, scheduleMapper, scheduleCascadeDeleter);
     }
 
     @Test
@@ -419,6 +424,30 @@ class ScheduleServiceTest {
         UpcomingScheduleListResponse response = scheduleService.listUpcomingSchedules(1L, 100);
 
         assertThat(response.getSchedules()).isEmpty();
+    }
+
+    @Test
+    void deleteSchedule_하위_데이터를_먼저_지우고_일정을_지운다() {
+        Schedule schedule = schedule(10L, mock(GroupTerm.class), null, START, END);
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+
+        scheduleService.deleteSchedule(10L);
+
+        InOrder order = inOrder(scheduleCascadeDeleter, scheduleRepository);
+        order.verify(scheduleCascadeDeleter).deleteChildren(10L);
+        order.verify(scheduleRepository).deleteById(10L);
+    }
+
+    @Test
+    void deleteSchedule_없는_일정이면_SCHEDULE_404_NOT_FOUND() {
+        given(scheduleRepository.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> scheduleService.deleteSchedule(99L))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ScheduleErrorCode.SCHEDULE_404_NOT_FOUND);
+        verify(scheduleCascadeDeleter, never()).deleteChildren(any());
+        verify(scheduleRepository, never()).deleteById(any());
     }
 
     private ScheduleCreateRequest.ScheduleCreateRequestBuilder createRequest(Long categoryId, boolean operationSpace) {

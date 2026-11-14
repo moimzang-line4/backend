@@ -202,7 +202,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | SCHEDULE_400_INVALID_CURSOR | 400 | cursor 형식이 올바르지 않습니다. | API-005 |
 | SCHEDULE_400_END_BEFORE_START | 400 | 종료 시간이 시작 시간보다 빠릅니다. | API-004, API-007 |
-| SCHEDULE_404_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-006, API-007 |
+| SCHEDULE_404_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-006, API-007, API-008 |
 | SCHEDULE_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 일정 카테고리입니다. | API-004, API-007 |
 | SCHEDULE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-004, API-005, API-009, API-010, API-011 |
 | SCHEDULE_409_CATEGORY_DUPLICATED | 409 | 이미 있는 카테고리입니다. | API-010 |
@@ -417,7 +417,12 @@ location·memo에 빈 문자열을 보내면 지운다. 시작·종료 중 하�
 `ledger_entry`(영수증 지출·완납 수입·추가 동아리 지원금 행)는 삭제하지 않고 보존하며,
 `schedule_round_id` 참조만 NULL로 전환한다(decisions #4와 동일 원칙).
 
-**Response**: 204 No Content. **에러**: COMMON_404
+지우는 순서(FK가 전부 RESTRICT): 일정-안건 연결(이 일정의 연결 + 이 일정 회의록 안건에 걸린 연결) → 일정 소속
+회의록의 안건 → 회의록 → 운영 메모 → 장부 차수 참조 해제 → 출석(round_attendee) → 정산 대상 → 차수 → 참가자 →
+자료(소프트 삭제된 행 포함) → 일정. 자료는 DB 행만 지우고 스토리지 파일은 남는다(영구 삭제 배치를 두지 않는 것과 같은
+원칙, decisions #16).
+
+**Response**: 200(BaseResponse, data 없음). **에러**: SCHEDULE_404_NOT_FOUND
 
 ---
 

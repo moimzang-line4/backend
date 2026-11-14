@@ -16,6 +16,7 @@ import jakarta.validation.Valid;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -102,5 +103,13 @@ public class ScheduleController implements ScheduleApi {
     public ResponseEntity<BaseResponse<ScheduleCategoryListResponse>> listCategories(@PathVariable Long termId) {
         ScheduleCategoryListResponse response = scheduleService.listCategories(termId);
         return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 일정을 하위 데이터와 함께 삭제한다
+    @Override
+    @DeleteMapping("/api/schedules/{scheduleId}")
+    public ResponseEntity<BaseResponse<Void>> deleteSchedule(@PathVariable Long scheduleId) {
+        scheduleService.deleteSchedule(scheduleId);
+        return ResponseEntity.ok(BaseResponse.success());
     }
 }

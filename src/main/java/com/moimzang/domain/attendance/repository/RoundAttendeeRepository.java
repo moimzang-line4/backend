@@ -3,6 +3,7 @@ package com.moimzang.domain.attendance.repository;
 import com.moimzang.domain.attendance.entity.RoundAttendee;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -27,4 +28,12 @@ public interface RoundAttendeeRepository extends JpaRepository<RoundAttendee, Lo
 
     // 영수증 삭제(API-035)로 차수가 사라질 때 그 차수의 출석 기록을 함께 삭제한다
     void deleteByScheduleRoundId(Long scheduleRoundId);
+
+    // 일정 삭제 시 그 일정의 모든 차수의 출석 기록을 지운다 — 차수·참가자보다 먼저 지워야 한다
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            delete from RoundAttendee ra
+            where ra.scheduleRound.id in (select r.id from ScheduleRound r where r.schedule.id = :scheduleId)
+            """)
+    void deleteAllByScheduleId(@Param("scheduleId") Long scheduleId);
 }
