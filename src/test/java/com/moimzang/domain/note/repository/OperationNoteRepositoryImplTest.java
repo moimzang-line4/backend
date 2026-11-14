@@ -140,6 +140,19 @@ class OperationNoteRepositoryImplTest {
     }
 
     @Test
+    void countForList_목록과_같은_유형_검색어_조건으로_그_일정의_전체_개수를_센다() {
+        OperationNote todo = persistNote(schedule, "포스터 인쇄", "A2 30장", "김가은");
+        ReflectionTestUtils.setField(todo, "type", NoteType.TODO);
+        em.persistAndFlush(todo);
+        persistNote(schedule, "포스터 시안", "색감 결정", "김가은");
+        persistNote(schedule, "대관 확인", "대강당", "이수민");
+
+        assertThat(operationNoteRepository.countForList(schedule.getId(), null, null)).isEqualTo(3);
+        assertThat(operationNoteRepository.countForList(schedule.getId(), null, "포스터")).isEqualTo(2);
+        assertThat(operationNoteRepository.countForList(schedule.getId(), NoteType.TODO, "포스터")).isEqualTo(1);
+    }
+
+    @Test
     void search_cursor는_그_지점_이후부터_반환하고_같은_시각이면_id로_가른다() {
         LocalDateTime sameTime = LocalDateTime.of(2026, 11, 3, 10, 0);
         OperationNote a = persistNote(schedule, "A", "내용", null);

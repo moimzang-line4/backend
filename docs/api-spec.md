@@ -880,8 +880,8 @@ type=TODO면 isTodoDone=false, 다른 유형은 null로 저장한다.
 인증: 불필요. **Query**: type(ALL|GENERAL|TODO|DECISION|IDEA, 기본 ALL), keyword(선택), cursor(선택),
 size(선택, 기본 20)
 
-**Response data**: notes[].noteId/type/title/assignee/content/isTodoDone(type=TODO만 값)/
-createdAt/updatedAt, nextCursor
+**Response data**: totalCount(type·keyword 조건에 맞는 전체 메모 수, 화면의 '메모 목록 N'),
+notes[].noteId/type/title/assignee/content/isTodoDone(type=TODO만 값)/createdAt/updatedAt, nextCursor
 
 cursor 페이지네이션(정렬 기준: createdAt 내림차순 — 최근에 작성한 메모가 위, tiebreaker id).
 

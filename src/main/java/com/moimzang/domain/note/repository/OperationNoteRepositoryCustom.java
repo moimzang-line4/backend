@@ -11,6 +11,9 @@ public interface OperationNoteRepositoryCustom {
     List<OperationNote> search(Long scheduleId, NoteType type, String keyword,
                                LocalDateTime cursorCreatedAt, Long cursorId, int limit);
 
+    // 위 목록과 같은 유형·검색어 조건의 전체 건수(메모장 화면의 '메모 목록 N')
+    long countForList(Long scheduleId, NoteType type, String keyword);
+
     // 기수의 운영 메모를 검색어·일정·유형 조건으로 조회한다(AI 비서 조회용, 읽기 전용)
     List<OperationNote> searchForAssistant(Long groupTermId, String keyword, Long scheduleId, NoteType type,
                                             int limit);
