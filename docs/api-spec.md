@@ -197,6 +197,12 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | GROUP_404_NOT_FOUND | 404 | 존재하지 않는 그룹입니다. | API-002, API-003 |
 
+### 일정 (ScheduleErrorCode) — API-010, API-011
+| 코드 | HTTP | 메시지 | 발생 API |
+|---|---|---|---|
+| SCHEDULE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-010, API-011 |
+| SCHEDULE_409_CATEGORY_DUPLICATED | 409 | 이미 있는 카테고리입니다. | API-010 |
+
 ### 정산 (SettlementErrorCode) — API-034~045
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
@@ -338,7 +344,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
 | title | string | Y | 제목 |
-| color | string | Y | 8종 중 하나(값 미확정 — §7 참고) |
+| color | string | Y | RED·ORANGE·YELLOW·GREEN·TEAL·BLUE·PURPLE·PINK 중 하나(피그마 스와치 순서, 팀 확정 전 — §7 참고) |
 | categoryId | number | N | 카테고리 ID |
 | isAllDay | boolean | Y | 종일 여부 |
 | startAt | datetime | Y | 시작 일시 |
@@ -414,11 +420,12 @@ cursor 페이지네이션(정렬 기준: startAt 오름차순, tiebreaker id).
 ---
 
 #### API-010 · POST /api/terms/{termId}/categories · 카테고리 추가
-인증: 불필요. **Request**: name. **Response**: categoryId, name. **에러**: COMMON_400
+인증: 불필요. **Request**: name. **Response**: categoryId, name. 같은 기수에 같은 이름(앞뒤 공백 제거 후)이 있으면 거부한다.
+**에러**: COMMON_400, SCHEDULE_404_GROUP_TERM_NOT_FOUND, SCHEDULE_409_CATEGORY_DUPLICATED
 
 #### API-011 · GET /api/terms/{termId}/categories · 카테고리 목록 조회
 인증: 불필요. 일정 등록에서 쓰는 목록(회의 카테고리는 API-081/082로 분리 운영, decisions #21).
-**Response data**: categories[].categoryId/name
+**Response data**: categories[].categoryId/name(만든 순서). **에러**: SCHEDULE_404_GROUP_TERM_NOT_FOUND
 
 #### API-081 · POST /api/terms/{termId}/meeting-categories · 회의 카테고리 생성
 인증: 불필요. 일정 카테고리(API-010)와 별도 테이블(meeting_category)로 운영한다(decisions #21).

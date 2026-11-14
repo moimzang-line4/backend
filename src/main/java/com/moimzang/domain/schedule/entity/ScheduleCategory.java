@@ -39,4 +39,11 @@ public class ScheduleCategory extends BaseEntity {
     // 카테고리명
     @Column(name = "name", nullable = false, length = 50)
     private String name;
+
+    public static ScheduleCategory create(GroupTerm groupTerm, String name) {
+        return ScheduleCategory.builder()
+                .groupTerm(groupTerm)
+                .name(name)
+                .build();
+    }
 }
