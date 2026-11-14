@@ -10,6 +10,7 @@ import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementHomeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementNoticeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetListResponse;
@@ -147,6 +148,14 @@ public class SettlementController implements SettlementApi {
             @Valid @RequestBody SettlementNoticeRequest request
     ) {
         SettlementNoticeResponse response = settlementService.generateSettlementNotice(scheduleId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 일정의 정산 홈을 조회한다
+    @Override
+    @GetMapping("/api/schedules/{scheduleId}/settlement")
+    public ResponseEntity<BaseResponse<SettlementHomeResponse>> getSettlementHome(@PathVariable Long scheduleId) {
+        SettlementHomeResponse response = settlementService.getSettlementHome(scheduleId);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }

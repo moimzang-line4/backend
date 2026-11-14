@@ -20,6 +20,10 @@ import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementHomeProgressResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementHomeReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementHomeResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementNoticeAccountResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementNoticeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementNoticeRoundResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
@@ -45,6 +49,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -568,5 +573,85 @@ public class SettlementService {
 
     private String formatAmount(int amount) {
         return String.format(Locale.US, "%,d", amount);
+    }
+
+    private static final String SETTLEMENT_STATUS_COMPLETE = "정산 완료";
+    private static final String SETTLEMENT_STATUS_IN_PROGRESS = "정산중";
+
+    // 일정의 정산 홈을 조회한다. progress는 사람 수 기준이다(그 사람의 일정 내 모든 차수가
+    // PAID여야 완료로 집계, decisions #53과 같은 기준). receipts[]는 영수증이 등록된 차수만
+    // 포함하고, 대표 계좌는 계좌가 설정된 차수 중 roundNo가 가장 작은 차수의 계좌를 쓴다
+    // (decisions #55와 같은 기준). 조회 전용이라 아무것도 저장하지 않는다
+    public SettlementHomeResponse getSettlementHome(Long scheduleId) {
+        log.info("[정산 홈 조회] 조회를 시작합니다. scheduleId = {}", scheduleId);
+
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> {
+                    log.warn("[정산 홈 조회] 존재하지 않는 일정입니다. scheduleId = {}", scheduleId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        List<ScheduleRound> rounds = scheduleRoundRepository.findOrderedRounds(scheduleId);
+
+        List<SettlementHomeReceiptResponse> receipts = rounds.stream()
+                .filter(ScheduleRound::hasReceipt)
+                .map(round -> settlementMapper.toHomeReceiptResponse(round, roundSettlementStatus(round)))
+                .toList();
+
+        SettlementNoticeAccountResponse account = rounds.stream()
+                .filter(ScheduleRound::hasAccount)
+                .min(Comparator.comparing(ScheduleRound::getRoundNo))
+                .map(settlementMapper::toNoticeAccountResponse)
+                .orElse(null);
+
+        // findByScheduleForAssistant(AI 비서용으로 이미 있던 조회)는 roundNo를 생략하면 그 일정
+        // 전체 settlement_target을 한 번에 반환한다 — 필터·페이지네이션이 필요 없는 전체 집계라
+        // API-042(decisions #54)와 달리 그대로 재사용해도 문제가 없다
+        List<SettlementTarget> allTargets = settlementTargetRepository.findByScheduleForAssistant(scheduleId, null);
+        SettlementHomeProgressResponse progress = calculatePersonProgress(allTargets);
+
+        String status = progress.getTotalCount() > 0 && progress.getPaidCount() == progress.getTotalCount()
+                ? SETTLEMENT_STATUS_COMPLETE : SETTLEMENT_STATUS_IN_PROGRESS;
+
+        log.info("[정산 홈 조회] 조회를 완료했습니다. scheduleId = {}, status = {}, receiptCount = {}",
+                scheduleId, status, receipts.size());
+        return SettlementHomeResponse.builder()
+                .scheduleTitle(schedule.getTitle())
+                .status(status)
+                .progress(progress)
+                .receipts(receipts)
+                .account(account)
+                .build();
+    }
+
+    // 그 차수의 정산 상태 — 정산 명단이 비어있으면(아직 API-038을 돌리지 않음) "정산중"으로 본다.
+    // 명단이 있으면 미입금(UNPAID)이 하나도 없어야 "정산 완료"다
+    private String roundSettlementStatus(ScheduleRound round) {
+        long targetCount = settlementTargetRepository.countByScheduleRoundId(round.getId());
+        if (targetCount == 0) {
+            return SETTLEMENT_STATUS_IN_PROGRESS;
+        }
+        boolean hasUnpaid = settlementTargetRepository.existsByScheduleRoundIdAndPaymentStatus(round.getId(), PaymentStatus.UNPAID);
+        return hasUnpaid ? SETTLEMENT_STATUS_IN_PROGRESS : SETTLEMENT_STATUS_COMPLETE;
+    }
+
+    // 사람(scheduleAttendee) 단위로 묶어 그 사람의 일정 내 모든 차수가 PAID인지를 AND로 누적한다
+    private SettlementHomeProgressResponse calculatePersonProgress(List<SettlementTarget> targets) {
+        Map<Long, Boolean> allPaidByAttendeeId = new LinkedHashMap<>();
+        for (SettlementTarget target : targets) {
+            Long attendeeId = target.getScheduleAttendee().getId();
+            boolean paid = target.getPaymentStatus() == PaymentStatus.PAID;
+            allPaidByAttendeeId.merge(attendeeId, paid, (soFar, current) -> soFar && current);
+        }
+
+        long totalCount = allPaidByAttendeeId.size();
+        long paidCount = allPaidByAttendeeId.values().stream().filter(Boolean::booleanValue).count();
+        int rate = totalCount == 0 ? 0 : (int) Math.round(paidCount * 100.0 / totalCount);
+
+        return SettlementHomeProgressResponse.builder()
+                .paidCount(paidCount)
+                .totalCount(totalCount)
+                .rate(rate)
+                .build();
     }
 }

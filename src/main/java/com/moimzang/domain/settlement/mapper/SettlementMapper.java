@@ -9,6 +9,7 @@ import com.moimzang.domain.settlement.dto.response.PaymentSummaryResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementImportAttendeeResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementHomeReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementNoticeAccountResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementNoticeRoundResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetResponse;
@@ -76,4 +77,10 @@ public interface SettlementMapper {
     // 정산 공지 생성(API-044)의 차수 한 줄을 변환한다. billedAmount는 Service가 계산해 넘기는 값이다
     @Mapping(target = "label", source = "round.label")
     SettlementNoticeRoundResponse toNoticeRoundResponse(ScheduleRound round, int billedAmount);
+
+    // 정산 홈 조회(API-045)의 영수증 등록 차수 한 줄을 변환한다. settlementStatus는 Service가
+    // 계산해 넘기는 값이고, registeredAt은 전용 컬럼이 없어 round.updatedAt으로 대체한다
+    @Mapping(target = "roundId", source = "round.id")
+    @Mapping(target = "registeredAt", source = "round.updatedAt")
+    SettlementHomeReceiptResponse toHomeReceiptResponse(ScheduleRound round, String settlementStatus);
 }

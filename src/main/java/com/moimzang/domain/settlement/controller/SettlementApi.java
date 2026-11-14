@@ -10,6 +10,7 @@ import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementHomeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementNoticeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetListResponse;
@@ -185,4 +186,15 @@ public interface SettlementApi {
     ResponseEntity<BaseResponse<SettlementNoticeResponse>> generateSettlementNotice(
             @Parameter(description = "일정 ID", example = "1") Long scheduleId,
             @Valid SettlementNoticeRequest request);
+
+    @Operation(summary = "정산 홈 조회", description = "일정의 정산 현황을 한눈에 보여준다. progress는 사람 수 기준이고(그 "
+            + "사람의 일정 내 모든 차수가 PAID여야 완료로 집계), receipts[]는 영수증이 등록된 차수만 포함한다. 대표 "
+            + "계좌는 계좌가 설정된 차수 중 roundNo가 가장 작은 차수의 계좌이고, 설정된 계좌가 하나도 없으면 null이다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<SettlementHomeResponse>> getSettlementHome(
+            @Parameter(description = "일정 ID", example = "1") Long scheduleId);
 }
