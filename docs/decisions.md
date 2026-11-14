@@ -749,3 +749,48 @@ API-038(#49)에서 이미 정한 기준을 그대로 따른다(사용자 결정,
 중복된 id는 `distinct()`로 정리한 뒤 처리한다. 같은 검증 로직이 두 API(API-038, API-044)에서
 반복되지만, 검증 대상이 다른 엔티티(`schedule_attendee` vs `schedule_round`)라 공통 헬퍼로
 묶지 않고 각 Service에 그대로 둔다.
+
+## 59. API-045 progress는 사람 수 기준이고, 집계는 findByScheduleForAssistant를 재사용한다
+`docs/api-spec.md`에 "미확정"으로 남아 있던 항목이다. 사람 수(입금 완료 인원/전체 인원) 단위와
+차수 수(정산 완료 차수/전체 차수) 단위 중 구현 전에 확인했다(사용자 결정, 2026-11-15) —
+**사람 수 기준**으로 정한다. 여러 차수에 걸친 사람은 그 사람의 일정 내 모든 차수가 PAID여야
+`paidCount`에 포함한다(API-042의 사람 단위 집계, decisions #53과 같은 기준).
+
+집계 쿼리는 `SettlementTargetRepositoryCustom.findByScheduleForAssistant(scheduleId, null)`을
+그대로 재사용한다. #54에서 API-042가 이 메서드를 재사용하지 않기로 한 이유(필터·cursor
+페이지네이션이 필요해 구조가 안 맞음)가 API-045에는 없다 — API-045의 progress는 필터·페이지
+없이 그 일정 전체를 한 번에 집계하면 되는 값이라, 원래 AI 비서용으로 만들어진 "일정 전체를
+한 번에 가져오는" 동작과 정확히 일치한다. 새 쿼리를 추가하지 않았다.
+
+## 60. API-045 상위 status와 정산 명단이 없는 차수의 처리
+상위 `status`(`"정산 완료"`/`"정산중"`) 판단 기준과, 정산 명단(`settlement_target`)이 0명인
+차수의 `settlementStatus`를 구현 전에 확인했다(사용자 결정, 2026-11-15).
+
+- **상위 status**: `progress.totalCount > 0 && progress.paidCount == progress.totalCount`면
+  `"정산 완료"`, 그 외(전체 인원 0명 포함)는 `"정산중"`이다. 구현은 `rate == 100`이 아니라
+  `paidCount == totalCount`로 직접 비교한다 — `rate`는 `Math.round`로 반올림하기 때문에
+  (예: 199/200 = 99.5% → `Math.round`로 100%) 인원수 비교 없이 `rate`만 보면 실제로는 미납이
+  남았는데도 100%로 반올림되는 경우를 "완료"로 잘못 판단할 수 있다.
+- **명단 0명 차수**: `"정산중"`으로 처리한다. "그 차수 전원이 PAID"라는 규칙을 문자 그대로
+  적용하면 명단이 빈 차수는 공집합이 "전원 PAID"를 공집합 특성상 자동으로 만족해 "정산
+  완료"가 되는데, 이는 아직 정산 명단조차 만들지 않은(API-038 미실행) 차수를 완료로 보여주는
+  역설이라 피한다.
+
+## 61. API-045 receipts[]는 영수증이 등록된 차수만 포함하고, progress·status는 일정 전체 정산 대상 기준으로 계산한다
+영수증 미등록 차수를 `receipts[]`에 포함할지 구현 전에 확인했다(사용자 결정, 2026-11-15) —
+**영수증이 등록된 차수만** 포함한다. `storeName`·`totalAmount`가 전부 영수증 등록 시에만
+채워지는 값이라, 미등록 차수를 섞으면 응답에 null 항목이 생겨 FE가 따로 분기해야 한다.
+
+`progress`(#59)·상위 `status`(#60)는 `receipts[]`와 달리 영수증 등록 여부로 거르지 않고, 그
+일정의 `settlement_target` 전체를 그대로 집계한다 — API-042의 `paymentStatus`와 같은
+범위다(둘 다 영수증 등록 여부를 걸러내는 조건이 없다). `settlementTarget.scheduleAttendee.
+schedule.id`(API-042가 쓰는 집계 조건)와 `settlementTarget.scheduleRound.schedule.id`
+(차수 기준)는 조건식 자체는 다르지만, API-038이 저장 시점에 `attendee.schedule ==
+round.schedule`을 항상 검증하므로 실제 데이터에서는 두 조건이 다른 결과를 내지 않는다.
+
+## 62. API-045 대표 계좌는 decisions #55와 같은 기준이고, 계좌가 하나도 없으면 account는 null이다
+API-044(#55)에서 정한 "계좌가 설정된 차수 중 roundNo가 가장 작은 차수의 계좌" 규칙을 그대로
+적용한다(사용자 결정, 2026-11-15). API-044는 선택 차수 전부에 계좌가 있어야 409로 통과시키지만,
+API-045는 조회 전용이라 그런 검증이 없다 — 그래서 후보를 "계좌가 설정된 차수"로 먼저 거른
+뒤 그중 roundNo가 가장 작은 차수를 고르고, 계좌가 설정된 차수가 하나도 없으면 `account`를
+`null`로 내려준다(API-043으로 계좌를 설정하기 전 기본 상태와 동일— 에러로 막지 않는다).
