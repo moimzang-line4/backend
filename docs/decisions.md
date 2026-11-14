@@ -631,3 +631,65 @@ API-038의 attendeeIds는 `schedule_attendee.id`를 받는데, 존재하긴 하�
 일정 소속이 아닌 id가 섞여 들어올 수 있다. 어떤 에러로 거부할지 구현 전에 확인했다(사용자 결정,
 2026-11-15) — 전용 코드를 신설하지 않고 **COMMON_400**으로 처리한다. 존재하지 않는 id가 섞인
 경우도 같은 COMMON_400으로 묶어, 크기 불일치·소속 불일치를 같은 검증 단계에서 함께 거른다.
+
+## 50. API-040(입금 확인·되돌리기)은 같은 상태 재요청을 멱등 처리한다
+이미 PAID인 차수에 `paid=true`(또는 이미 UNPAID인 차수에 `paid=false`)가 다시 오면 어떻게
+처리할지 구현 전에 확인했다(사용자 결정, 2026-11-15) — `RoundAttendee.updateCheckedIn`(#30과
+같은 기준)과 동일하게 **멱등 처리**한다. 상태가 실제로 바뀌지 않으면 에러 없이 200을 주고 그
+차수의 `paidAt`은 건드리지 않는다. 상태가 실제로 바뀔 때만 `paidAt`을 갱신한다(입금 확인 시
+현재 시각, 되돌리기 시 null).
+
+한 사람이 일정 내 여러 차수에 걸쳐 있을 때 일부 차수는 이미 같은 상태(멱등), 일부는 실제로
+바뀌는 혼재 상황도 생길 수 있어, `SettlementTarget.updatePaymentStatus(boolean)`를 차수별로
+독립 적용한다. 응답의 대표 `paidAt`은(차수마다 값이 다를 수 있어) 입금 확인이면 그중 가장 최근
+값을, 되돌리기면 전 차수가 null이라 자연히 null을 내려준다.
+
+## 51. settlement_target이 하나도 없는 attendee는 CommonErrorCode.NOT_FOUND로 처리한다
+API-040·API-041은 scheduleId·attendeeId로 그 사람의 일정 내 정산 대상을 찾는데, 그 일정에
+정산 명단 자체가 없거나(API-038 저장 전) 그 사람이 명단에 없으면 조회 결과가 비어있다. 전용
+에러 코드가 필요한지 구현 전에 확인했다(사용자 결정, 2026-11-15) — `SettlementErrorCode`의
+기존 12개 코드 중에는 맞는 게 없고, 새 코드를 만들 이유도 없다(다른 모든 "존재하지 않는
+리소스" 케이스와 같은 성격). 기존 `CommonErrorCode.NOT_FOUND`(COMMON_404)를 그대로 쓴다.
+
+## 52. API-041(입금 명단 삭제)은 settlement_target만 지우고, 한 차수라도 PAID면 423으로 막는다
+API-041은 "미입금 카드 스와이프 삭제하기"에서 온다. API-032(참가자 제외, #28)와 달리 출석
+기록(`round_attendee`)은 건드리지 않고 **그 일정 내 모든 차수의 `settlement_target`만
+삭제**한다(사용자 결정, 2026-11-15) — "입금 명단에서 뺀다"는 건 그 사람이 그 모임에 안 왔다는
+뜻이 아니라 더 이상 돈을 걷지 않겠다는 뜻이라, 출석 사실과는 별개 결정이기 때문이다.
+
+이미 `SettlementErrorCode.SETTLEMENT_423_PAID_CANNOT_DELETE`가 있어(#54 계산기 작업 때
+함께 만든 12개 코드 중 하나, 구현 전 존재 확인함) 새 코드 없이 그대로 쓴다 — 한 차수라도 입금
+완료 상태면 삭제 자체를 막는다. 통과하면 각 차수에서 그 사람의 `settlement_target`을 지우고
+남은 인원으로 `BilledAmountCalculator`를 다시 호출한다. 어느 차수든 남은 인원이 0명이 되면
+그 차수는 계산기를 호출하지 않는다(#31과 같은 이유). 응답은 기존 관례대로 200 +
+`BaseResponse.success()`다(`DELETED`(204)는 쓰지 않는다).
+
+## 53. API-042(입금 현황 조회)의 정렬·cursor 기준과 totalBilledAmount 집계 방식
+API-042는 `settlement_target`이 아니라 **사람(schedule_attendee) 단위**로 묶어 보여주는
+목록이라, 정렬·cursor 기준 컬럼을 구현 전에 확정했다(사용자 결정, 2026-11-15) —
+`schedule_attendee.createdAt` 오름차순, 동일 시 `schedule_attendee.id` 오름차순을 쓴다.
+`settlement_target.createdAt`은 같은 사람도 차수마다 달라 사람 단위 커서로 쓸 수 없고,
+`schedule_attendee.createdAt`은 그 사람이 일정에 등록된 시점으로 모든 차수에서 값이 같아
+안정적인 정렬·커서 기준이 된다.
+
+`totalBilledAmount`는 그 사람의 일정 내 모든 차수 `billed_amount` 합산이고,
+`paymentStatus`는 **모든 차수가 PAID일 때만 PAID**로 집계한다(한 차수라도 미납이면 UNPAID) —
+AI 비서용 `SettlementStatusTool.aggregateByAttendee`가 이미 쓰고 있는 것과 같은 규칙이라
+두 곳의 "입금 완료" 의미가 갈리지 않는다.
+
+## 54. API-042는 `findByScheduleForAssistant`를 재사용하지 않고 전용 쿼리를 새로 만든다
+구현 전에 `SettlementTargetRepositoryCustom.findByScheduleForAssistant`를 API-042가 재사용할
+수 있는지 확인했다(사용자 결정, 2026-11-15) — **재사용하지 않는다.** 이유는 세 가지다.
+
+1. 그 메서드는 AI 비서(`SettlementStatusTool`)가 이름순으로 그 일정 전체 차수를 한 번에
+   불러와 메모리에서 집계하는 용도로 만들어졌다. 필터(status/keyword)·cursor 페이지네이션이
+   전혀 없고, 시그니처를 바꾸면 이미 그 메서드에 의존하는 AI 도구의 동작이 깨진다.
+2. API-042는 상태 필터(HAVING)·cursor를 DB 레벨에서 적용해야 커서가 안정적으로 동작하는데,
+   이 메서드는 "전체를 가져와 메모리에서 거른다"는 전제라 그 구조에 맞지 않는다.
+3. 정렬 기준도 다르다(`findByScheduleForAssistant`는 이름순·차수순, API-042는
+   `schedule_attendee.createdAt`·id순 — #53).
+
+대신 `SettlementTargetRepositoryCustom`에 `searchPaymentSummaries`를 새로 추가했다. QueryDSL
+`groupBy(scheduleAttendee.id)` + `CaseBuilder` 기반 조건부 합산으로 사람 단위 미납 차수 수를
+세어, `status=PAID`면 미납 차수 0건, `status=UNPAID`면 1건 이상을 `having`으로 거른다.
+`findByScheduleForAssistant`는 전혀 수정하지 않았다.
