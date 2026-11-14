@@ -76,4 +76,16 @@ public class SettlementTarget extends BaseEntity {
     public void updateBilledAmount(int billedAmount) {
         this.billedAmount = billedAmount;
     }
+
+    // 입금 상태를 지정값으로 바꾼다. 이미 같은 상태면 멱등하게 아무 것도 바꾸지 않고(기존
+    // paidAt 유지), 실제로 상태가 바뀔 때만 paidAt을 갱신한다(입금 확인 시 현재 시각,
+    // 되돌리기 시 null) — RoundAttendee.updateCheckedIn과 같은 패턴
+    public void updatePaymentStatus(boolean paid) {
+        PaymentStatus newStatus = paid ? PaymentStatus.PAID : PaymentStatus.UNPAID;
+        if (this.paymentStatus == newStatus) {
+            return;
+        }
+        this.paymentStatus = newStatus;
+        this.paidAt = paid ? LocalDateTime.now() : null;
+    }
 }

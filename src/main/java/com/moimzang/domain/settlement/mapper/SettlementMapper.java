@@ -1,13 +1,19 @@
 package com.moimzang.domain.settlement.mapper;
 
 import com.moimzang.domain.attendance.entity.RoundAttendee;
+import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
+import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
+import com.moimzang.domain.settlement.dto.response.PaymentSummaryResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementImportAttendeeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetSaveResponse;
 import com.moimzang.domain.settlement.entity.SettlementTarget;
+import com.moimzang.domain.settlement.enums.PaymentStatus;
+import com.moimzang.domain.settlement.repository.PaymentSummary;
+import java.time.LocalDateTime;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
@@ -43,4 +49,17 @@ public interface SettlementMapper {
     @Mapping(target = "affiliation", source = "scheduleAttendee.affiliation")
     @Mapping(target = "phoneLast4", source = "scheduleAttendee.phoneLast4")
     SettlementImportAttendeeResponse toImportAttendeeResponse(RoundAttendee roundAttendee);
+
+    // 입금 확인·되돌리기(API-040) 응답으로 변환한다. paymentStatus·paidAt은 Service가
+    // 그 사람의 전 차수를 반영해 계산해 넘기는 값이다
+    @Mapping(target = "attendeeId", source = "attendee.id")
+    @Mapping(target = "name", source = "attendee.name")
+    PaymentStatusResponse toPaymentStatusResponse(ScheduleAttendee attendee, PaymentStatus paymentStatus, LocalDateTime paidAt);
+
+    // 입금 현황 조회(API-042)의 한 명을 변환한다
+    @Mapping(target = "attendeeId", source = "attendee.id")
+    @Mapping(target = "name", source = "attendee.name")
+    @Mapping(target = "affiliation", source = "attendee.affiliation")
+    @Mapping(target = "phoneLast4", source = "attendee.phoneLast4")
+    PaymentSummaryResponse toPaymentSummaryResponse(PaymentSummary summary);
 }

@@ -1,7 +1,10 @@
 package com.moimzang.domain.settlement.controller;
 
+import com.moimzang.domain.settlement.dto.request.PaymentConfirmRequest;
 import com.moimzang.domain.settlement.dto.request.ReceiptRegisterRequest;
 import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
+import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
+import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
@@ -105,4 +108,47 @@ public interface SettlementApi {
     })
     ResponseEntity<BaseResponse<SettlementTargetImportResponse>> importSettlementTargets(
             @Parameter(description = "차수 ID", example = "1") Long roundId);
+
+    @Operation(summary = "입금 확인·되돌리기", description = "그 사람의 일정 내 모든 차수 settlement_target을 함께 "
+            + "갱신한다(토글이 아니라 paid 값으로 지정). 이미 같은 상태로 재요청하면 멱등하게 처리하고 그 차수의 "
+            + "paidAt을 바꾸지 않는다. 장부 반영은 하지 않는다(API-074 담당).")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "처리 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404(그 일정에 정산 대상이 없는 참가자)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<PaymentStatusResponse>> updatePaymentStatus(
+            @Parameter(description = "일정 ID", example = "1") Long scheduleId,
+            @Parameter(description = "참가자 ID(schedule_attendee.id)", example = "1") Long attendeeId,
+            @Valid PaymentConfirmRequest request);
+
+    @Operation(summary = "입금 명단에서 삭제", description = "일정의 모든 차수에서 그 사람의 정산 대상을 삭제하고, "
+            + "각 차수는 남은 인원으로 1인 청구액을 다시 계산한다. 한 차수라도 입금 완료 상태면 423으로 거부한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "삭제 성공"),
+        @ApiResponse(responseCode = "404", description = "COMMON_404(그 일정에 정산 대상이 없는 참가자)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "423", description = "SETTLEMENT_423_PAID_CANNOT_DELETE",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<Void>> removeFromPayments(
+            @Parameter(description = "일정 ID", example = "1") Long scheduleId,
+            @Parameter(description = "참가자 ID(schedule_attendee.id)", example = "1") Long attendeeId);
+
+    @Operation(summary = "입금 현황 조회", description = "일정의 입금 현황을 cursor 페이지네이션으로 조회한다. "
+            + "paymentStatus는 사람 단위 집계(그 사람의 일정 내 모든 차수가 PAID여야 PAID)이고, totalBilledAmount는 "
+            + "그 사람의 모든 차수 billedAmount 합산이다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(잘못된 status, 잘못된 cursor)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<PaymentSummaryListResponse>> getPaymentSummaries(
+            @Parameter(description = "일정 ID", example = "1") Long scheduleId,
+            @Parameter(description = "입금 상태 필터(기본 UNPAID)", example = "UNPAID") String status,
+            @Parameter(description = "검색어(이름 포함검색)", example = "김모임") String keyword,
+            @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지") String cursor,
+            @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
 }
