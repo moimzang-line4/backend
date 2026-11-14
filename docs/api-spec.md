@@ -228,9 +228,12 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | ATTENDANCE_409_DUPLICATE_NAME | 409 | 같은 이름의 사람이 있어요. | API-030 |
 
-### 운영 공간 (SpaceErrorCode) — API-013
+### 운영 공간 (ScheduleErrorCode의 SPACE_*) — API-012~016
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
+| SPACE_400_INVALID_CURSOR | 400 | cursor 형식이 올바르지 않습니다. | API-012 |
+| SPACE_404_AGENDA_NOT_FOUND | 404 | 존재하지 않는 안건입니다. | API-013 |
+| SPACE_404_LINK_NOT_FOUND | 404 | 존재하지 않는 안건 연결입니다. | API-016 |
 | SPACE_409_AGENDA_ALREADY_LINKED | 409 | 이미 연결된 안건입니다. | API-013 |
 
 ### 운영 메모 (NoteErrorCode) — API-046~050
@@ -494,6 +497,14 @@ cursor 페이지네이션. `file`(API-064)과 같은 다중 정렬 패턴 — so
 UPCOMING/LATEST/OLDEST는 그 항목의 날짜(date, 즉 schedule.start_at 또는 meeting.meeting_date),
 NAME은 title. 둘 다 id를 tiebreaker로 쓴다.
 
+구현 세부: 일정·회의록을 테이블별로 (size+1)건씩 조회해 같은 기준으로 합친다. 정렬 키는
+(날짜 또는 제목, 유형 순서, id)이고 유형 순서는 SCHEDULE 0·MEETING 1(두 테이블의 id가 겹칠 때 순서를 가름).
+날짜 키는 일정은 start_at, 회의는 meeting_date 0시. UPCOMING·OLDEST는 오름차순, LATEST는 내림차순, NAME은
+오름차순. 지난 기록 = 일정은 end_at ≤ 현재(한국 시간), 회의는 status=COMPLETED.
+`date`는 일정은 시작일, 회의는 회의 날짜. keyword는 제목 검색.
+
+**에러**: COMMON_400(status 누락·잘못된 enum), SPACE_400_INVALID_CURSOR, SCHEDULE_404_GROUP_TERM_NOT_FOUND
+
 ---
 
 #### API-013 · POST /api/schedules/{scheduleId}/agenda-links · 안건 연결
@@ -503,9 +514,9 @@ NAME은 title. 둘 다 id를 tiebreaker로 쓴다.
 `meeting.schedule_id IS NULL`이고 `schedule_agenda_link`에 행이 없어야 한다(decisions #44).
 일정 상세에서 만든 회의록의 안건은 이미 그 일정에 속하므로 후보에서 빠진다.
 
-**Request**: agendaIds(number[]). **Response data**: links[].linkId/agendaId
-**에러**: COMMON_400(안건 미선택), COMMON_404, SPACE_409_AGENDA_ALREADY_LINKED(이미 연결됐거나
-다른 일정에 속한 회의록의 안건)
+**Request**: agendaIds(number[], 중복은 한 번만 연결). **Response data**: links[].linkId/agendaId
+**에러**: COMMON_400(안건 미선택), SCHEDULE_404_NOT_FOUND, SPACE_404_AGENDA_NOT_FOUND(없거나 다른 기수의 안건),
+SPACE_409_AGENDA_ALREADY_LINKED(이미 연결됐거나 다른 일정에 속한 회의록의 안건)
 
 ---
 
@@ -522,12 +533,16 @@ PENDING·IN_PROGRESS인 안건이 남아 있을 수 있다.
 **Response data**: links[].linkId/meetingId/meetingTitle/meetingDate/meetingStatus(IN_PROGRESS|COMPLETED)/
 agendaId/agendaOrderNo/agendaContent/agendaStatus/discussionNote/decision/hasDecision
 
-**에러**: COMMON_404
+agendaOrderNo는 meeting_agenda.order_no 원래 값(회의 상세 API-053과 같은 값). 정렬은 회의 날짜 최신순, 회의 안에서는
+안건 순서. hasDecision은 공백만 있으면 false.
+
+**에러**: SCHEDULE_404_NOT_FOUND
 
 ---
 
 #### API-016 · DELETE /api/schedules/{scheduleId}/agenda-links/{linkId} · 회의록 연결 해제
-인증: 불필요. `schedule_agenda_link` 행만 삭제, 원본 회의록·안건은 유지. **에러**: COMMON_404
+인증: 불필요. `schedule_agenda_link` 행만 삭제, 원본 회의록·안건은 유지. 다른 일정의 linkId면 404.
+**에러**: SPACE_404_LINK_NOT_FOUND
 
 ### 부원 명단
 
