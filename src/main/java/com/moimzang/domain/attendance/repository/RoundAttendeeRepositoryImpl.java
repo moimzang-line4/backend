@@ -43,6 +43,15 @@ public class RoundAttendeeRepositoryImpl implements RoundAttendeeRepositoryCusto
                 .fetch();
     }
 
+    @Override
+    public List<RoundAttendee> findCheckedInByScheduleRoundId(Long scheduleRoundId) {
+        return queryFactory.selectFrom(roundAttendee)
+                .join(roundAttendee.scheduleAttendee, scheduleAttendee).fetchJoin()
+                .where(roundAttendee.scheduleRound.id.eq(scheduleRoundId), roundAttendee.isCheckedIn.isTrue())
+                .orderBy(scheduleAttendee.name.asc())
+                .fetch();
+    }
+
     private BooleanExpression[] baseConditions(Long roundId, Boolean isCheckedIn, String keyword) {
         return new BooleanExpression[]{
                 roundAttendee.scheduleRound.id.eq(roundId),

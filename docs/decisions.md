@@ -599,3 +599,35 @@ NOT NULL이면 그 일정에 속한 회의록이다 — `file.schedule_id`(NULL=
 **따라오는 것**: API-015 응답에 `meetingStatus`를 추가한다. 화면이 입력란을 잠그려면 회의 상태가
 필요한데, 안건 상태로는 판단할 수 없다 — 종료된 회의에도 PENDING·IN_PROGRESS 안건이 남아 있을 수
 있다(실측: 회의 28이 COMPLETED인데 안건 53은 IN_PROGRESS).
+
+## 47. settlement_target의 (schedule_round_id, schedule_attendee_id) 중복은 DB UNIQUE로 막는다
+`settlement_target`에는 애초에 이 조합을 막는 제약이 없어, API-038(정산 명단 저장)이 같은
+참가자를 두 번 저장하면 중복 행이 생길 수 있었다. 코드 레벨 검증만으로 막을지, DB 제약까지
+추가할지 구현 전에 확인했다(사용자 결정, 2026-11-15) — **DB UNIQUE 제약을 추가**하기로 했다.
+V4가 이미 `meeting_schedule`로 쓰여 있어 `V5__settlement_target_unique.sql`로
+`uk_settlement_target_round_attendee` 유니크 키를 추가했고, `SettlementTarget` 엔티티의
+`@Table(uniqueConstraints = ...)`에도 동일하게 반영했다.
+
+API-038의 명단 교체는 "전체 삭제 후 재등록" 대신 **diff 방식**(기존-신규를 비교해 유지 대상은
+금액만 갱신, 빠지는 대상만 삭제, 새 대상만 추가)으로 구현했다 — Hibernate가 flush 시 insert를
+delete보다 먼저 실행해, 같은 (차수, 참가자) 조합을 지웠다가 바로 다시 넣으면 이 유니크 제약과
+순간적으로 충돌할 수 있기 때문이다. diff 방식은 같은 조합을 지웠다가 다시 넣는 일이 없어 이
+충돌에서 자유롭다.
+
+## 48. API-032(참가자 제외)로 빠지는 사람의 settlement_target 처리
+#28에서 API-032는 그 차수의 `round_attendee`만 지우기로 했는데, 정산 명단(API-037~039)이
+구현되면서 그 사람의 `settlement_target`을 어떻게 할지가 새로 생겼다(구현 전 확인, 사용자 결정,
+2026-11-15).
+
+- 제외 대상이 **입금 완료(PAID)** 상태면 제외 자체를 `SETTLEMENT_423_PAID_MEMBER_LOCKED`로
+  막는다. `round_attendee`도 지우지 않는다 — 이미 돈을 낸 사람의 출석 기록과 정산 기록이 함께
+  사라지면 안 되기 때문이다.
+- **미입금(UNPAID)** 상태면 `round_attendee`와 함께 `settlement_target`도 삭제하고, 남은
+  인원으로 `BilledAmountCalculator`를 다시 호출해 1인 청구액을 재계산한다. 남은 인원이 0명이
+  되면 계산기를 호출하지 않는다(#31과 같은 이유).
+
+## 49. 정산 명단 저장(API-038) attendeeIds에 다른 일정 소속 참가자가 섞이면 COMMON_400
+API-038의 attendeeIds는 `schedule_attendee.id`를 받는데, 존재하긴 하지만 그 차수가 속한
+일정 소속이 아닌 id가 섞여 들어올 수 있다. 어떤 에러로 거부할지 구현 전에 확인했다(사용자 결정,
+2026-11-15) — 전용 코드를 신설하지 않고 **COMMON_400**으로 처리한다. 존재하지 않는 id가 섞인
+경우도 같은 COMMON_400으로 묶어, 크기 불일치·소속 불일치를 같은 검증 단계에서 함께 거른다.

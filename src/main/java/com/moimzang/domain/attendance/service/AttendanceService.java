@@ -21,6 +21,11 @@ import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.attendance.entity.RoundAttendee;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.domain.settlement.entity.SettlementTarget;
+import com.moimzang.domain.settlement.enums.PaymentStatus;
+import com.moimzang.domain.settlement.exception.SettlementErrorCode;
+import com.moimzang.domain.settlement.repository.SettlementTargetRepository;
+import com.moimzang.domain.settlement.service.BilledAmountCalculator;
 import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CommonErrorCode;
@@ -29,6 +34,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -46,6 +52,8 @@ public class AttendanceService {
     private final RoundAttendeeRepository roundAttendeeRepository;
     private final ScheduleRepository scheduleRepository;
     private final AttendanceMapper attendanceMapper;
+    private final SettlementTargetRepository settlementTargetRepository;
+    private final BilledAmountCalculator billedAmountCalculator;
 
     // 일정의 차수 목록을 roundNo 오름차순으로 조회한다
     public ScheduleRoundListResponse listRounds(Long scheduleId) {
@@ -216,7 +224,9 @@ public class AttendanceService {
         return attendanceMapper.toCheckInResponse(roundAttendee, progress);
     }
 
-    // 그 차수에서 참가자를 제외한다(이 차수의 출석 기록만 삭제, 다른 차수·참가자 원본은 유지)
+    // 그 차수에서 참가자를 제외한다(이 차수의 출석 기록만 삭제, 다른 차수·참가자 원본은 유지).
+    // 그 사람이 정산 명단에 입금 완료 상태로 있으면 제외 자체를 막고, 미입금 상태면 정산 대상도
+    // 함께 삭제한 뒤 남은 인원으로 1인 청구액을 재계산한다(0명이 되면 계산기를 호출하지 않는다 — decisions #31)
     @Transactional
     public void removeAttendee(Long roundId, Long attendeeId) {
         log.info("[참가자 제외] 제외를 시작합니다. roundId = {}, attendeeId = {}", roundId, attendeeId);
@@ -227,7 +237,27 @@ public class AttendanceService {
                     return new CustomException(CommonErrorCode.NOT_FOUND);
                 });
 
+        Optional<SettlementTarget> settlementTarget = settlementTargetRepository
+                .findByScheduleRoundIdAndScheduleAttendeeId(roundId, attendeeId);
+        if (settlementTarget.filter(target -> target.getPaymentStatus() == PaymentStatus.PAID).isPresent()) {
+            log.warn("[참가자 제외] 입금 완료된 인원은 제외할 수 없습니다. roundId = {}, attendeeId = {}", roundId, attendeeId);
+            throw new CustomException(SettlementErrorCode.SETTLEMENT_423_PAID_MEMBER_LOCKED);
+        }
+
+        List<SettlementTarget> remainingTargets = settlementTarget.isEmpty() ? List.of()
+                : settlementTargetRepository.findByScheduleRoundId(roundId).stream()
+                        .filter(target -> !target.getId().equals(settlementTarget.get().getId()))
+                        .toList();
+
         roundAttendeeRepository.delete(roundAttendee);
+        settlementTarget.ifPresent(settlementTargetRepository::delete);
+
+        if (!remainingTargets.isEmpty()) {
+            ScheduleRound round = roundAttendee.getScheduleRound();
+            int billedAmount = billedAmountCalculator.calculate(round.getTotalAmount(), round.getClubSubsidyAmount(), remainingTargets.size());
+            remainingTargets.forEach(target -> target.updateBilledAmount(billedAmount));
+        }
+
         log.info("[참가자 제외] 제외를 완료했습니다. roundId = {}, attendeeId = {}", roundId, attendeeId);
     }
 }
