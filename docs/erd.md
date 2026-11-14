@@ -156,7 +156,7 @@
 ### settlement_target (정산 대상)
 | 컬럼 | 타입 | PK | FK | NOT NULL | 도메인 | 설명 |
 |---|---|---|---|---|---|---|
-| id | BIGINT | ✅ | | ✅ | long | |
+| id | BIGINT | ✅ | | ✅ | long | UNIQUE(schedule_round_id, schedule_attendee_id) |
 | schedule_round_id | BIGINT | | → schedule_round.id | ✅ | long | |
 | schedule_attendee_id | BIGINT | | → schedule_attendee.id | ✅ | long | |
 | billed_amount | INT | | | ✅ | int | ⌊(영수증 금액 − 지원금) ÷ 인원⌋을 100원 단위로 버림(내림) |
