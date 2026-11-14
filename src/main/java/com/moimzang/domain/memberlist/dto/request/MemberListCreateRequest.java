@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,9 +23,9 @@ public class MemberListCreateRequest {
     @Size(max = 100)
     private String name;
 
-    @Schema(description = "등록 마감일. 그날 23:59:59까지 등록을 받는다", example = "2026-11-30")
+    @Schema(description = "등록 마감 일시. 이 시각까지 등록을 받는다", example = "2026-11-30T23:59:00")
     @NotNull
-    private LocalDate registerDeadline;
+    private LocalDateTime registerDeadline;
 
     @Schema(description = "학교 수집(기본 true)", example = "true")
     private Boolean collectSchool;

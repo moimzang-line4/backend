@@ -52,8 +52,7 @@ public class MemberService {
         return MemberJoinFormResponse.builder()
                 .groupName(memberList.getGroupTerm().getGroup().getName())
                 .memberListName(memberList.getName())
-                .registerDeadline(memberList.getRegisterDeadline() == null ? null
-                        : memberList.getRegisterDeadline().toLocalDate())
+                .registerDeadline(memberList.getRegisterDeadline())
                 .fields(MemberListFieldsResponse.builder()
                         .school(memberList.collectsSchool())
                         .studentId(memberList.collectsStudentId())

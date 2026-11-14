@@ -17,6 +17,6 @@ public class MemberListCreateResponse {
     @Schema(description = "등록 링크 토큰", example = "Qm9hcmQtOGY0Yw")
     private final String joinToken;
 
-    @Schema(description = "등록 링크 경로. 프론트 도메인을 앞에 붙여 쓴다", example = "/join/Qm9hcmQtOGY0Yw")
+    @Schema(description = "등록 링크", example = "moimjang.app/join/Qm9hcmQtOGY0Yw")
     private final String joinUrl;
 }

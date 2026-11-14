@@ -68,10 +68,11 @@ class MemberListServiceTest {
     void setUp() {
         memberListService = new MemberListService(memberListRepository, memberRepository, groupTermRepository,
                 scheduleAttendeeRepository, roundAttendeeRepository, settlementTargetRepository);
+        ReflectionTestUtils.setField(memberListService, "joinBaseUrl", "moimjang.app/join/");
     }
 
     @Test
-    void createMemberList_토글을_안보내면_전부_수집하고_마감일은_그날_끝까지로_저장한다() {
+    void createMemberList_토글을_안보내면_전부_수집하고_마감_일시는_받은_그대로_저장한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(memberListRepository.existsByJoinToken(anyString())).willReturn(false);
@@ -83,7 +84,7 @@ class MemberListServiceTest {
 
         MemberListCreateResponse response = memberListService.createMemberList(1L, MemberListCreateRequest.builder()
                 .name(" 26기 신입 부원 ")
-                .registerDeadline(LocalDate.of(2026, 11, 30))
+                .registerDeadline(LocalDateTime.of(2026, 11, 30, 23, 59))
                 .collectPhone(false)
                 .build());
 
@@ -92,7 +93,7 @@ class MemberListServiceTest {
         MemberList saved = captor.getValue();
         assertThat(saved.getGroupTerm()).isSameAs(groupTerm);
         assertThat(saved.getName()).isEqualTo("26기 신입 부원");
-        assertThat(saved.getRegisterDeadline()).isEqualTo(LocalDateTime.of(2026, 11, 30, 23, 59, 59));
+        assertThat(saved.getRegisterDeadline()).isEqualTo(LocalDateTime.of(2026, 11, 30, 23, 59));
         assertThat(saved.getCollectSchool()).isTrue();
         assertThat(saved.getCollectStudentId()).isTrue();
         assertThat(saved.getCollectPart()).isTrue();
@@ -103,7 +104,7 @@ class MemberListServiceTest {
         assertThat(saved.getIsLinkClosed()).isFalse();
         assertThat(response.getMemberListId()).isEqualTo(3L);
         assertThat(response.getJoinToken()).isEqualTo(saved.getJoinToken()).matches("[A-Za-z0-9_-]{16}");
-        assertThat(response.getJoinUrl()).isEqualTo("/join/" + saved.getJoinToken());
+        assertThat(response.getJoinUrl()).isEqualTo("moimjang.app/join/" + saved.getJoinToken());
     }
 
     @Test
@@ -134,7 +135,7 @@ class MemberListServiceTest {
         MemberList closed = memberList(2L, "MT 참가자", today().plusDays(3), true);
         MemberList expired = memberList(3L, "OT 참가자", today().minusDays(1), false);
         given(groupTermRepository.existsById(1L)).willReturn(true);
-        given(memberListRepository.findByGroupTermIdOrderByIdAsc(1L)).willReturn(List.of(recruiting, closed, expired));
+        given(memberListRepository.findByGroupTermIdOrderByIdDesc(1L)).willReturn(List.of(recruiting, closed, expired));
         given(memberRepository.countByMemberListIds(List.of(1L, 2L, 3L)))
                 .willReturn(List.of(countRow(1L, 24L), countRow(3L, 5L)));
 
@@ -143,7 +144,7 @@ class MemberListServiceTest {
         assertThat(response.getMemberLists()).hasSize(3);
         assertThat(response.getMemberLists().get(0).getMemberCount()).isEqualTo(24L);
         assertThat(response.getMemberLists().get(0).getStatus()).isEqualTo(MemberListStatus.RECRUITING);
-        assertThat(response.getMemberLists().get(0).getRegisterDeadline()).isEqualTo(today().plusDays(3));
+        assertThat(response.getMemberLists().get(0).getRegisterDeadline()).isEqualTo(today().plusDays(3).atTime(23, 59, 59));
         assertThat(response.getMemberLists().get(1).getMemberCount()).isZero();
         assertThat(response.getMemberLists().get(1).getStatus()).isEqualTo(MemberListStatus.COMPLETED);
         assertThat(response.getMemberLists().get(2).getStatus()).isEqualTo(MemberListStatus.COMPLETED);
@@ -152,7 +153,7 @@ class MemberListServiceTest {
     @Test
     void listMemberLists_명단방이_없으면_인원수를_조회하지_않는다() {
         given(groupTermRepository.existsById(1L)).willReturn(true);
-        given(memberListRepository.findByGroupTermIdOrderByIdAsc(1L)).willReturn(List.of());
+        given(memberListRepository.findByGroupTermIdOrderByIdDesc(1L)).willReturn(List.of());
 
         assertThat(memberListService.listMemberLists(1L).getMemberLists()).isEmpty();
         verify(memberRepository, never()).countByMemberListIds(any());
@@ -179,7 +180,7 @@ class MemberListServiceTest {
         assertThat(response.getName()).isEqualTo("26기 부원");
         assertThat(response.getMemberCount()).isEqualTo(24L);
         assertThat(response.getStatus()).isEqualTo(MemberListStatus.RECRUITING);
-        assertThat(response.getJoinUrl()).isEqualTo("/join/" + memberList.getJoinToken());
+        assertThat(response.getJoinUrl()).isEqualTo("moimjang.app/join/" + memberList.getJoinToken());
         assertThat(response.getIsLinkClosed()).isFalse();
         assertThat(response.getFields().getSchool()).isTrue();
         assertThat(response.getFields().getPhone()).isFalse();
@@ -203,12 +204,12 @@ class MemberListServiceTest {
 
         memberListService.updateMemberList(1L, MemberListUpdateRequest.builder()
                 .name(" 26기 정규 부원 ")
-                .registerDeadline(LocalDate.of(2026, 12, 5))
+                .registerDeadline(LocalDateTime.of(2026, 12, 5, 23, 59))
                 .collectPhone(true)
                 .build());
 
         assertThat(memberList.getName()).isEqualTo("26기 정규 부원");
-        assertThat(memberList.getRegisterDeadline()).isEqualTo(LocalDateTime.of(2026, 12, 5, 23, 59, 59));
+        assertThat(memberList.getRegisterDeadline()).isEqualTo(LocalDateTime.of(2026, 12, 5, 23, 59));
         assertThat(memberList.getCollectPhone()).isTrue();
         assertThat(memberList.getCollectSchool()).isTrue();
         assertThat(memberList.getJoinToken()).isEqualTo(token);
@@ -255,7 +256,7 @@ class MemberListServiceTest {
     private MemberListCreateRequest createRequest() {
         return MemberListCreateRequest.builder()
                 .name("26기 부원")
-                .registerDeadline(LocalDate.of(2026, 11, 30))
+                .registerDeadline(LocalDateTime.of(2026, 11, 30, 23, 59))
                 .build();
     }
 

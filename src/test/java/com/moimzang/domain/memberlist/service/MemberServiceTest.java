@@ -75,7 +75,7 @@ class MemberServiceTest {
 
         assertThat(response.getGroupName()).isEqualTo("음샘");
         assertThat(response.getMemberListName()).isEqualTo("2026년 2학기 음샘");
-        assertThat(response.getRegisterDeadline()).isEqualTo(today().plusDays(3));
+        assertThat(response.getRegisterDeadline()).isEqualTo(today().plusDays(3).atTime(23, 59, 59));
         assertThat(response.getFields().getSchool()).isTrue();
         assertThat(response.getFields().getPhone()).isFalse();
     }
