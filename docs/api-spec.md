@@ -802,7 +802,7 @@ cursor 페이지네이션(정렬 기준: createdAt 내림차순 — 최근에 �
 
 #### API-050 · PATCH /api/notes/{noteId}/todo · 할 일 완료 처리
 인증: 불필요. **Request**: isTodoDone(boolean). **Response data**: noteId, isTodoDone
-**에러**: COMMON_404, NOTE_400_NOT_TODO_TYPE(할일 유형이 아님)
+**에러**: COMMON_400(isTodoDone 누락), NOTE_404_NOT_FOUND, NOTE_400_NOT_TODO_TYPE(할일 유형이 아님)
 
 ### 회의
 

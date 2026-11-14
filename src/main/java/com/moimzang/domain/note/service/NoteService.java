@@ -1,9 +1,11 @@
 package com.moimzang.domain.note.service;
 
 import com.moimzang.domain.note.dto.request.NoteCreateRequest;
+import com.moimzang.domain.note.dto.request.NoteTodoUpdateRequest;
 import com.moimzang.domain.note.dto.request.NoteUpdateRequest;
 import com.moimzang.domain.note.dto.response.NoteCreateResponse;
 import com.moimzang.domain.note.dto.response.NoteListResponse;
+import com.moimzang.domain.note.dto.response.NoteTodoUpdateResponse;
 import com.moimzang.domain.note.dto.response.NoteUpdateResponse;
 import com.moimzang.domain.note.entity.OperationNote;
 import com.moimzang.domain.note.enums.NoteType;
@@ -116,6 +118,25 @@ public class NoteService {
         log.info("[메모 수정] 수정을 완료했습니다. noteId = {}", noteId);
         return NoteUpdateResponse.builder()
                 .noteId(note.getId())
+                .build();
+    }
+
+    // 할 일 메모의 완료 여부를 체크하거나 해제한다 — 할 일이 아닌 메모에는 완료 개념이 없어 거부한다
+    @Transactional
+    public NoteTodoUpdateResponse updateTodoDone(Long noteId, NoteTodoUpdateRequest request) {
+        log.info("[할 일 완료 처리] 처리를 시작합니다. noteId = {}, isTodoDone = {}", noteId, request.getIsTodoDone());
+
+        OperationNote note = findNote(noteId, "할 일 완료 처리");
+        if (!note.isTodo()) {
+            log.warn("[할 일 완료 처리] 할 일 유형이 아닙니다. noteId = {}, type = {}", noteId, note.getType());
+            throw new CustomException(NoteErrorCode.NOTE_400_NOT_TODO_TYPE);
+        }
+        note.changeTodoDone(request.getIsTodoDone());
+
+        log.info("[할 일 완료 처리] 처리를 완료했습니다. noteId = {}, isTodoDone = {}", noteId, note.getIsTodoDone());
+        return NoteTodoUpdateResponse.builder()
+                .noteId(note.getId())
+                .isTodoDone(note.getIsTodoDone())
                 .build();
     }
 

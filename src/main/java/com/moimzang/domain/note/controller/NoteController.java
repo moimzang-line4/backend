@@ -1,9 +1,11 @@
 package com.moimzang.domain.note.controller;
 
 import com.moimzang.domain.note.dto.request.NoteCreateRequest;
+import com.moimzang.domain.note.dto.request.NoteTodoUpdateRequest;
 import com.moimzang.domain.note.dto.request.NoteUpdateRequest;
 import com.moimzang.domain.note.dto.response.NoteCreateResponse;
 import com.moimzang.domain.note.dto.response.NoteListResponse;
+import com.moimzang.domain.note.dto.response.NoteTodoUpdateResponse;
 import com.moimzang.domain.note.dto.response.NoteUpdateResponse;
 import com.moimzang.domain.note.service.NoteService;
 import com.moimzang.global.response.BaseResponse;
@@ -58,6 +60,17 @@ public class NoteController implements NoteApi {
             @Valid @RequestBody NoteUpdateRequest request
     ) {
         NoteUpdateResponse response = noteService.updateNote(noteId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 할 일 메모의 완료 여부를 체크하거나 해제한다
+    @Override
+    @PatchMapping("/api/notes/{noteId}/todo")
+    public ResponseEntity<BaseResponse<NoteTodoUpdateResponse>> updateTodoDone(
+            @PathVariable Long noteId,
+            @Valid @RequestBody NoteTodoUpdateRequest request
+    ) {
+        NoteTodoUpdateResponse response = noteService.updateTodoDone(noteId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 

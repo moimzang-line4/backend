@@ -1,9 +1,11 @@
 package com.moimzang.domain.note.controller;
 
 import com.moimzang.domain.note.dto.request.NoteCreateRequest;
+import com.moimzang.domain.note.dto.request.NoteTodoUpdateRequest;
 import com.moimzang.domain.note.dto.request.NoteUpdateRequest;
 import com.moimzang.domain.note.dto.response.NoteCreateResponse;
 import com.moimzang.domain.note.dto.response.NoteListResponse;
+import com.moimzang.domain.note.dto.response.NoteTodoUpdateResponse;
 import com.moimzang.domain.note.dto.response.NoteUpdateResponse;
 import com.moimzang.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -58,6 +60,17 @@ public interface NoteApi {
     })
     ResponseEntity<BaseResponse<NoteUpdateResponse>> updateNote(
             @Parameter(description = "메모 ID", example = "1") Long noteId, @Valid NoteUpdateRequest request);
+
+    @Operation(summary = "할 일 완료 처리", description = "할 일(TODO) 메모의 완료 여부를 체크하거나 해제한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "처리 성공"),
+        @ApiResponse(responseCode = "400", description = "NOTE_400_NOT_TODO_TYPE 또는 COMMON_400(isTodoDone 누락)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "NOTE_404_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<NoteTodoUpdateResponse>> updateTodoDone(
+            @Parameter(description = "메모 ID", example = "1") Long noteId, @Valid NoteTodoUpdateRequest request);
 
     @Operation(summary = "운영 메모 삭제", description = "메모를 삭제한다.")
     @ApiResponses({

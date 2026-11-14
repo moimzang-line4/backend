@@ -11,9 +11,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.moimzang.domain.note.dto.request.NoteCreateRequest;
+import com.moimzang.domain.note.dto.request.NoteTodoUpdateRequest;
 import com.moimzang.domain.note.dto.request.NoteUpdateRequest;
 import com.moimzang.domain.note.dto.response.NoteCreateResponse;
 import com.moimzang.domain.note.dto.response.NoteListResponse;
+import com.moimzang.domain.note.dto.response.NoteTodoUpdateResponse;
 import com.moimzang.domain.note.entity.OperationNote;
 import com.moimzang.domain.note.enums.NoteType;
 import com.moimzang.domain.note.exception.NoteErrorCode;
@@ -256,6 +258,56 @@ class NoteServiceTest {
         given(operationNoteRepository.findById(99L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> noteService.updateNote(99L, NoteUpdateRequest.builder().title("제목").build()))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(NoteErrorCode.NOTE_404_NOT_FOUND);
+    }
+
+    @Test
+    void updateTodoDone_할_일을_완료로_체크한다() {
+        OperationNote note = note(NoteType.TODO, "포스터", null, "인쇄");
+        given(operationNoteRepository.findById(1L)).willReturn(Optional.of(note));
+
+        NoteTodoUpdateResponse response = noteService.updateTodoDone(1L,
+                NoteTodoUpdateRequest.builder().isTodoDone(true).build());
+
+        assertThat(note.getIsTodoDone()).isTrue();
+        assertThat(response.getNoteId()).isEqualTo(1L);
+        assertThat(response.getIsTodoDone()).isTrue();
+    }
+
+    @Test
+    void updateTodoDone_완료한_할_일을_해제한다() {
+        OperationNote note = note(NoteType.TODO, "포스터", null, "인쇄");
+        ReflectionTestUtils.setField(note, "isTodoDone", true);
+        given(operationNoteRepository.findById(1L)).willReturn(Optional.of(note));
+
+        NoteTodoUpdateResponse response = noteService.updateTodoDone(1L,
+                NoteTodoUpdateRequest.builder().isTodoDone(false).build());
+
+        assertThat(note.getIsTodoDone()).isFalse();
+        assertThat(response.getIsTodoDone()).isFalse();
+    }
+
+    @Test
+    void updateTodoDone_할_일이_아니면_NOTE_400_NOT_TODO_TYPE() {
+        OperationNote note = note(NoteType.GENERAL, "대관 확인", null, "대강당");
+        given(operationNoteRepository.findById(1L)).willReturn(Optional.of(note));
+
+        assertThatThrownBy(() -> noteService.updateTodoDone(1L,
+                NoteTodoUpdateRequest.builder().isTodoDone(true).build()))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(NoteErrorCode.NOTE_400_NOT_TODO_TYPE);
+        assertThat(note.getIsTodoDone()).isNull();
+    }
+
+    @Test
+    void updateTodoDone_없는_메모면_NOTE_404_NOT_FOUND() {
+        given(operationNoteRepository.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> noteService.updateTodoDone(99L,
+                NoteTodoUpdateRequest.builder().isTodoDone(true).build()))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
                 .isEqualTo(NoteErrorCode.NOTE_404_NOT_FOUND);
