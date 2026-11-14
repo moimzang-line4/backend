@@ -1,7 +1,19 @@
 package com.moimzang.domain.note.controller;
 
+import com.moimzang.domain.note.dto.request.NoteCreateRequest;
+import com.moimzang.domain.note.dto.request.NoteUpdateRequest;
+import com.moimzang.domain.note.dto.response.NoteCreateResponse;
+import com.moimzang.domain.note.dto.response.NoteUpdateResponse;
 import com.moimzang.domain.note.service.NoteService;
+import com.moimzang.global.response.BaseResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -9,4 +21,34 @@ import org.springframework.web.bind.annotation.RestController;
 public class NoteController implements NoteApi {
 
     private final NoteService noteService;
+
+    // 일정 운영 공간에 메모를 작성한다
+    @Override
+    @PostMapping("/api/schedules/{scheduleId}/notes")
+    public ResponseEntity<BaseResponse<NoteCreateResponse>> createNote(
+            @PathVariable Long scheduleId,
+            @Valid @RequestBody NoteCreateRequest request
+    ) {
+        NoteCreateResponse response = noteService.createNote(scheduleId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 메모를 부분 수정한다
+    @Override
+    @PatchMapping("/api/notes/{noteId}")
+    public ResponseEntity<BaseResponse<NoteUpdateResponse>> updateNote(
+            @PathVariable Long noteId,
+            @Valid @RequestBody NoteUpdateRequest request
+    ) {
+        NoteUpdateResponse response = noteService.updateNote(noteId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 메모를 삭제한다
+    @Override
+    @DeleteMapping("/api/notes/{noteId}")
+    public ResponseEntity<BaseResponse<Void>> deleteNote(@PathVariable Long noteId) {
+        noteService.deleteNote(noteId);
+        return ResponseEntity.ok(BaseResponse.success());
+    }
 }

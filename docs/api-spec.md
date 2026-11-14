@@ -223,10 +223,12 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | SPACE_409_AGENDA_ALREADY_LINKED | 409 | 이미 연결된 안건입니다. | API-013 |
 
-### 운영 메모 (NoteErrorCode) — API-050
+### 운영 메모 (NoteErrorCode) — API-046~050
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
 | NOTE_400_NOT_TODO_TYPE | 400 | 할 일 유형이 아닙니다. | API-050 |
+| NOTE_404_NOT_FOUND | 404 | 존재하지 않는 메모입니다. | API-048, API-049, API-050 |
+| NOTE_404_SCHEDULE_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-046, API-047 |
 
 ### 회의 / 안건 (MeetingErrorCode, AgendaErrorCode) — API-051~061, 056~058, 081~083
 | 코드 | HTTP | 메시지 | 발생 API |
@@ -775,7 +777,8 @@ storeName/totalAmount/registeredAt/settlementStatus, account.bankName/accountNum
 
 #### API-046 · POST /api/schedules/{scheduleId}/notes · 운영 메모 작성
 인증: 불필요. **Request**: type(GENERAL|TODO|DECISION|IDEA), title, assignee(선택), content(100자 이하)
-**Response data**: noteId. **에러**: COMMON_400, COMMON_404
+type=TODO면 isTodoDone=false, 다른 유형은 null로 저장한다.
+**Response data**: noteId. **에러**: COMMON_400, NOTE_404_SCHEDULE_NOT_FOUND
 
 #### API-047 · GET /api/schedules/{scheduleId}/notes · 운영 메모 목록 조회
 인증: 불필요. **Query**: type(ALL|GENERAL|TODO|DECISION|IDEA, 기본 ALL), keyword(선택), cursor(선택),
@@ -789,10 +792,12 @@ cursor 페이지네이션(정렬 기준: createdAt).
 **에러**: COMMON_404, COMMON_400(잘못된 cursor)
 
 #### API-048 · PATCH /api/notes/{noteId} · 운영 메모 수정
-인증: 불필요. Request는 API-046과 동일. **에러**: COMMON_400, COMMON_404
+인증: 불필요. Request는 API-046과 같은 필드를 전부 선택값으로 받아 보낸 필드만 수정한다. assignee에 빈 문자열을
+보내면 담당자를 지운다. 유형을 TODO로 바꾸면 isTodoDone=false, TODO에서 다른 유형으로 바꾸면 null.
+**Response data**: noteId. **에러**: COMMON_400, NOTE_404_NOT_FOUND
 
 #### API-049 · DELETE /api/notes/{noteId} · 운영 메모 삭제
-인증: 불필요. **에러**: COMMON_404
+인증: 불필요. **에러**: NOTE_404_NOT_FOUND
 
 #### API-050 · PATCH /api/notes/{noteId}/todo · 할 일 완료 처리
 인증: 불필요. **Request**: isTodoDone(boolean). **Response data**: noteId, isTodoDone

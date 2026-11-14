@@ -59,4 +59,45 @@ public class OperationNote extends BaseEntity {
     // 할 일 완료 여부(type이 할일인 경우만 사용)
     @Column(name = "is_todo_done")
     private Boolean isTodoDone;
+
+    // 할 일은 미완료로 시작하고, 다른 유형은 완료 여부를 쓰지 않아 비워둔다
+    public static OperationNote create(Schedule schedule, NoteType type, String title, String assignee,
+                                       String content) {
+        return OperationNote.builder()
+                .schedule(schedule)
+                .type(type)
+                .title(title)
+                .assignee(assignee)
+                .content(content)
+                .isTodoDone(type == NoteType.TODO ? Boolean.FALSE : null)
+                .build();
+    }
+
+    // 메모를 부분 수정한다 — 인자가 null인 필드는 바꾸지 않는다.
+    // 담당자는 선택 항목이라 빈 문자열을 보내면 담당자를 지운다
+    public void update(NoteType type, String title, String assignee, String content) {
+        if (type != null) {
+            changeType(type);
+        }
+        if (title != null) {
+            this.title = title;
+        }
+        if (assignee != null) {
+            this.assignee = assignee.isEmpty() ? null : assignee;
+        }
+        if (content != null) {
+            this.content = content;
+        }
+    }
+
+    // 다른 유형에서 할 일로 바뀌면 미완료로 시작하고, 할 일에서 벗어나면 완료 여부를 비운다.
+    // 할 일을 할 일로 다시 보내는 경우는 기존 완료 여부를 그대로 둔다
+    private void changeType(NoteType newType) {
+        if (newType == NoteType.TODO && this.type != NoteType.TODO) {
+            this.isTodoDone = Boolean.FALSE;
+        } else if (newType != NoteType.TODO) {
+            this.isTodoDone = null;
+        }
+        this.type = newType;
+    }
 }
