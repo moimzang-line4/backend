@@ -93,6 +93,90 @@ class LedgerEntryRepositoryImplTest {
         assertThat(result).extracting(LedgerEntry::getItemName).containsExactly("최근 지출", "중간 지출");
     }
 
+    // API-069의 currentBalance·totalIncome·totalExpense는 기수가 바뀌어도 이월되는 그룹 전체
+    // 누적값이라, 같은 그룹의 다른(이전) 기수 장부도 합산 대상에 포함돼야 한다
+    @Test
+    void aggregateByTypeForGroup_같은_그룹의_다른_기수_장부도_합산한다() {
+        persistEntry(groupTerm, LedgerType.INCOME, "이번 기수 수입", 500000, LocalDate.of(2026, 9, 1));
+        GroupTerm previousTerm = persistGroupTerm(groupTerm.getGroup(), "25기");
+        persistEntry(previousTerm, LedgerType.INCOME, "이전 기수 수입", 300000, LocalDate.of(2025, 9, 1));
+        persistEntry(previousTerm, LedgerType.EXPENSE, "이전 기수 지출", 100000, LocalDate.of(2025, 10, 1));
+
+        List<LedgerTypeTotal> totals = ledgerEntryRepository.aggregateByTypeForGroup(groupTerm.getGroup().getId());
+
+        assertThat(totals).containsExactlyInAnyOrder(
+                new LedgerTypeTotal(LedgerType.INCOME, 800000L, 2L),
+                new LedgerTypeTotal(LedgerType.EXPENSE, 100000L, 1L));
+    }
+
+    @Test
+    void aggregateByTypeForGroup_다른_그룹의_장부는_합산하지_않는다() {
+        persistEntry(groupTerm, LedgerType.INCOME, "우리 수입", 500000, LocalDate.of(2026, 9, 1));
+        GroupTerm otherGroupTerm = persistGroupTerm(persistClubGroup("다른 동아리"), "26기");
+        persistEntry(otherGroupTerm, LedgerType.INCOME, "남의 수입", 999999, LocalDate.of(2026, 9, 1));
+
+        List<LedgerTypeTotal> totals = ledgerEntryRepository.aggregateByTypeForGroup(groupTerm.getGroup().getId());
+
+        assertThat(totals).containsExactly(new LedgerTypeTotal(LedgerType.INCOME, 500000L, 1L));
+    }
+
+    @Test
+    void search_다른_기수_내역은_포함하지_않는다() {
+        persistEntry(groupTerm, LedgerType.EXPENSE, "이번 기수", 10000, LocalDate.of(2026, 11, 1));
+        GroupTerm otherTerm = persistGroupTerm(groupTerm.getGroup(), "25기");
+        persistEntry(otherTerm, LedgerType.EXPENSE, "다른 기수", 20000, LocalDate.of(2026, 11, 2));
+
+        List<LedgerEntry> result = ledgerEntryRepository.search(groupTerm.getId(), null, null, null, 10);
+
+        assertThat(result).extracting(LedgerEntry::getItemName).containsExactly("이번 기수");
+    }
+
+    @Test
+    void search_type_필터를_적용한다() {
+        persistEntry(groupTerm, LedgerType.INCOME, "수입", 10000, LocalDate.of(2026, 11, 1));
+        persistEntry(groupTerm, LedgerType.EXPENSE, "지출", 20000, LocalDate.of(2026, 11, 2));
+
+        List<LedgerEntry> result = ledgerEntryRepository.search(groupTerm.getId(), LedgerType.EXPENSE, null, null, 10);
+
+        assertThat(result).extracting(LedgerEntry::getItemName).containsExactly("지출");
+    }
+
+    // entryDate만으로는 같은 날짜 내역의 순서가 안정적이지 않아 id desc를 보조 정렬로 쓴다
+    @Test
+    void search_entryDate_내림차순이고_같은_날짜는_id_내림차순이다() {
+        persistEntry(groupTerm, LedgerType.EXPENSE, "오래된 지출", 10000, LocalDate.of(2026, 11, 1));
+        persistEntry(groupTerm, LedgerType.EXPENSE, "같은날_먼저입력", 20000, LocalDate.of(2026, 11, 10));
+        persistEntry(groupTerm, LedgerType.EXPENSE, "같은날_나중입력", 30000, LocalDate.of(2026, 11, 10));
+
+        List<LedgerEntry> result = ledgerEntryRepository.search(groupTerm.getId(), null, null, null, 10);
+
+        assertThat(result).extracting(LedgerEntry::getItemName)
+                .containsExactly("같은날_나중입력", "같은날_먼저입력", "오래된 지출");
+    }
+
+    @Test
+    void search_cursor_이후의_항목만_반환한다() {
+        LedgerEntry first = persistEntry(groupTerm, LedgerType.EXPENSE, "최신", 10000, LocalDate.of(2026, 11, 10));
+        persistEntry(groupTerm, LedgerType.EXPENSE, "중간", 20000, LocalDate.of(2026, 11, 5));
+        persistEntry(groupTerm, LedgerType.EXPENSE, "가장 오래됨", 30000, LocalDate.of(2026, 11, 1));
+
+        List<LedgerEntry> result = ledgerEntryRepository.search(
+                groupTerm.getId(), null, first.getEntryDate(), first.getId(), 10);
+
+        assertThat(result).extracting(LedgerEntry::getItemName).containsExactly("중간", "가장 오래됨");
+    }
+
+    @Test
+    void search_limit만큼만_반환한다() {
+        persistEntry(groupTerm, LedgerType.EXPENSE, "1", 10000, LocalDate.of(2026, 11, 1));
+        persistEntry(groupTerm, LedgerType.EXPENSE, "2", 20000, LocalDate.of(2026, 11, 2));
+        persistEntry(groupTerm, LedgerType.EXPENSE, "3", 30000, LocalDate.of(2026, 11, 3));
+
+        List<LedgerEntry> result = ledgerEntryRepository.search(groupTerm.getId(), null, null, null, 2);
+
+        assertThat(result).hasSize(2);
+    }
+
     private ClubGroup persistClubGroup(String name) {
         ClubGroup group = BeanUtils.instantiateClass(ClubGroup.class);
         ReflectionTestUtils.setField(group, "name", name);
