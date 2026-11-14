@@ -1046,3 +1046,17 @@ Gemini 멀티모달로 영수증 이미지를 직접 분석하도록 구현했�
   검증한다(생성기는 목하지 않고 실제 인스턴스를 써서 바이트까지 만들어본다). `LedgerEntryRepository
   Impl`에는 `findAllForExport`가 기수 경계를 지키고 정렬이 안정적인지(entryDate asc, id asc)를
   Testcontainers로 검증하는 테스트를 추가했다.
+
+## 72. API-028(차수 추가)은 기존 참가자 전원을 자동 포함하는 것으로 확정한다
+`docs/api-spec.md`가 "새 차수 생성 시 기존 일정 참가자를 자동으로 미출석 상태로 넣을지, 빈 차수로
+시작할지는 구현 시점에 정한다"로 미확정 남겨둔 항목이다. 코드(`AttendanceService.createRound`)는
+이미 그 일정의 `schedule_attendee` 전원을 `RoundAttendee.create`로 새 차수에 미출석 상태로 함께
+넣도록 구현돼 있어, 이 동작을 구현 기준으로 확정한다(사용자 결정, 2026-11-15). 다만 이 결정은
+기존 코드를 사후에 문서화한 것이라 — 구현 시점에 사용자 확인을 거친 다른 결정들과 달리 — 이 동작이
+실제로 의도한 사양인지는 팀 확인이 필요하다.
+
+## 73. API-040 에러 목록에 COMMON_400이 없는 것도 문서 누락으로 간주한다
+`docs/api-spec.md`의 API-040 에러 목록은 COMMON_404만 적혀 있다. Request `paid`가 누락된 요청을
+조용히 처리하면 입금 상태가 의도치 않게 바뀔 수 있어, attendance의 #30과 같은 이유로 문서 누락으로
+간주한다(사용자 결정, 2026-11-15) — `PaymentConfirmRequest.paid`를 `@NotNull Boolean`으로
+검증하고, 누락 시 COMMON_400을 반환하도록 구현한다.
