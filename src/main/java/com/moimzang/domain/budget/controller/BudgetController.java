@@ -6,7 +6,9 @@ import com.moimzang.domain.budget.dto.response.LedgerEntryCreateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryDetailResponse;
 import com.moimzang.domain.budget.dto.response.LedgerEntryUpdateResponse;
 import com.moimzang.domain.budget.dto.response.LedgerSummaryResponse;
+import com.moimzang.domain.budget.dto.response.LedgerSyncResponse;
 import com.moimzang.domain.budget.service.BudgetService;
+import com.moimzang.domain.budget.service.LedgerSyncService;
 import com.moimzang.global.response.BaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class BudgetController implements BudgetApi {
 
     private final BudgetService budgetService;
+    private final LedgerSyncService ledgerSyncService;
 
     // 예산 요약·내역을 조회한다
     @Override
@@ -75,5 +78,13 @@ public class BudgetController implements BudgetApi {
     public ResponseEntity<BaseResponse<Void>> deleteLedgerEntry(@PathVariable Long entryId) {
         budgetService.deleteLedgerEntry(entryId);
         return ResponseEntity.ok(BaseResponse.success());
+    }
+
+    // 정산 내역을 새로고침한다(자동 기록 재계산)
+    @Override
+    @PostMapping("/api/terms/{termId}/ledger/sync")
+    public ResponseEntity<BaseResponse<LedgerSyncResponse>> syncLedger(@PathVariable Long termId) {
+        LedgerSyncResponse response = ledgerSyncService.sync(termId);
+        return ResponseEntity.ok(BaseResponse.success(response));
     }
 }

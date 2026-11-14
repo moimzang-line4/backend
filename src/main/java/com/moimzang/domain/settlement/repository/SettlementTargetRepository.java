@@ -47,4 +47,11 @@ public interface SettlementTargetRepository extends JpaRepository<SettlementTarg
             )
             """)
     void deleteAllByMemberListId(@Param("memberListId") Long memberListId);
+
+    // 정산 내역 새로고침(API-074) 대상 일정 선정용 — 그 기수에서 정산 대상이 하나라도 있는 일정
+    @Query("""
+            select distinct t.scheduleRound.schedule.id from SettlementTarget t
+            where t.scheduleRound.schedule.groupTerm.id = :groupTermId
+            """)
+    List<Long> findScheduleIdsByGroupTerm(@Param("groupTermId") Long groupTermId);
 }
