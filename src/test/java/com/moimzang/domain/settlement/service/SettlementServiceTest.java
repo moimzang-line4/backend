@@ -20,13 +20,17 @@ import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.budget.repository.LedgerEntryRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.domain.settlement.dto.request.AccountSetRequest;
 import com.moimzang.domain.settlement.dto.request.PaymentConfirmRequest;
 import com.moimzang.domain.settlement.dto.request.ReceiptRegisterRequest;
+import com.moimzang.domain.settlement.dto.request.SettlementNoticeRequest;
 import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
+import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementNoticeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetListResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetSaveResponse;
@@ -133,11 +137,32 @@ class SettlementServiceTest {
     }
 
     private ScheduleRound roundWithId(Long id, Long scheduleId) {
+        return roundWithId(id, scheduleId, 1, "1차");
+    }
+
+    private ScheduleRound roundWithId(Long id, Long scheduleId, Integer roundNo, String label) {
         Schedule schedule = mock(Schedule.class);
         lenient().when(schedule.getId()).thenReturn(scheduleId);
-        ScheduleRound round = ScheduleRound.create(schedule, 1, "1차");
+        ScheduleRound round = ScheduleRound.create(schedule, roundNo, label);
         ReflectionTestUtils.setField(round, "id", id);
         return round;
+    }
+
+    // scheduleTitle은 정산 공지 생성(generateSettlementNotice) 성공 경로에서만 쓰이고, 400/404/409로
+    // 끝나는 테스트는 그 전에 던져서 쓰이지 않는다 — lenient로 strict stub 검사를 피한다
+    private Schedule scheduleWithTitle(String title) {
+        Schedule schedule = mock(Schedule.class);
+        lenient().when(schedule.getTitle()).thenReturn(title);
+        return schedule;
+    }
+
+    private void setReceiptAndAccount(ScheduleRound round, int totalAmount, int clubSubsidyAmount,
+                                       String bankName, String accountNumber, String accountHolder) {
+        ReflectionTestUtils.setField(round, "totalAmount", totalAmount);
+        ReflectionTestUtils.setField(round, "clubSubsidyAmount", clubSubsidyAmount);
+        ReflectionTestUtils.setField(round, "bankName", bankName);
+        ReflectionTestUtils.setField(round, "accountNumber", accountNumber);
+        ReflectionTestUtils.setField(round, "accountHolder", accountHolder);
     }
 
     private RoundAttendee checkedInRoundAttendeeWithAttendee(ScheduleRound round, ScheduleAttendee attendee) {
@@ -906,5 +931,232 @@ class SettlementServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void setAccount_정상_저장한다() {
+        ScheduleRound round = roundWithId(1L);
+        AccountSetRequest request = AccountSetRequest.builder()
+                .bankName("국민은행").accountNumber("123-456").accountHolder("김모임").build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+
+        AccountResponse response = settlementService.setAccount(1L, request);
+
+        assertThat(response.getRoundId()).isEqualTo(1L);
+        assertThat(response.getBankName()).isEqualTo("국민은행");
+        assertThat(response.getAccountNumber()).isEqualTo("123-456");
+        assertThat(response.getAccountHolder()).isEqualTo("김모임");
+        assertThat(round.getBankName()).isEqualTo("국민은행");
+    }
+
+    @Test
+    void setAccount_이미_설정된_계좌를_덮어쓴다() {
+        ScheduleRound round = roundWithId(1L);
+        ReflectionTestUtils.setField(round, "bankName", "신한은행");
+        ReflectionTestUtils.setField(round, "accountNumber", "999-999");
+        ReflectionTestUtils.setField(round, "accountHolder", "박모임");
+        AccountSetRequest request = AccountSetRequest.builder()
+                .bankName("국민은행").accountNumber("123-456").accountHolder("김모임").build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+
+        settlementService.setAccount(1L, request);
+
+        assertThat(round.getBankName()).isEqualTo("국민은행");
+        assertThat(round.getAccountNumber()).isEqualTo("123-456");
+        assertThat(round.getAccountHolder()).isEqualTo("김모임");
+    }
+
+    @Test
+    void setAccount_존재하지_않는_차수면_COMMON_404를_던진다() {
+        AccountSetRequest request = AccountSetRequest.builder()
+                .bankName("국민은행").accountNumber("123-456").accountHolder("김모임").build();
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> settlementService.setAccount(1L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void generateSettlementNotice_정상_생성하고_combinedAmount와_noticeText를_만든다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round1 = roundWithId(10L, 100L, 1, "1차");
+        ScheduleRound round2 = roundWithId(11L, 100L, 2, "2차");
+        setReceiptAndAccount(round1, 40000, 0, "국민은행", "123-456", "김모임");
+        setReceiptAndAccount(round2, 30000, 0, "국민은행", "123-456", "김모임");
+        SettlementTarget target1 = settlementTargetWithId(1L, 20000, PaymentStatus.UNPAID);
+        SettlementTarget target2 = settlementTargetWithId(2L, 15000, PaymentStatus.UNPAID);
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(10L, 11L)).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findAllById(List.of(10L, 11L))).willReturn(List.of(round1, round2));
+        given(settlementTargetRepository.findFirstByScheduleRoundId(10L)).willReturn(Optional.of(target1));
+        given(settlementTargetRepository.findFirstByScheduleRoundId(11L)).willReturn(Optional.of(target2));
+
+        SettlementNoticeResponse response = settlementService.generateSettlementNotice(100L, request);
+
+        assertThat(response.getScheduleTitle()).isEqualTo("정기 모임");
+        assertThat(response.getCombinedAmount()).isEqualTo(35000);
+        assertThat(response.getRounds()).hasSize(2);
+        assertThat(response.getRounds().get(0).getLabel()).isEqualTo("1차");
+        assertThat(response.getRounds().get(0).getBilledAmount()).isEqualTo(20000);
+        assertThat(response.getRounds().get(1).getLabel()).isEqualTo("2차");
+        assertThat(response.getRounds().get(1).getBilledAmount()).isEqualTo(15000);
+        assertThat(response.getAccount().getBankName()).isEqualTo("국민은행");
+        assertThat(response.getNoticeText())
+                .contains("[정기 모임] 정산 안내")
+                .contains("1차: 20,000원")
+                .contains("2차: 15,000원")
+                .contains("총 입금액: 35,000원")
+                .contains("국민은행 123-456 (김모임)");
+    }
+
+    @Test
+    void generateSettlementNotice_차수를_선택하지_않으면_SETTLEMENT_400_ROUND_SELECTION_REQUIRED를_던진다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of()).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+
+        assertThatThrownBy(() -> settlementService.generateSettlementNotice(100L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(SettlementErrorCode.SETTLEMENT_400_ROUND_SELECTION_REQUIRED);
+    }
+
+    @Test
+    void generateSettlementNotice_영수증_미등록_차수가_포함되면_SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED를_던진다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round = roundWithId(10L, 100L, 1, "1차");
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(10L)).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findAllById(List.of(10L))).willReturn(List.of(round));
+
+        assertThatThrownBy(() -> settlementService.generateSettlementNotice(100L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(SettlementErrorCode.SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED);
+    }
+
+    @Test
+    void generateSettlementNotice_계좌_미설정_차수가_포함되면_SETTLEMENT_409_ACCOUNT_NOT_SET을_던진다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round = roundWithId(10L, 100L, 1, "1차");
+        ReflectionTestUtils.setField(round, "totalAmount", 40000);
+        ReflectionTestUtils.setField(round, "clubSubsidyAmount", 0);
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(10L)).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findAllById(List.of(10L))).willReturn(List.of(round));
+
+        assertThatThrownBy(() -> settlementService.generateSettlementNotice(100L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(SettlementErrorCode.SETTLEMENT_409_ACCOUNT_NOT_SET);
+    }
+
+    @Test
+    void generateSettlementNotice_다른_일정_소속_차수가_포함되면_COMMON_400을_던진다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound otherScheduleRound = roundWithId(10L, 999L, 1, "1차");
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(10L)).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findAllById(List.of(10L))).willReturn(List.of(otherScheduleRound));
+
+        assertThatThrownBy(() -> settlementService.generateSettlementNotice(100L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void generateSettlementNotice_존재하지_않는_차수가_섞이면_COMMON_400을_던진다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(999L)).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findAllById(List.of(999L))).willReturn(List.of());
+
+        assertThatThrownBy(() -> settlementService.generateSettlementNotice(100L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void generateSettlementNotice_중복된_roundId는_제거하고_처리한다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round = roundWithId(10L, 100L, 1, "1차");
+        setReceiptAndAccount(round, 40000, 0, "국민은행", "123-456", "김모임");
+        SettlementTarget target = settlementTargetWithId(1L, 20000, PaymentStatus.UNPAID);
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(10L, 10L)).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findAllById(List.of(10L))).willReturn(List.of(round));
+        given(settlementTargetRepository.findFirstByScheduleRoundId(10L)).willReturn(Optional.of(target));
+
+        SettlementNoticeResponse response = settlementService.generateSettlementNotice(100L, request);
+
+        assertThat(response.getRounds()).hasSize(1);
+        assertThat(response.getCombinedAmount()).isEqualTo(20000);
+        verify(scheduleRoundRepository).findAllById(List.of(10L));
+    }
+
+    @Test
+    void generateSettlementNotice_존재하지_않는_일정이면_CommonErrorCode_NOT_FOUND를_던진다() {
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(10L)).build();
+        given(scheduleRepository.findById(100L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> settlementService.generateSettlementNotice(100L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void generateSettlementNotice_계좌가_다른_차수_중_roundNo가_가장_작은_차수의_계좌를_대표로_쓴다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round1 = roundWithId(10L, 100L, 1, "1차");
+        ScheduleRound round2 = roundWithId(11L, 100L, 2, "2차");
+        setReceiptAndAccount(round1, 40000, 0, "국민은행", "111-111", "1차계좌주");
+        setReceiptAndAccount(round2, 30000, 0, "신한은행", "222-222", "2차계좌주");
+        SettlementTarget target1 = settlementTargetWithId(1L, 20000, PaymentStatus.UNPAID);
+        SettlementTarget target2 = settlementTargetWithId(2L, 15000, PaymentStatus.UNPAID);
+        // 요청 배열 순서를 일부러 2차, 1차로 뒤집어 보내도 대표 계좌는 roundNo 기준으로 고정된다
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(11L, 10L)).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findAllById(List.of(11L, 10L))).willReturn(List.of(round2, round1));
+        given(settlementTargetRepository.findFirstByScheduleRoundId(10L)).willReturn(Optional.of(target1));
+        given(settlementTargetRepository.findFirstByScheduleRoundId(11L)).willReturn(Optional.of(target2));
+
+        SettlementNoticeResponse response = settlementService.generateSettlementNotice(100L, request);
+
+        assertThat(response.getAccount().getBankName()).isEqualTo("국민은행");
+        assertThat(response.getAccount().getAccountHolder()).isEqualTo("1차계좌주");
+        assertThat(response.getRounds().get(0).getLabel()).isEqualTo("1차");
+        assertThat(response.getRounds().get(1).getLabel()).isEqualTo("2차");
+    }
+
+    @Test
+    void generateSettlementNotice_정산_명단이_없는_차수가_포함되면_SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED를_던진다() {
+        Schedule schedule = scheduleWithTitle("정기 모임");
+        ScheduleRound round = roundWithId(10L, 100L, 1, "1차");
+        setReceiptAndAccount(round, 40000, 0, "국민은행", "123-456", "김모임");
+        SettlementNoticeRequest request = SettlementNoticeRequest.builder().roundIds(List.of(10L)).build();
+
+        given(scheduleRepository.findById(100L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findAllById(List.of(10L))).willReturn(List.of(round));
+        given(settlementTargetRepository.findFirstByScheduleRoundId(10L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> settlementService.generateSettlementNotice(100L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(SettlementErrorCode.SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED);
     }
 }

@@ -3,11 +3,14 @@ package com.moimzang.domain.settlement.mapper;
 import com.moimzang.domain.attendance.entity.RoundAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
+import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementImportAttendeeResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementNoticeAccountResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementNoticeRoundResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetSaveResponse;
 import com.moimzang.domain.settlement.entity.SettlementTarget;
@@ -62,4 +65,15 @@ public interface SettlementMapper {
     @Mapping(target = "affiliation", source = "attendee.affiliation")
     @Mapping(target = "phoneLast4", source = "attendee.phoneLast4")
     PaymentSummaryResponse toPaymentSummaryResponse(PaymentSummary summary);
+
+    // 입금 안내 계좌 설정(API-043) 응답으로 변환한다
+    @Mapping(target = "roundId", source = "id")
+    AccountResponse toAccountResponse(ScheduleRound round);
+
+    // 정산 공지 생성(API-044)의 대표 계좌로 변환한다(roundId 없이 계좌 정보만)
+    SettlementNoticeAccountResponse toNoticeAccountResponse(ScheduleRound round);
+
+    // 정산 공지 생성(API-044)의 차수 한 줄을 변환한다. billedAmount는 Service가 계산해 넘기는 값이다
+    @Mapping(target = "label", source = "round.label")
+    SettlementNoticeRoundResponse toNoticeRoundResponse(ScheduleRound round, int billedAmount);
 }

@@ -1,12 +1,16 @@
 package com.moimzang.domain.settlement.controller;
 
+import com.moimzang.domain.settlement.dto.request.AccountSetRequest;
 import com.moimzang.domain.settlement.dto.request.PaymentConfirmRequest;
 import com.moimzang.domain.settlement.dto.request.ReceiptRegisterRequest;
+import com.moimzang.domain.settlement.dto.request.SettlementNoticeRequest;
 import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
+import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementNoticeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetListResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetSaveResponse;
@@ -19,6 +23,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -120,6 +125,28 @@ public class SettlementController implements SettlementApi {
             @RequestParam(required = false) Integer size
     ) {
         PaymentSummaryListResponse response = settlementService.getPaymentSummaries(scheduleId, status, keyword, cursor, size);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 그 차수의 입금 안내 계좌를 등록·수정한다(upsert)
+    @Override
+    @PutMapping("/api/rounds/{roundId}/account")
+    public ResponseEntity<BaseResponse<AccountResponse>> setAccount(
+            @PathVariable Long roundId,
+            @Valid @RequestBody AccountSetRequest request
+    ) {
+        AccountResponse response = settlementService.setAccount(roundId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 선택한 차수들의 정산 공지 문구를 만든다(저장하지 않고 응답만 생성)
+    @Override
+    @PostMapping("/api/schedules/{scheduleId}/settlement-notice")
+    public ResponseEntity<BaseResponse<SettlementNoticeResponse>> generateSettlementNotice(
+            @PathVariable Long scheduleId,
+            @Valid @RequestBody SettlementNoticeRequest request
+    ) {
+        SettlementNoticeResponse response = settlementService.generateSettlementNotice(scheduleId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }

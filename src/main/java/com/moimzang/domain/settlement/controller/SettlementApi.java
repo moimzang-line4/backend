@@ -1,12 +1,16 @@
 package com.moimzang.domain.settlement.controller;
 
+import com.moimzang.domain.settlement.dto.request.AccountSetRequest;
 import com.moimzang.domain.settlement.dto.request.PaymentConfirmRequest;
 import com.moimzang.domain.settlement.dto.request.ReceiptRegisterRequest;
+import com.moimzang.domain.settlement.dto.request.SettlementNoticeRequest;
 import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
+import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementNoticeResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetListResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetSaveResponse;
@@ -151,4 +155,34 @@ public interface SettlementApi {
             @Parameter(description = "검색어(이름 포함검색)", example = "김모임") String keyword,
             @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지") String cursor,
             @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);
+
+    @Operation(summary = "입금 안내 계좌 설정", description = "그 차수의 입금 안내 계좌를 등록·수정한다(upsert). "
+            + "은행 연동 없이 공지에 띄울 텍스트일 뿐이라 이미 설정된 계좌가 있으면 그대로 덮어쓴다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "설정 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(필수 필드 누락)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<AccountResponse>> setAccount(
+            @Parameter(description = "차수 ID", example = "1") Long roundId,
+            @Valid AccountSetRequest request);
+
+    @Operation(summary = "정산 공지 생성", description = "선택한 차수들의 정산 공지 문구를 만들어 응답만 반환한다(저장하지 "
+            + "않음). 선택 차수의 계좌가 서로 다르면 roundNo가 가장 작은 차수의 계좌를 대표로 쓴다. 영수증은 등록됐지만 "
+            + "정산 명단(API-038)을 아직 저장하지 않은 차수는 영수증 미등록과 같은 409로 거부한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "생성 성공"),
+        @ApiResponse(responseCode = "400", description = "SETTLEMENT_400_ROUND_SELECTION_REQUIRED, COMMON_400(그 일정 "
+                + "소속이 아니거나 존재하지 않는 차수 포함)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED, SETTLEMENT_409_ACCOUNT_NOT_SET",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<SettlementNoticeResponse>> generateSettlementNotice(
+            @Parameter(description = "일정 ID", example = "1") Long scheduleId,
+            @Valid SettlementNoticeRequest request);
 }

@@ -7,15 +7,21 @@ import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.budget.repository.LedgerEntryRepository;
+import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
+import com.moimzang.domain.settlement.dto.request.AccountSetRequest;
 import com.moimzang.domain.settlement.dto.request.PaymentConfirmRequest;
 import com.moimzang.domain.settlement.dto.request.ReceiptRegisterRequest;
+import com.moimzang.domain.settlement.dto.request.SettlementNoticeRequest;
 import com.moimzang.domain.settlement.dto.request.SettlementTargetSaveRequest;
+import com.moimzang.domain.settlement.dto.response.AccountResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentStatusResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryListResponse;
 import com.moimzang.domain.settlement.dto.response.PaymentSummaryResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptRegisterResponse;
 import com.moimzang.domain.settlement.dto.response.ReceiptResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementNoticeResponse;
+import com.moimzang.domain.settlement.dto.response.SettlementNoticeRoundResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetImportResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetListResponse;
 import com.moimzang.domain.settlement.dto.response.SettlementTargetResponse;
@@ -35,10 +41,12 @@ import com.moimzang.global.storage.FileStorage;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -447,5 +455,118 @@ public class SettlementService {
         LocalDateTime createdAt = last.attendee().getCreatedAt();
         String sortValue = String.valueOf(createdAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
         return CursorCodec.encode(sortValue, last.attendee().getId());
+    }
+
+    // 그 차수의 입금 안내 계좌를 등록·수정한다(upsert, 은행 연동 없이 공지에 띄울 텍스트일 뿐)
+    @Transactional
+    public AccountResponse setAccount(Long roundId, AccountSetRequest request) {
+        log.info("[입금 안내 계좌 설정] 설정을 시작합니다. roundId = {}", roundId);
+
+        ScheduleRound round = scheduleRoundRepository.findById(roundId)
+                .orElseThrow(() -> {
+                    log.warn("[입금 안내 계좌 설정] 존재하지 않는 차수입니다. roundId = {}", roundId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        round.updateAccount(request.getBankName(), request.getAccountNumber(), request.getAccountHolder());
+
+        log.info("[입금 안내 계좌 설정] 설정을 완료했습니다. roundId = {}", roundId);
+        return settlementMapper.toAccountResponse(round);
+    }
+
+    // 선택한 차수들의 정산 공지 문구를 만든다(저장하지 않고 응답만 생성). 대표 계좌는 선택 차수 중
+    // roundNo가 가장 작은 차수의 계좌를 쓴다 — 요청 roundIds 배열 순서와 무관하게 결정적이기 때문이다
+    public SettlementNoticeResponse generateSettlementNotice(Long scheduleId, SettlementNoticeRequest request) {
+        log.info("[정산 공지 생성] 생성을 시작합니다. scheduleId = {}, roundIds = {}", scheduleId, request.getRoundIds());
+
+        Schedule schedule = scheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> {
+                    log.warn("[정산 공지 생성] 존재하지 않는 일정입니다. scheduleId = {}", scheduleId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        List<Long> distinctRoundIds = request.getRoundIds().stream().distinct().toList();
+        if (distinctRoundIds.isEmpty()) {
+            log.warn("[정산 공지 생성] 선택한 차수가 없습니다. scheduleId = {}", scheduleId);
+            throw new CustomException(SettlementErrorCode.SETTLEMENT_400_ROUND_SELECTION_REQUIRED);
+        }
+
+        List<ScheduleRound> rounds = scheduleRoundRepository.findAllById(distinctRoundIds);
+        boolean hasInvalidRound = rounds.size() != distinctRoundIds.size()
+                || rounds.stream().anyMatch(round -> !round.getSchedule().getId().equals(scheduleId));
+        if (hasInvalidRound) {
+            log.warn("[정산 공지 생성] 그 일정 소속이 아닌 차수가 섞여 있습니다. scheduleId = {}", scheduleId);
+            throw new CustomException(CommonErrorCode.BAD_REQUEST);
+        }
+
+        boolean hasUnregisteredReceipt = rounds.stream().anyMatch(round -> !round.hasReceipt());
+        if (hasUnregisteredReceipt) {
+            log.warn("[정산 공지 생성] 영수증이 등록되지 않은 차수가 포함되어 있습니다. scheduleId = {}", scheduleId);
+            throw new CustomException(SettlementErrorCode.SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED);
+        }
+
+        boolean hasMissingAccount = rounds.stream().anyMatch(round -> !round.hasAccount());
+        if (hasMissingAccount) {
+            log.warn("[정산 공지 생성] 입금 안내 계좌가 설정되지 않은 차수가 포함되어 있습니다. scheduleId = {}", scheduleId);
+            throw new CustomException(SettlementErrorCode.SETTLEMENT_409_ACCOUNT_NOT_SET);
+        }
+
+        // roundNo 오름차순으로 고정해 공지 문구 나열 순서·대표 계좌 선택이 요청 배열 순서에
+        // 좌우되지 않게 한다
+        List<ScheduleRound> orderedRounds = rounds.stream()
+                .sorted(Comparator.comparing(ScheduleRound::getRoundNo))
+                .toList();
+
+        List<RoundAmount> roundAmounts = new ArrayList<>();
+        for (ScheduleRound round : orderedRounds) {
+            // 영수증은 등록됐지만 정산 명단(API-038)을 아직 저장하지 않은 차수는 영수증 미등록과
+            // 같은 409로 거부한다 — 둘 다 "정산 준비가 안 된 차수"라는 같은 의미이기 때문이다
+            Integer billedAmount = settlementTargetRepository.findFirstByScheduleRoundId(round.getId())
+                    .map(SettlementTarget::getBilledAmount)
+                    .orElseThrow(() -> {
+                        log.warn("[정산 공지 생성] 정산 명단이 없는 차수가 포함되어 있습니다. scheduleId = {}, roundId = {}",
+                                scheduleId, round.getId());
+                        return new CustomException(SettlementErrorCode.SETTLEMENT_409_UNREGISTERED_ROUND_INCLUDED);
+                    });
+            roundAmounts.add(new RoundAmount(round, billedAmount));
+        }
+
+        int combinedAmount = roundAmounts.stream().mapToInt(RoundAmount::billedAmount).sum();
+        ScheduleRound representativeRound = orderedRounds.get(0);
+        String noticeText = buildNoticeText(schedule.getTitle(), roundAmounts, combinedAmount, representativeRound);
+
+        log.info("[정산 공지 생성] 생성을 완료했습니다. scheduleId = {}, roundCount = {}, combinedAmount = {}",
+                scheduleId, roundAmounts.size(), combinedAmount);
+        return SettlementNoticeResponse.builder()
+                .scheduleTitle(schedule.getTitle())
+                .rounds(roundAmounts.stream()
+                        .map(ra -> settlementMapper.toNoticeRoundResponse(ra.round(), ra.billedAmount()))
+                        .toList())
+                .combinedAmount(combinedAmount)
+                .account(settlementMapper.toNoticeAccountResponse(representativeRound))
+                .noticeText(noticeText)
+                .build();
+    }
+
+    private record RoundAmount(ScheduleRound round, int billedAmount) {
+    }
+
+    private String buildNoticeText(String scheduleTitle, List<RoundAmount> roundAmounts, int combinedAmount,
+                                    ScheduleRound representativeRound) {
+        StringBuilder text = new StringBuilder();
+        text.append("[").append(scheduleTitle).append("] 정산 안내\n\n");
+        for (RoundAmount roundAmount : roundAmounts) {
+            text.append(roundAmount.round().getLabel()).append(": ")
+                    .append(formatAmount(roundAmount.billedAmount())).append("원\n");
+        }
+        text.append("\n총 입금액: ").append(formatAmount(combinedAmount)).append("원\n");
+        text.append(representativeRound.getBankName()).append(" ").append(representativeRound.getAccountNumber())
+                .append(" (").append(representativeRound.getAccountHolder()).append(")\n\n");
+        text.append("확인 후 입금해주세요!");
+        return text.toString();
+    }
+
+    private String formatAmount(int amount) {
+        return String.format(Locale.US, "%,d", amount);
     }
 }

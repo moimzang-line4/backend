@@ -101,4 +101,16 @@ public class ScheduleRound extends BaseEntity {
         this.clubSubsidyAmount = clubSubsidyAmount;
         this.imageUrl = imageUrl;
     }
+
+    // 입금 안내 계좌 설정 여부 — 세 필드가 항상 함께 들어오므로(API-043) bankName 하나로 판단한다
+    public boolean hasAccount() {
+        return bankName != null;
+    }
+
+    // 입금 안내 계좌를 등록·수정한다(upsert) — 이미 설정된 계좌가 있으면 덮어쓴다
+    public void updateAccount(String bankName, String accountNumber, String accountHolder) {
+        this.bankName = bankName;
+        this.accountNumber = accountNumber;
+        this.accountHolder = accountHolder;
+    }
 }
