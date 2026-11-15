@@ -117,6 +117,91 @@ RDS 파라미터 그룹의 `time_zone`도 같은 값으로 맞춰 둔다.
 `ddl-auto: validate`이므로 엔티티와 스키마가 어긋나면 기동 자체가 실패한다. 엔티티를 바꿨으면
 `src/main/resources/db/migration/`에 마이그레이션을 추가해야 한다.
 
+## 서버 접근
+
+```bash
+chmod 400 <키>.pem                       # 안 하면 SSH가 키를 거부한다
+ssh -i <키>.pem ubuntu@<EC2_HOST>
+```
+
+- 사용자명은 **`ubuntu`** 다. Ubuntu AMI라서 `ec2-user`가 아니다
+- 키 권한이 느슨하면 `Permissions 0644 for ... are too open`으로 거부된다.
+  가장 자주 걸리는 지점이다
+- SSH 22번은 보안 그룹에서 전체 공개이고, **비밀번호 인증은 꺼져 있다**
+  (`passwordauthentication no`). 키 없이는 들어올 수 없다
+
+대부분의 경우 SSH는 필요하지 않다. 배포는 자동이고, 기동 실패 시 애플리케이션 로그가
+**GitHub Actions 로그에 그대로 찍힌다**(헬스체크 게이트가 출력한다). 저장소 권한만 있으면
+누구나 볼 수 있어서, 배포 실패 원인 파악은 대개 SSH 없이 끝난다. 실시간으로 컨테이너
+상태를 들여다봐야 할 때만 접속한다.
+
+## 운영 DB 접근
+
+**RDS는 퍼블릭 액세스가 꺼져 있다.** 사설 IP만 가지므로 노트북에서 직접 붙을 수 없고
+EC2를 경유해야 한다.
+
+필요한 정보:
+
+| 항목 | 값 |
+|---|---|
+| 엔드포인트 | `moimzang-db...ap-northeast-2.rds.amazonaws.com` (RDS 콘솔에서 확인) |
+| 포트 | `3306` |
+| 데이터베이스 | `moimzang` |
+| 계정 | 마스터 계정 (또는 아래 읽기 전용 계정) |
+
+### 방법 1: SSH 터널 — GUI 툴을 쓸 수 있다
+
+```bash
+ssh -i <키>.pem -N \
+  -L 3307:<RDS_엔드포인트>:3306 \
+  ubuntu@<EC2_HOST>
+```
+
+이 창을 **열어둔 채로** 두고(`-N`은 셸 없이 터널만 유지) 다른 창에서 접속한다.
+
+```bash
+mysql -h 127.0.0.1 -P 3307 -u <계정> -p moimzang
+```
+
+로컬 포트를 **3307**로 쓰는 이유는 3306을 로컬 MySQL이 이미 점유하고 있을 가능성이 높아서다.
+비어 있는 포트면 아무거나 된다.
+
+DBeaver·DataGrip(IntelliJ Ultimate의 Database 창도 같다)·MySQL Workbench는 연결 설정에
+SSH 터널 탭이 따로 있어서 더 편하다. SSH 쪽에 EC2 호스트·사용자 `ubuntu`·pem을 넣고,
+DB 쪽에는 RDS 엔드포인트와 3306을 적으면 툴이 터널까지 만들어 준다.
+
+**주의**: 툴의 터널 기능을 쓸 때 DB 호스트에는 `127.0.0.1`이 아니라 **RDS 엔드포인트**를
+적는다(툴이 SSH 세션 안에서 그 주소를 해석한다). 위처럼 터미널에서 `-L`로 직접 터널을
+만들었을 때는 반대로 `127.0.0.1:3307`로 붙는다. 두 방식이 달라서 섞으면 연결되지 않는다.
+
+### 방법 2: 서버에서 직접
+
+```bash
+ssh -i <키>.pem ubuntu@<EC2_HOST>
+sudo apt install -y mysql-client     # 한 번만
+mysql -h <RDS_엔드포인트> -u <계정> -p moimzang
+```
+
+### 읽기 전용 계정
+
+마스터 계정은 DDL 전체 권한이 있어 테이블을 드롭할 수도 있다. 조회만 필요한 사람에게는
+따로 만들어 주는 쪽이 안전하다.
+
+```sql
+CREATE USER 'readonly'@'%' IDENTIFIED BY '<비밀번호>';
+GRANT SELECT ON moimzang.* TO 'readonly'@'%';
+```
+
+### 스키마를 직접 바꾸지 않는다 (IMPORTANT)
+
+Flyway 마이그레이션(`src/main/resources/db/migration/`)이 스키마 정본이고 애플리케이션은
+`ddl-auto: validate`로 돈다. DB에서 손으로 컬럼을 추가하거나 타입을 바꾸면 **엔티티와
+어긋나서 앱이 기동 자체를 실패하고**, 다음 배포에서 헬스체크 게이트가 그걸 잡아 배포를
+빨간불로 끝낸다. 되돌리기도 번거롭다.
+
+스키마를 바꿀 일이 생기면 마이그레이션 파일을 추가하는 방식으로만 한다. ERD·결정 기록을
+함께 갱신하는 절차는 `HARNESS.md`를 본다.
+
 ## 장애 확인
 
 ```bash
