@@ -202,6 +202,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | SCHEDULE_400_INVALID_CURSOR | 400 | cursor 형식이 올바르지 않습니다. | API-005 |
 | SCHEDULE_400_END_BEFORE_START | 400 | 종료 시간이 시작 시간보다 빠릅니다. | API-004, API-007 |
+| SCHEDULE_400_OPERATION_SPACE_CANNOT_DISABLE | 400 | 운영 공간은 끌 수 없습니다. | API-007 |
 | SCHEDULE_404_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-006, API-007, API-008 |
 | SCHEDULE_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 일정 카테고리입니다. | API-004, API-007 |
 | SCHEDULE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-004, API-005, API-009, API-010, API-011 |
@@ -414,10 +415,16 @@ dDay는 한국 날짜 기준 시작일까지 남은 일수(당일 0, 지난 일�
 ---
 
 #### API-007 · PATCH /api/schedules/{scheduleId} · 일정 수정
-인증: 불필요. Request 필드는 API-004와 동일(createOperationSpace 제외)하고 전부 선택값 — 보낸 필드만 수정한다.
+인증: 불필요. Request 필드는 API-004와 동일하고 전부 선택값 — 보낸 필드만 수정한다.
 location·memo에 빈 문자열을 보내면 지운다. 시작·종료 중 하나만 바꿔도 바뀐 결과 기준으로 순서를 확인한다.
+
+**운영 공간 토글**: 꺼진 운영 공간을 켜는 것만 된다. `createOperationSpace=true`면 운영 공간을 켜고 일정 등록과 같이
+1차 차수를 만든다(이미 차수가 있으면 새로 만들지 않음). 켜진 운영 공간에 `false`를 보내면 400 — 끄면 그 안의
+메모·출석·정산 기록 처리를 함께 정해야 해서 끄는 동작은 지원하지 않는다. 꺼진 상태에서 `false`는 그대로 둔다.
+
 **Response**: scheduleId
-**에러**: COMMON_400, SCHEDULE_400_END_BEFORE_START, SCHEDULE_404_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND
+**에러**: COMMON_400, SCHEDULE_400_END_BEFORE_START, SCHEDULE_400_OPERATION_SPACE_CANNOT_DISABLE,
+SCHEDULE_404_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND
 
 ---
 
@@ -1332,7 +1339,7 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 
 ## 7. 미확정(TBD) 항목 모음
 
-아래 19개 항목 중 **아직 정하지 않은 것은 5개**(1·12·15·18·19번)다. 나머지는
+아래 19개 항목 중 **아직 정하지 않은 것은 4개**(1·12·18·19번)다. 나머지는
 해소돼 각 항목에 결정 번호를 적어 뒀다. 번호는 한 번 붙이면 바꾸지 않는다 — 다른 문서·이슈가
 이 번호를 가리키기 때문에, 해소된 항목도 지우지 않고 "해소됨"으로 남긴다.
 구현 착수 전 미해소 항목에 들어가면 안 된다(§6에서 각 엔드포인트 자리에도 표시):
@@ -1363,7 +1370,8 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
     PRD·Figma에서 포맷이 확정된 카드가 미입금자 조회뿐이기 때문이다(decisions #33).
 14. ~~API-014 자동 매칭 알고리즘 상세 기준~~ — **해소됨(2026-11-14)**: API-014 자체를 명세에서
     삭제해 정할 기준이 없어졌다. 자동으로 안건을 연결해 주는 화면이 처음부터 없었다(decisions #45).
-15. API-007 일정 수정 시 운영 공간 토글(`hasOperationSpace`) 변경 허용 여부 — 보류(decisions #12)
+15. ~~API-007 일정 수정 시 운영 공간 토글(`hasOperationSpace`) 변경 허용 여부~~ — **해소됨**: 꺼진 운영 공간을
+   켜는 것만 허용하고(1차 차수 함께 생성) 켜진 운영 공간은 끌 수 없다.
 16. ~~API-069 `totalIncome`/`totalExpense`(누적 수입·지출)가 기수 기준인지 그룹 전체 기간 기준인지~~
     — **해소됨(decisions #68)**: `currentBalance`와 같은 그룹 전체(모든 기수) 누적이다.
 17. ~~AI 연동 벤더/모델 — 영수증 인식(API-036), 회의 요약(API-060), AI 채팅 응답(API-078)~~ —
