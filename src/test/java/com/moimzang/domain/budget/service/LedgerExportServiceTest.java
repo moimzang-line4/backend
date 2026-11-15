@@ -22,8 +22,14 @@ import com.moimzang.global.exception.CustomException;
 import com.moimzang.global.storage.FileStorage;
 import java.io.InputStream;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.apache.poi.ss.usermodel.FormulaEvaluator;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +51,9 @@ class LedgerExportServiceTest {
     private LedgerExportKeyGenerator keyGenerator;
 
     @Mock
+    private LedgerExportReceiptCollector receiptCollector;
+
+    @Mock
     private FileStorage fileStorage;
 
     // 생성기는 순수 POI 로직이라 목하지 않고 실제 인스턴스를 쓴다(LedgerExportExcelGeneratorTest가 내용은 따로 검증)
@@ -52,9 +61,12 @@ class LedgerExportServiceTest {
 
     private LedgerExportService ledgerExportService;
 
+    private final ReceiptLinkingResult noReceipts = new ReceiptLinkingResult(List.of(), Map.of());
+
     @BeforeEach
     void setUp() {
-        ledgerExportService = new LedgerExportService(groupTermRepository, ledgerEntryRepository, excelGenerator, keyGenerator, fileStorage);
+        ledgerExportService = new LedgerExportService(
+                groupTermRepository, ledgerEntryRepository, excelGenerator, keyGenerator, receiptCollector, fileStorage);
     }
 
     private GroupTerm groupTermWithGroup(Long id, String groupName, String termName) {
@@ -62,6 +74,7 @@ class LedgerExportServiceTest {
         ReflectionTestUtils.setField(group, "id", 1L);
         GroupTerm term = GroupTerm.create(group, termName);
         ReflectionTestUtils.setField(term, "id", id);
+        ReflectionTestUtils.setField(term, "createdAt", LocalDateTime.of(2026, 3, 1, 0, 0));
         return term;
     }
 
@@ -82,9 +95,8 @@ class LedgerExportServiceTest {
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(ledgerEntryRepository.findAllForExport(1L)).willReturn(List.of(entry));
-        given(ledgerEntryRepository.aggregateByTypeForGroup(1L)).willReturn(
-                List.of(new LedgerTypeTotal(LedgerType.INCOME, 1_200_000L, 3L),
-                        new LedgerTypeTotal(LedgerType.EXPENSE, 750_000L, 2L)));
+        given(ledgerEntryRepository.aggregateByTypeForGroupBeforeTerm(1L, 1L)).willReturn(List.of());
+        given(receiptCollector.collect(List.of(entry))).willReturn(noReceipts);
         given(keyGenerator.generate()).willReturn("ledger-exports/2026/11/fixed-key.xlsx");
         given(fileStorage.store(eq("ledger-exports/2026/11/fixed-key.xlsx"), any(InputStream.class), anyLong(), anyString()))
                 .willReturn("ledger-exports/2026/11/fixed-key.xlsx");
@@ -104,7 +116,8 @@ class LedgerExportServiceTest {
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(ledgerEntryRepository.findAllForExport(1L)).willReturn(List.of());
-        given(ledgerEntryRepository.aggregateByTypeForGroup(1L)).willReturn(List.of());
+        given(ledgerEntryRepository.aggregateByTypeForGroupBeforeTerm(1L, 1L)).willReturn(List.of());
+        given(receiptCollector.collect(List.of())).willReturn(noReceipts);
         given(keyGenerator.generate()).willReturn("ledger-exports/2026/11/abc-123.xlsx");
         given(fileStorage.toUrl(anyString())).willReturn("http://dummy");
 
@@ -117,14 +130,15 @@ class LedgerExportServiceTest {
     }
 
     @Test
-    void export_요약은_aggregateByTypeForGroup_결과를_그대로_엑셀에_반영한다() throws Exception {
+    void export_초기_잔액은_이_기수보다_이전_기수의_누적값으로_계산해_A4에_리터럴로_찍는다() throws Exception {
         GroupTerm groupTerm = groupTermWithGroup(1L, "모임장", "26기");
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(ledgerEntryRepository.findAllForExport(1L)).willReturn(List.of());
-        given(ledgerEntryRepository.aggregateByTypeForGroup(1L)).willReturn(
+        given(ledgerEntryRepository.aggregateByTypeForGroupBeforeTerm(1L, 1L)).willReturn(
                 List.of(new LedgerTypeTotal(LedgerType.INCOME, 900_000L, 5L),
                         new LedgerTypeTotal(LedgerType.EXPENSE, 400_000L, 4L)));
+        given(receiptCollector.collect(List.of())).willReturn(noReceipts);
         given(keyGenerator.generate()).willReturn("ledger-exports/2026/11/key.xlsx");
         given(fileStorage.toUrl(anyString())).willReturn("http://dummy");
 
@@ -134,13 +148,37 @@ class LedgerExportServiceTest {
         verify(fileStorage).store(anyString(), contentCaptor.capture(), anyLong(), anyString());
         byte[] bytes = contentCaptor.getValue().readAllBytes();
 
-        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook =
-                new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(0);
-            // aggregateByTypeForGroup(900000 수입, 400000 지출) → currentBalance = 500000
-            assertThat(sheet.getRow(0).getCell(1).getNumericCellValue()).isEqualTo(900_000);
-            assertThat(sheet.getRow(1).getCell(1).getNumericCellValue()).isEqualTo(400_000);
-            assertThat(sheet.getRow(2).getCell(1).getNumericCellValue()).isEqualTo(500_000);
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Row valueRow = sheet.getRow(3);
+            // 900000(이전 기수 수입) - 400000(이전 기수 지출) = 500000
+            assertThat(valueRow.getCell(0).getNumericCellValue()).isEqualTo(500_000);
+
+            FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
+            assertThat(evaluator.evaluate(valueRow.getCell(5)).getNumberValue()).isEqualTo(500_000);
+        }
+    }
+
+    @Test
+    void export_이전_기수가_없으면_초기_잔액은_0이다() {
+        GroupTerm groupTerm = groupTermWithGroup(1L, "모임장", "26기");
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(ledgerEntryRepository.findAllForExport(1L)).willReturn(List.of());
+        given(ledgerEntryRepository.aggregateByTypeForGroupBeforeTerm(1L, 1L)).willReturn(List.of());
+        given(receiptCollector.collect(List.of())).willReturn(noReceipts);
+        given(keyGenerator.generate()).willReturn("ledger-exports/2026/11/key.xlsx");
+        given(fileStorage.toUrl(anyString())).willReturn("http://dummy");
+
+        ArgumentCaptor<InputStream> contentCaptor = ArgumentCaptor.forClass(InputStream.class);
+
+        ledgerExportService.export(1L);
+
+        verify(fileStorage).store(anyString(), contentCaptor.capture(), anyLong(), anyString());
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(contentCaptor.getValue().readAllBytes()))) {
+            assertThat(workbook.getSheetAt(0).getRow(3).getCell(0).getNumericCellValue()).isZero();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 }

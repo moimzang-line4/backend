@@ -123,6 +123,47 @@ class LedgerEntryRepositoryImplTest {
         assertThat(totals).containsExactly(new LedgerTypeTotal(LedgerType.INCOME, 500000L, 1L));
     }
 
+    // 장부 엑셀 다운로드(API-075)의 "초기 잔액" — 같은 그룹에서 이 기수보다 먼저 생성된(group_term_id가
+    // 더 작은) 기수의 장부만 합산한다. "이전 기수" 판단은 group_term.id 오름차순(생성 순서)으로 가정한다
+    @Test
+    void aggregateByTypeForGroupBeforeTerm_이전_기수의_장부만_합산한다() {
+        // groupTerm(setUp에서 생성)보다 id가 더 작아야 "이전 기수"가 되므로, 같은 그룹의 새 기수를
+        // 먼저 만들고 그 기수를 "현재 기수"로 놓고 조회한다
+        GroupTerm previousTerm = groupTerm;
+        persistEntry(previousTerm, LedgerType.INCOME, "이전 기수 수입", 300000, LocalDate.of(2025, 9, 1));
+        persistEntry(previousTerm, LedgerType.EXPENSE, "이전 기수 지출", 100000, LocalDate.of(2025, 10, 1));
+        GroupTerm currentTerm = persistGroupTerm(previousTerm.getGroup(), "26기");
+        persistEntry(currentTerm, LedgerType.INCOME, "이번 기수 수입", 500000, LocalDate.of(2026, 9, 1));
+
+        List<LedgerTypeTotal> totals =
+                ledgerEntryRepository.aggregateByTypeForGroupBeforeTerm(currentTerm.getGroup().getId(), currentTerm.getId());
+
+        assertThat(totals).containsExactlyInAnyOrder(
+                new LedgerTypeTotal(LedgerType.INCOME, 300000L, 1L),
+                new LedgerTypeTotal(LedgerType.EXPENSE, 100000L, 1L));
+    }
+
+    @Test
+    void aggregateByTypeForGroupBeforeTerm_이전_기수가_없으면_결과가_비어있다() {
+        persistEntry(groupTerm, LedgerType.INCOME, "이번 기수 수입", 500000, LocalDate.of(2026, 9, 1));
+
+        List<LedgerTypeTotal> totals =
+                ledgerEntryRepository.aggregateByTypeForGroupBeforeTerm(groupTerm.getGroup().getId(), groupTerm.getId());
+
+        assertThat(totals).isEmpty();
+    }
+
+    @Test
+    void aggregateByTypeForGroupBeforeTerm_다른_그룹의_이전_기수는_합산하지_않는다() {
+        GroupTerm otherGroupPreviousTerm = persistGroupTerm(persistClubGroup("다른 동아리"), "1기");
+        persistEntry(otherGroupPreviousTerm, LedgerType.INCOME, "남의 이전 기수 수입", 999999, LocalDate.of(2020, 1, 1));
+
+        List<LedgerTypeTotal> totals =
+                ledgerEntryRepository.aggregateByTypeForGroupBeforeTerm(groupTerm.getGroup().getId(), groupTerm.getId());
+
+        assertThat(totals).isEmpty();
+    }
+
     @Test
     void search_다른_기수_내역은_포함하지_않는다() {
         persistEntry(groupTerm, LedgerType.EXPENSE, "이번 기수", 10000, LocalDate.of(2026, 11, 1));
