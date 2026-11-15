@@ -9,6 +9,7 @@ import com.moimzang.domain.file.dto.response.FileUploadResponse;
 import com.moimzang.domain.file.dto.response.FileZipTarget;
 import com.moimzang.domain.file.enums.FileCategory;
 import com.moimzang.domain.file.enums.FileCategoryFilter;
+import com.moimzang.domain.file.enums.FileContentVariant;
 import com.moimzang.domain.file.enums.FileDownloadMode;
 import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.domain.file.service.FileService;
@@ -92,9 +93,10 @@ public class FileController implements FileApi {
     @GetMapping("/api/files/{fileId}/content")
     public ResponseEntity<StreamingResponseBody> getFileContent(
             @PathVariable Long fileId,
-            @RequestParam(defaultValue = "DOWNLOAD") FileDownloadMode mode
+            @RequestParam(defaultValue = "DOWNLOAD") FileDownloadMode mode,
+            @RequestParam(defaultValue = "ORIGINAL") FileContentVariant variant
     ) {
-        FileContentTarget target = fileService.getFileContent(fileId);
+        FileContentTarget target = fileService.getFileContent(fileId, variant);
         String fileName = target.getName() + "." + target.getExtension();
         MediaType mediaType = MediaTypeFactory.getMediaType(fileName).orElse(MediaType.APPLICATION_OCTET_STREAM);
         String dispositionType = mode == FileDownloadMode.PREVIEW ? "inline" : "attachment";

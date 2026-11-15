@@ -12,6 +12,7 @@ import com.moimzang.domain.file.dto.response.FileZipTarget;
 import com.moimzang.domain.file.entity.File;
 import com.moimzang.domain.file.enums.FileCategory;
 import com.moimzang.domain.file.enums.FileCategoryFilter;
+import com.moimzang.domain.file.enums.FileContentVariant;
 import com.moimzang.domain.file.enums.FileDownloadMode;
 import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.domain.file.exception.FileErrorCode;
@@ -227,15 +228,15 @@ public class FileService {
         // URL 조립 — 우리 서버의 콘텐츠 서빙 엔드포인트를 가리킨다. mode를 쿼리로 그대로 넘겨서
         // 실제 다운로드 시점에 Content-Disposition(attachment/inline)을 거기서 결정하게 한다
         FileDownloadUrlResponse response = FileDownloadUrlResponse.builder()
-                .url("/api/files/%d/content?mode=%s".formatted(file.getId(), mode))
+                .url(FileContentUrl.of(file.getId(), mode))
                 .build();
 
         log.info("[다운로드 URL 발급] 발급을 완료했습니다. fileId = {}", fileId);
         return response;
     }
 
-    public FileContentTarget getFileContent(Long fileId) {
-        log.info("[파일 콘텐츠 서빙] 대상 조회를 시작합니다. fileId = {}", fileId);
+    public FileContentTarget getFileContent(Long fileId, FileContentVariant variant) {
+        log.info("[파일 콘텐츠 서빙] 대상 조회를 시작합니다. fileId = {}, variant = {}", fileId, variant);
 
         // 소프트 삭제된 파일은 URL을 알고 있어도 열 수 없게 막는다
         File file = fileRepository.findActiveById(fileId)
@@ -243,6 +244,21 @@ public class FileService {
                     log.warn("[파일 콘텐츠 서빙] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
+
+        if (variant == FileContentVariant.THUMBNAIL) {
+            // 원본으로 조용히 되돌리지 않는다 — pdf에 썸네일을 요청했는데 20MB가 날아가면 더 나쁘다
+            if (file.getThumbnailKey() == null) {
+                log.warn("[파일 콘텐츠 서빙] 썸네일이 없는 자료입니다. fileId = {}", fileId);
+                throw new CustomException(FileErrorCode.FILE_404_THUMBNAIL_NOT_FOUND);
+            }
+
+            log.info("[파일 콘텐츠 서빙] 썸네일 대상 조회를 완료했습니다. fileId = {}", fileId);
+            return FileContentTarget.builder()
+                    .name(file.getName())
+                    .extension(extractExtension(file.getThumbnailKey()))
+                    .storageKey(file.getThumbnailKey())
+                    .build();
+        }
 
         log.info("[파일 콘텐츠 서빙] 대상 조회를 완료했습니다. fileId = {}", fileId);
         return FileContentTarget.builder()

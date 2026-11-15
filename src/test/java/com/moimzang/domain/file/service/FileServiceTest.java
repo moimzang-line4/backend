@@ -12,6 +12,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.moimzang.domain.file.dto.response.FileContentTarget;
 import com.moimzang.domain.file.dto.response.FileDownloadUrlResponse;
 import com.moimzang.domain.file.dto.response.FileListResponse;
 import com.moimzang.domain.file.dto.response.FileUploadResponse;
@@ -20,6 +21,7 @@ import com.moimzang.domain.file.dto.response.FileZipTarget;
 import com.moimzang.domain.file.entity.File;
 import com.moimzang.domain.file.enums.FileCategory;
 import com.moimzang.domain.file.enums.FileCategoryFilter;
+import com.moimzang.domain.file.enums.FileContentVariant;
 import com.moimzang.domain.file.enums.FileDownloadMode;
 import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.domain.file.exception.FileErrorCode;
@@ -371,10 +373,52 @@ class FileServiceTest {
     void getFileContent_파일이_없거나_삭제됐으면_FILE_404_NOT_FOUND를_던진다() {
         given(fileRepository.findActiveById(1L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> fileService.getFileContent(1L))
+        assertThatThrownBy(() -> fileService.getFileContent(1L, FileContentVariant.ORIGINAL))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(FileErrorCode.FILE_404_NOT_FOUND);
+    }
+
+    @Test
+    void getFileContent_썸네일을_요청하면_썸네일_키와_그_확장자를_준다() {
+        File file = File.upload(mock(GroupTerm.class), null, "봄소풍", "gif", 2048L,
+                FileCategory.PHOTO, "files/2026/11/abc.gif", "files/2026/11/abc_thumb.png");
+        ReflectionTestUtils.setField(file, "id", 1L);
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.of(file));
+
+        FileContentTarget target = fileService.getFileContent(1L, FileContentVariant.THUMBNAIL);
+
+        assertThat(target.getStorageKey()).isEqualTo("files/2026/11/abc_thumb.png");
+        // 원본은 gif지만 실제로 나가는 바이트는 png라 Content-Type도 png여야 한다
+        assertThat(target.getExtension()).isEqualTo("png");
+        assertThat(target.getName()).isEqualTo("봄소풍");
+    }
+
+    @Test
+    void getFileContent_variant가_ORIGINAL이면_원본_키를_그대로_준다() {
+        File file = File.upload(mock(GroupTerm.class), null, "봄소풍", "gif", 2048L,
+                FileCategory.PHOTO, "files/2026/11/abc.gif", "files/2026/11/abc_thumb.png");
+        ReflectionTestUtils.setField(file, "id", 1L);
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.of(file));
+
+        FileContentTarget target = fileService.getFileContent(1L, FileContentVariant.ORIGINAL);
+
+        assertThat(target.getStorageKey()).isEqualTo("files/2026/11/abc.gif");
+        assertThat(target.getExtension()).isEqualTo("gif");
+    }
+
+    @Test
+    void getFileContent_썸네일이_없는데_요청하면_FILE_404_THUMBNAIL_NOT_FOUND를_던진다() {
+        // 원본으로 폴백하면 pdf 요청에 20MB가 그대로 나가므로 명시적으로 끊는다
+        File file = File.upload(mock(GroupTerm.class), null, "계약서", "pdf", 1024L,
+                FileCategory.ACTIVITY_DOC, "files/2026/11/contract.pdf", null);
+        ReflectionTestUtils.setField(file, "id", 1L);
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.of(file));
+
+        assertThatThrownBy(() -> fileService.getFileContent(1L, FileContentVariant.THUMBNAIL))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_404_THUMBNAIL_NOT_FOUND);
     }
 
     @Test
