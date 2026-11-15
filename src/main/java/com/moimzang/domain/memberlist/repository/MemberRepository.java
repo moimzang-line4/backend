@@ -9,6 +9,9 @@ import org.springframework.data.repository.query.Param;
 
 public interface MemberRepository extends JpaRepository<Member, Long>, MemberRepositoryCustom {
 
+    // 공개 등록 중복 확인. 같은 명단방에 이름과 전화번호가 모두 같은 부원이 있는지 본다
+    boolean existsByMemberListIdAndNameAndPhone(Long memberListId, String name, String phone);
+
     // 명단방 하나의 등록 인원
     long countByMemberListId(Long memberListId);
 

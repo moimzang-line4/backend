@@ -133,6 +133,40 @@ class MemberServiceTest {
     }
 
     @Test
+    void registerMember_이름과_전화번호가_같은_부원이_있으면_MEMBER_409_ALREADY_REGISTERED() {
+        MemberList memberList = openList(true, true);
+        ReflectionTestUtils.setField(memberList, "id", 2L);
+        given(memberListRepository.findByJoinToken("token")).willReturn(Optional.of(memberList));
+        given(memberRepository.existsByMemberListIdAndNameAndPhone(2L, "홍길동", "010-0000-0000")).willReturn(true);
+
+        assertError(() -> memberService.registerMember("token", registerRequest().phone(" 010-0000-0000 ").build()),
+                MemberListErrorCode.MEMBER_409_ALREADY_REGISTERED);
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void registerMember_전화번호를_받지_않는_명단방은_중복_검사를_하지_않는다() {
+        given(memberListRepository.findByJoinToken("token")).willReturn(Optional.of(openList(true, false)));
+        given(memberRepository.save(any(Member.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        memberService.registerMember("token", registerRequest().phone("010-0000-0000").build());
+
+        verify(memberRepository, never()).existsByMemberListIdAndNameAndPhone(any(), any(), any());
+        verify(memberRepository).save(any(Member.class));
+    }
+
+    @Test
+    void addMember_운영진_추가는_중복_검사를_하지_않는다() {
+        given(memberListRepository.findById(2L)).willReturn(Optional.of(openList(true, true)));
+        given(memberRepository.save(any(Member.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        memberService.addMember(2L, MemberAddRequest.builder().name("홍길동").department("광고홍보학과")
+                .phone("010-0000-0000").build());
+
+        verify(memberRepository, never()).existsByMemberListIdAndNameAndPhone(any(), any(), any());
+    }
+
+    @Test
     void registerMember_켜진_항목이_비어_있으면_MEMBER_400_REQUIRED_FIELD_MISSING() {
         given(memberListRepository.findByJoinToken("token")).willReturn(Optional.of(openList(true, false)));
 

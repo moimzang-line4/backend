@@ -63,7 +63,8 @@ public class MemberService {
                 .build();
     }
 
-    // 부원이 공개 링크로 직접 등록한다. 명단방에서 켠 항목은 필수이고 끈 항목은 보내도 저장하지 않는다
+    // 부원이 공개 링크로 직접 등록한다. 명단방에서 켠 항목은 필수이고 끈 항목은 보내도 저장하지 않는다.
+    // 같은 명단방에 이름과 전화번호가 모두 같은 부원이 있으면 중복 등록으로 막는다
     @Transactional
     public MemberCreateResponse registerMember(String joinToken, MemberRegisterRequest request) {
         log.info("[부원 등록] 등록을 시작합니다.");
@@ -89,7 +90,15 @@ public class MemberService {
             throw new CustomException(MemberListErrorCode.MEMBER_400_REQUIRED_FIELD_MISSING);
         }
 
-        Member member = memberRepository.save(Member.create(memberList, request.getName().strip(), school,
+        // 이름만 같은 건 동명이인일 수 있어 전화번호까지 같을 때만 같은 사람으로 본다.
+        // 전화번호를 받지 않는 명단방은 같은 사람인지 가릴 수 없어 검사하지 않는다
+        String name = request.getName().strip();
+        if (phone != null && memberRepository.existsByMemberListIdAndNameAndPhone(memberList.getId(), name, phone)) {
+            log.warn("[부원 등록] 이미 등록된 부원입니다. memberListId = {}", memberList.getId());
+            throw new CustomException(MemberListErrorCode.MEMBER_409_ALREADY_REGISTERED);
+        }
+
+        Member member = memberRepository.save(Member.create(memberList, name, school,
                 request.getDepartment().strip(), phone, studentId, part, grade, true));
 
         log.info("[부원 등록] 등록을 완료했습니다. memberListId = {}, memberId = {}", memberList.getId(), member.getId());
