@@ -35,6 +35,9 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  # nginx가 TLS를 종단하고 X-Forwarded-*를 넘긴다. 이게 없으면 springdoc이 OpenAPI
+  # server URL을 http로 만들어 https로 열린 Swagger UI에서 호출이 막힌다
+  forward-headers-strategy: framework
 
 app:
   cors:
