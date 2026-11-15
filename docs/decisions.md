@@ -1116,3 +1116,39 @@ nginx가 TLS를 종단하는 배포 구성이므로 `server.forward-headers-stra
 이게 없으면 springdoc이 OpenAPI 문서의 server URL을 `http://`로 생성하고, https로 열린
 Swagger UI에서 "Try it out"이 mixed content로 차단된다. 프론트에 Swagger를 넘기는 것이
 배포의 목적이라 이 설정이 빠지면 배포 자체가 무의미해진다.
+
+## 76. 배포는 EC2 단일 인스턴스 + ECR + RDS + S3로 구성하고 develop push로 자동 배포한다
+프론트엔드에 Swagger를 넘기기 위한 배포 구성을 정했다(사용자 결정, 2026-11-15).
+
+**구성**: GitHub Actions가 멀티스테이지 Docker 이미지를 빌드해 ECR에 `github.sha` 태그로
+올리고, EC2에 SSH로 들어가 `docker compose`로 교체한다. 같은 인스턴스의 nginx 컨테이너가
+TLS를 종단하고 `api.chungs.store`로 들어온 요청을 app으로 넘긴다. DB는 RDS MySQL 8로
+인스턴스와 분리했다 — 이미지 교체·인스턴스 재생성과 데이터 수명을 묶지 않기 위해서다.
+
+**S3와 인스턴스 역할**: `STORAGE_TYPE=s3`로 운영한다. `S3ClientConfig`가
+`DefaultCredentialsProvider`를 쓰므로 EC2 인스턴스 역할에 S3 권한을 붙이면 액세스 키를
+서버에 두지 않아도 된다. 다만 `S3FileStorage.toUrl`이 presigned가 아니라 고정 S3 URL을
+응답에 그대로 싣기 때문에, 프론트가 영수증 이미지를 띄우려면 버킷에 공개 읽기 정책이
+필요하다. 이 서비스는 인증이 아예 없어 API로 이미 전부 열려 있으므로 노출 수준이 달라지지
+않는다고 보고 공개 읽기로 간다. 제대로 막으려면 presigned URL 발급으로 바꿔야 한다.
+
+**배포 트리거는 `develop` push**다. 프론트가 최신 API를 바로 보려면 `main` 머지를 기다리게
+할 수 없다. `main`은 릴리스 시점의 기록으로만 쓴다.
+
+**타임존을 컨테이너에 명시한다**(`TZ=Asia/Seoul`). 엔티티 감사 필드와 코드의
+`LocalDateTime.now()`가 JVM 기본 타임존을 따르는데 컨테이너 기본값은 UTC라, 넣지 않으면
+생성 시각이 9시간 어긋난다(검증: TZ 미주입 시 JVM zone이 `Etc/UTC`로 잡힌다).
+RDS 파라미터 그룹의 `time_zone`도 같은 값으로 맞춘다.
+
+**이미지 빌드 단계에서 테스트를 건너뛴다**(`-x test`). 테스트가 Testcontainers로 MySQL을
+띄우므로 이미지 빌드 안에서 돌리려면 도커 인 도커가 필요하다. 테스트는 별도 Actions 잡에서
+돌리고 배포 잡의 선행 조건으로 걸었다.
+
+**배포 마지막에 헬스체크 게이트를 둔다**. `docker compose up -d`는 컨테이너가 떴는지만 보고
+성공하므로, Flyway 마이그레이션 실패처럼 기동 중 터지는 오류를 초록불로 지나친다.
+`/health`가 응답할 때까지 최대 60초 기다리고 실패하면 앱 로그를 남기며 잡을 실패시킨다.
+
+**영수증 인식(API-036)에 Gemini 키를 넣지 않는다**. 고정 벤더가 OpenAI로 바뀌면서
+(decisions #74) 영수증 인식도 `OPENAI_API_KEY`를 재사용하고, `app.ocr.openai`의 model·timeout은
+리터럴로 둬서 새 환경변수가 필요하지 않다. 따라서 배포 환경변수에서 `GEMINI_API_KEY`는 빼고
+채팅·영수증 모두 OpenAI 키 하나로 운영한다(사용자 결정).
