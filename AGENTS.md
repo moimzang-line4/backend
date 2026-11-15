@@ -49,8 +49,9 @@ Controller/Api/Service/Mapper/ErrorCode 틀을 갖추고 있고, 비즈니스 �
 - API 명세: `docs/api-spec.md`
 - 설계 결정 로그: `docs/decisions.md`
 - 팀 작업 분배: `docs/team-ownership.md`
+- 배포 구조·운영: `docs/deploy.md`
 
-새 기능을 구현하기 전에 위 네 문서에서 해당 도메인 부분을 먼저 읽는다. `docs/api-spec.md`에
+새 기능을 구현하기 전에 위 문서에서 해당 도메인 부분을 먼저 읽는다. `docs/api-spec.md`에
 "미확정"으로 표시된 항목은 구현 시점에 정하고 그 결정을 `docs/decisions.md`에 追記한다.
 
 ## Git·커밋·PR
