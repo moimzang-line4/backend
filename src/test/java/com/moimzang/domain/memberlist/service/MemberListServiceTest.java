@@ -100,7 +100,7 @@ class MemberListServiceTest {
         assertThat(saved.getCollectGrade()).isTrue();
         assertThat(saved.getCollectPhone()).isFalse();
         assertThat(saved.getCollectDepartment()).isTrue();
-        assertThat(saved.getStatus()).isEqualTo(MemberListStatus.RECRUITING);
+        assertThat(ReflectionTestUtils.getField(saved, "status")).isEqualTo(MemberListStatus.RECRUITING);
         assertThat(saved.getIsLinkClosed()).isFalse();
         assertThat(response.getMemberListId()).isEqualTo(3L);
         assertThat(response.getJoinToken()).isEqualTo(saved.getJoinToken()).matches("[A-Za-z0-9_-]{16}");
