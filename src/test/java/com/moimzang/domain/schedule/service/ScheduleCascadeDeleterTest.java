@@ -93,8 +93,8 @@ class ScheduleCascadeDeleterTest {
         em.persist(settlementTarget(round, attendee));
         LedgerEntry ledger = em.persist(ledger(round));
 
-        em.persist(File.upload(groupTerm, target, "공연장 계약서", "pdf", 1024L, FileCategory.ACTIVITY_DOC, "key/a"));
-        File softDeleted = File.upload(groupTerm, target, "옛 계약서", "pdf", 1024L, FileCategory.ACTIVITY_DOC, "key/b");
+        em.persist(File.upload(groupTerm, target, "공연장 계약서", "pdf", 1024L, FileCategory.ACTIVITY_DOC, "key/a", null));
+        File softDeleted = File.upload(groupTerm, target, "옛 계약서", "pdf", 1024L, FileCategory.ACTIVITY_DOC, "key/b", null);
         ReflectionTestUtils.setField(softDeleted, "deletedAt", LocalDateTime.of(2026, 11, 1, 10, 0));
         em.persist(softDeleted);
         em.flush();
@@ -130,7 +130,7 @@ class ScheduleCascadeDeleterTest {
         em.persist(MeetingAgenda.create(otherMeeting, "곡 순서", 0));
         em.persist(OperationNote.create(other, NoteType.GENERAL, "대관", null, "소강당"));
         em.persist(ScheduleRound.create(other, 1, "1차"));
-        em.persist(File.upload(groupTerm, other, "신입생 공연 포스터", "png", 2048L, FileCategory.PHOTO, "key/c"));
+        em.persist(File.upload(groupTerm, other, "신입생 공연 포스터", "png", 2048L, FileCategory.PHOTO, "key/c", null));
         em.flush();
 
         scheduleCascadeDeleter.deleteChildren(target.getId());

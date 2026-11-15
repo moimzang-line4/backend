@@ -18,5 +18,7 @@ public class FileSummaryResponse {
     private final Long size;
     private final FileCategory category;
     private final Long scheduleId;
+    // 활동사진 그리드에 띄울 썸네일 주소. 이미지가 아니거나 생성에 실패한 자료는 null이다
+    private final String thumbnailUrl;
     private final LocalDateTime createdAt;
 }

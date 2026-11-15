@@ -12,6 +12,7 @@ import com.moimzang.domain.file.dto.response.FileZipTarget;
 import com.moimzang.domain.file.entity.File;
 import com.moimzang.domain.file.enums.FileCategory;
 import com.moimzang.domain.file.enums.FileCategoryFilter;
+import com.moimzang.domain.file.enums.FileContentVariant;
 import com.moimzang.domain.file.enums.FileDownloadMode;
 import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.domain.file.exception.FileErrorCode;
@@ -25,6 +26,7 @@ import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CustomException;
 import com.moimzang.global.storage.FileStorage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -37,6 +39,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -58,6 +61,7 @@ public class FileService {
     private final ScheduleRepository scheduleRepository;
     private final FileMapper fileMapper;
     private final FileStorage fileStorage;
+    private final FileThumbnailGenerator thumbnailGenerator;
 
     public FilePolicyResponse getPolicy() {
         log.info("[업로드 정책 조회] 조회를 시작합니다.");
@@ -127,6 +131,9 @@ public class FileService {
             throw new UncheckedIOException("파일 저장 중 입출력 오류가 발생했다", e);
         }
 
+        // 썸네일 생성 — 실패해도 업로드는 그대로 성공시킨다(그리드 표시를 위한 최적화일 뿐이다)
+        String thumbnailKey = storeThumbnail(file, extension, storageKey);
+
         // 장부 파일은 기수당 1개만 유지한다 — 기존 파일은 소프트 삭제만 하고 실제 스토리지 파일은 남겨둔다
         if (category == FileCategory.LEDGER_FILE) {
             fileRepository.findActiveFile(termId, FileCategory.LEDGER_FILE)
@@ -137,7 +144,8 @@ public class FileService {
         }
 
         // 새 레코드 저장 및 응답 변환
-        File saved = fileRepository.save(File.upload(groupTerm, schedule, name, extension, file.getSize(), category, storageKey));
+        File saved = fileRepository.save(
+                File.upload(groupTerm, schedule, name, extension, file.getSize(), category, storageKey, thumbnailKey));
         log.info("[파일 업로드] 업로드를 완료했습니다. termId = {}, fileId = {}", termId, saved.getId());
         return fileMapper.toUploadResponse(saved);
     }
@@ -220,15 +228,15 @@ public class FileService {
         // URL 조립 — 우리 서버의 콘텐츠 서빙 엔드포인트를 가리킨다. mode를 쿼리로 그대로 넘겨서
         // 실제 다운로드 시점에 Content-Disposition(attachment/inline)을 거기서 결정하게 한다
         FileDownloadUrlResponse response = FileDownloadUrlResponse.builder()
-                .url("/api/files/%d/content?mode=%s".formatted(file.getId(), mode))
+                .url(FileContentUrl.of(file.getId(), mode))
                 .build();
 
         log.info("[다운로드 URL 발급] 발급을 완료했습니다. fileId = {}", fileId);
         return response;
     }
 
-    public FileContentTarget getFileContent(Long fileId) {
-        log.info("[파일 콘텐츠 서빙] 대상 조회를 시작합니다. fileId = {}", fileId);
+    public FileContentTarget getFileContent(Long fileId, FileContentVariant variant) {
+        log.info("[파일 콘텐츠 서빙] 대상 조회를 시작합니다. fileId = {}, variant = {}", fileId, variant);
 
         // 소프트 삭제된 파일은 URL을 알고 있어도 열 수 없게 막는다
         File file = fileRepository.findActiveById(fileId)
@@ -236,6 +244,21 @@ public class FileService {
                     log.warn("[파일 콘텐츠 서빙] 파일을 찾을 수 없습니다. fileId = {}", fileId);
                     return new CustomException(FileErrorCode.FILE_404_NOT_FOUND);
                 });
+
+        if (variant == FileContentVariant.THUMBNAIL) {
+            // 원본으로 조용히 되돌리지 않는다 — pdf에 썸네일을 요청했는데 20MB가 날아가면 더 나쁘다
+            if (file.getThumbnailKey() == null) {
+                log.warn("[파일 콘텐츠 서빙] 썸네일이 없는 자료입니다. fileId = {}", fileId);
+                throw new CustomException(FileErrorCode.FILE_404_THUMBNAIL_NOT_FOUND);
+            }
+
+            log.info("[파일 콘텐츠 서빙] 썸네일 대상 조회를 완료했습니다. fileId = {}", fileId);
+            return FileContentTarget.builder()
+                    .name(file.getName())
+                    .extension(extractExtension(file.getThumbnailKey()))
+                    .storageKey(file.getThumbnailKey())
+                    .build();
+        }
 
         log.info("[파일 콘텐츠 서빙] 대상 조회를 완료했습니다. fileId = {}", fileId);
         return FileContentTarget.builder()
@@ -386,5 +409,38 @@ public class FileService {
     private String buildStorageKey(String extension) {
         LocalDate today = LocalDate.now();
         return "files/%d/%02d/%s.%s".formatted(today.getYear(), today.getMonthValue(), UUID.randomUUID(), extension);
+    }
+
+    // 썸네일을 만들어 저장하고 그 키를 돌려준다. 대상이 아니거나 실패하면 null을 돌려주고
+    // 업로드는 계속 진행한다 — 썸네일이 없으면 프론트가 파일 타입 아이콘을 그리면 된다
+    private String storeThumbnail(MultipartFile file, String extension, String storageKey) {
+        if (!thumbnailGenerator.supports(extension)) {
+            return null;
+        }
+
+        // 원본 저장이 이미 스트림을 한 번 소비했으므로 새로 연다. 20MB를 통째로 메모리에
+        // 들고 있지 않으려고 바이트 배열 대신 스트림을 다시 받는다
+        try (InputStream content = file.getInputStream()) {
+            Optional<FileThumbnail> generated = thumbnailGenerator.generate(content, extension);
+            if (generated.isEmpty()) {
+                return null;
+            }
+
+            FileThumbnail thumbnail = generated.get();
+            String thumbnailKey = buildThumbnailKey(storageKey, thumbnail.extension());
+            fileStorage.store(thumbnailKey, new ByteArrayInputStream(thumbnail.content()),
+                    thumbnail.content().length, thumbnail.contentType());
+            return thumbnailKey;
+        } catch (IOException | RuntimeException e) {
+            log.warn("[파일 업로드] 썸네일을 만들지 못해 원본만 저장합니다. storageKey = {}", storageKey, e);
+            return null;
+        }
+    }
+
+    // 원본 키 옆에 붙여 둔다 — 같은 디렉터리에 있어야 어느 파일의 썸네일인지 추적하기 쉽다
+    private String buildThumbnailKey(String storageKey, String thumbnailExtension) {
+        int dot = storageKey.lastIndexOf('.');
+        String withoutExtension = dot < 0 ? storageKey : storageKey.substring(0, dot);
+        return "%s_thumb.%s".formatted(withoutExtension, thumbnailExtension);
     }
 }

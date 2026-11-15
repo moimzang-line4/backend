@@ -7,6 +7,7 @@ import com.moimzang.domain.file.dto.response.FileRestoreResponse;
 import com.moimzang.domain.file.dto.response.FileUploadResponse;
 import com.moimzang.domain.file.enums.FileCategory;
 import com.moimzang.domain.file.enums.FileCategoryFilter;
+import com.moimzang.domain.file.enums.FileContentVariant;
 import com.moimzang.domain.file.enums.FileDownloadMode;
 import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.global.response.BaseResponse;
@@ -78,15 +79,19 @@ public interface FileApi {
             @Parameter(description = "다운로드·미리보기 모드(기본 DOWNLOAD)") FileDownloadMode mode);
 
     @Operation(summary = "파일 콘텐츠 서빙", description = "download-url이 돌려준 url이 실제로 가리키는 대상. "
-            + "mode=DOWNLOAD면 Content-Disposition: attachment로, PREVIEW면 inline으로 응답한다.")
+            + "mode=DOWNLOAD면 Content-Disposition: attachment로, PREVIEW면 inline으로 응답한다. "
+            + "variant=THUMBNAIL이면 활동사진 그리드용 축소본을 내려준다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "서빙 성공"),
-        @ApiResponse(responseCode = "404", description = "FILE_404_NOT_FOUND",
+        @ApiResponse(responseCode = "404", description = "FILE_404_NOT_FOUND, FILE_404_THUMBNAIL_NOT_FOUND",
                      content = @Content(schema = @Schema(implementation = BaseResponse.class)))
     })
     ResponseEntity<StreamingResponseBody> getFileContent(
             @Parameter(description = "파일 ID", example = "1") Long fileId,
-            @Parameter(description = "다운로드·미리보기 모드(기본 DOWNLOAD)") FileDownloadMode mode);
+            @Parameter(description = "다운로드·미리보기 모드(기본 DOWNLOAD)") FileDownloadMode mode,
+            @Parameter(description = "내려줄 바이트(기본 ORIGINAL). THUMBNAIL은 활동사진 그리드용 축소본이며, "
+                                   + "썸네일이 없는 자료면 FILE_404_THUMBNAIL_NOT_FOUND가 난다")
+            FileContentVariant variant);
 
     @Operation(summary = "파일 삭제", description = "파일을 소프트 삭제한다.")
     @ApiResponses({

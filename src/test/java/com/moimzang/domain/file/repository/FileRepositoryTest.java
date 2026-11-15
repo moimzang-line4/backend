@@ -85,7 +85,7 @@ class FileRepositoryTest {
 
     private File persistFile(String name) {
         File file = File.upload(groupTerm, null, name, "pdf", 1024L, FileCategory.ACTIVITY_DOC,
-                "files/2026/11/%s.pdf".formatted(name));
+                "files/2026/11/%s.pdf".formatted(name), null);
         return em.persistAndFlush(file);
     }
 }

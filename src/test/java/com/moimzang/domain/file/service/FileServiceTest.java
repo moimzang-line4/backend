@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.moimzang.domain.file.dto.response.FileContentTarget;
 import com.moimzang.domain.file.dto.response.FileDownloadUrlResponse;
 import com.moimzang.domain.file.dto.response.FileListResponse;
 import com.moimzang.domain.file.dto.response.FileUploadResponse;
@@ -19,6 +21,7 @@ import com.moimzang.domain.file.dto.response.FileZipTarget;
 import com.moimzang.domain.file.entity.File;
 import com.moimzang.domain.file.enums.FileCategory;
 import com.moimzang.domain.file.enums.FileCategoryFilter;
+import com.moimzang.domain.file.enums.FileContentVariant;
 import com.moimzang.domain.file.enums.FileDownloadMode;
 import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.domain.file.exception.FileErrorCode;
@@ -38,6 +41,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -60,6 +64,9 @@ class FileServiceTest {
     @Mock
     private FileStorage fileStorage;
 
+    @Mock
+    private FileThumbnailGenerator thumbnailGenerator;
+
     @Spy
     private FileMapper fileMapper = Mappers.getMapper(FileMapper.class);
 
@@ -67,7 +74,8 @@ class FileServiceTest {
 
     @BeforeEach
     void setUp() {
-        fileService = new FileService(fileRepository, groupTermRepository, scheduleRepository, fileMapper, fileStorage);
+        fileService = new FileService(fileRepository, groupTermRepository, scheduleRepository, fileMapper,
+                fileStorage, thumbnailGenerator);
     }
 
     @Test
@@ -87,6 +95,109 @@ class FileServiceTest {
         assertThat(response.getFileId()).isEqualTo(10L);
         assertThat(response.getName()).isEqualTo("공연장 계약서");
         verify(fileStorage).store(any(), any(), eq((long) multipartFile.getSize()), eq("application/pdf"));
+    }
+
+    @Test
+    void upload_이미지면_썸네일도_저장하고_원본_키_옆에_붙인다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MultipartFile multipartFile = new MockMultipartFile("file", "봄소풍.png", "image/png", "image".getBytes());
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(thumbnailGenerator.supports("png")).willReturn(true);
+        given(thumbnailGenerator.generate(any(), eq("png")))
+                .willReturn(Optional.of(new FileThumbnail("thumb".getBytes(), "png", "image/png")));
+        given(fileRepository.save(any(File.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        fileService.upload(1L, multipartFile, "봄소풍", FileCategory.PHOTO, null);
+
+        ArgumentCaptor<File> captor = ArgumentCaptor.forClass(File.class);
+        verify(fileRepository).save(captor.capture());
+        File saved = captor.getValue();
+
+        // 원본과 같은 자리에 _thumb 접미사만 붙는다
+        assertThat(saved.getThumbnailKey()).isEqualTo(saved.getStorageKey().replace(".png", "_thumb.png"));
+        verify(fileStorage).store(eq(saved.getThumbnailKey()), any(), eq(5L), eq("image/png"));
+    }
+
+    @Test
+    void upload_gif는_png_썸네일로_저장된다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MultipartFile multipartFile = new MockMultipartFile("file", "활동.gif", "image/gif", "image".getBytes());
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(thumbnailGenerator.supports("gif")).willReturn(true);
+        given(thumbnailGenerator.generate(any(), eq("gif")))
+                .willReturn(Optional.of(new FileThumbnail("thumb".getBytes(), "png", "image/png")));
+        given(fileRepository.save(any(File.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        fileService.upload(1L, multipartFile, "활동", FileCategory.PHOTO, null);
+
+        ArgumentCaptor<File> captor = ArgumentCaptor.forClass(File.class);
+        verify(fileRepository).save(captor.capture());
+        // 원본은 gif지만 썸네일 확장자는 png다
+        assertThat(captor.getValue().getThumbnailKey()).endsWith("_thumb.png");
+    }
+
+    @Test
+    void upload_썸네일_대상이_아니면_원본만_저장한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MultipartFile multipartFile = new MockMultipartFile("file", "계약서.pdf", "application/pdf", "content".getBytes());
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(thumbnailGenerator.supports("pdf")).willReturn(false);
+        given(fileRepository.save(any(File.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        fileService.upload(1L, multipartFile, "계약서", FileCategory.ACTIVITY_DOC, null);
+
+        ArgumentCaptor<File> captor = ArgumentCaptor.forClass(File.class);
+        verify(fileRepository).save(captor.capture());
+        assertThat(captor.getValue().getThumbnailKey()).isNull();
+        // 원본 1건만 저장한다
+        verify(fileStorage).store(any(), any(), anyLong(), any());
+    }
+
+    @Test
+    void upload_썸네일_생성에_실패해도_업로드는_성공한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MultipartFile multipartFile = new MockMultipartFile("file", "깨진.png", "image/png", "broken".getBytes());
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(thumbnailGenerator.supports("png")).willReturn(true);
+        given(thumbnailGenerator.generate(any(), eq("png"))).willReturn(Optional.empty());
+        given(fileRepository.save(any(File.class))).willAnswer(invocation -> {
+            File saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 11L);
+            return saved;
+        });
+
+        FileUploadResponse response = fileService.upload(1L, multipartFile, "깨진", FileCategory.PHOTO, null);
+
+        assertThat(response.getFileId()).isEqualTo(11L);
+        ArgumentCaptor<File> captor = ArgumentCaptor.forClass(File.class);
+        verify(fileRepository).save(captor.capture());
+        assertThat(captor.getValue().getThumbnailKey()).isNull();
+    }
+
+    @Test
+    void upload_썸네일_생성_중_예외가_나도_업로드는_성공한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MultipartFile multipartFile = new MockMultipartFile("file", "봄소풍.jpg", "image/jpeg", "image".getBytes());
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(thumbnailGenerator.supports("jpg")).willReturn(true);
+        given(thumbnailGenerator.generate(any(), eq("jpg"))).willThrow(new IllegalStateException("디코더 폭발"));
+        given(fileRepository.save(any(File.class))).willAnswer(invocation -> {
+            File saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 12L);
+            return saved;
+        });
+
+        FileUploadResponse response = fileService.upload(1L, multipartFile, "봄소풍", FileCategory.PHOTO, null);
+
+        assertThat(response.getFileId()).isEqualTo(12L);
+        ArgumentCaptor<File> captor = ArgumentCaptor.forClass(File.class);
+        verify(fileRepository).save(captor.capture());
+        assertThat(captor.getValue().getThumbnailKey()).isNull();
     }
 
     @Test
@@ -154,7 +265,7 @@ class FileServiceTest {
     @Test
     void upload_장부파일이면_기존_활성_장부파일을_소프트삭제하고_scheduleId를_무시한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
-        File existing = File.upload(groupTerm, null, "이전 장부", "xlsx", 100L, FileCategory.LEDGER_FILE, "files/old.xlsx");
+        File existing = File.upload(groupTerm, null, "이전 장부", "xlsx", 100L, FileCategory.LEDGER_FILE, "files/old.xlsx", null);
         MultipartFile multipartFile =
                 new MockMultipartFile("file", "장부.xlsx", "application/vnd.ms-excel", "content".getBytes());
 
@@ -184,8 +295,8 @@ class FileServiceTest {
     void getZipTargets_같은_이름의_파일이_여러_개면_엔트리명에_번호를_붙인다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         given(groupTerm.getName()).willReturn("26기");
-        File file1 = File.upload(groupTerm, null, "계약서", "pdf", 100L, FileCategory.ACTIVITY_DOC, "k1");
-        File file2 = File.upload(groupTerm, null, "계약서", "pdf", 100L, FileCategory.ACTIVITY_DOC, "k2");
+        File file1 = File.upload(groupTerm, null, "계약서", "pdf", 100L, FileCategory.ACTIVITY_DOC, "k1", null);
+        File file2 = File.upload(groupTerm, null, "계약서", "pdf", 100L, FileCategory.ACTIVITY_DOC, "k2", null);
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
         given(fileRepository.searchAll(eq(1L), isNull(), isNull())).willReturn(List.of(file1, file2));
@@ -199,8 +310,8 @@ class FileServiceTest {
     @Test
     void listFiles_다음_페이지가_있으면_nextCursor를_만든다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
-        File file1 = File.upload(groupTerm, null, "파일1", "pdf", 100L, FileCategory.ACTIVITY_DOC, "k1");
-        File file2 = File.upload(groupTerm, null, "파일2", "pdf", 100L, FileCategory.ACTIVITY_DOC, "k2");
+        File file1 = File.upload(groupTerm, null, "파일1", "pdf", 100L, FileCategory.ACTIVITY_DOC, "k1", null);
+        File file2 = File.upload(groupTerm, null, "파일2", "pdf", 100L, FileCategory.ACTIVITY_DOC, "k2", null);
         ReflectionTestUtils.setField(file1, "id", 1L);
         ReflectionTestUtils.setField(file1, "createdAt", LocalDateTime.now());
         ReflectionTestUtils.setField(file2, "id", 2L);
@@ -262,10 +373,52 @@ class FileServiceTest {
     void getFileContent_파일이_없거나_삭제됐으면_FILE_404_NOT_FOUND를_던진다() {
         given(fileRepository.findActiveById(1L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> fileService.getFileContent(1L))
+        assertThatThrownBy(() -> fileService.getFileContent(1L, FileContentVariant.ORIGINAL))
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(FileErrorCode.FILE_404_NOT_FOUND);
+    }
+
+    @Test
+    void getFileContent_썸네일을_요청하면_썸네일_키와_그_확장자를_준다() {
+        File file = File.upload(mock(GroupTerm.class), null, "봄소풍", "gif", 2048L,
+                FileCategory.PHOTO, "files/2026/11/abc.gif", "files/2026/11/abc_thumb.png");
+        ReflectionTestUtils.setField(file, "id", 1L);
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.of(file));
+
+        FileContentTarget target = fileService.getFileContent(1L, FileContentVariant.THUMBNAIL);
+
+        assertThat(target.getStorageKey()).isEqualTo("files/2026/11/abc_thumb.png");
+        // 원본은 gif지만 실제로 나가는 바이트는 png라 Content-Type도 png여야 한다
+        assertThat(target.getExtension()).isEqualTo("png");
+        assertThat(target.getName()).isEqualTo("봄소풍");
+    }
+
+    @Test
+    void getFileContent_variant가_ORIGINAL이면_원본_키를_그대로_준다() {
+        File file = File.upload(mock(GroupTerm.class), null, "봄소풍", "gif", 2048L,
+                FileCategory.PHOTO, "files/2026/11/abc.gif", "files/2026/11/abc_thumb.png");
+        ReflectionTestUtils.setField(file, "id", 1L);
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.of(file));
+
+        FileContentTarget target = fileService.getFileContent(1L, FileContentVariant.ORIGINAL);
+
+        assertThat(target.getStorageKey()).isEqualTo("files/2026/11/abc.gif");
+        assertThat(target.getExtension()).isEqualTo("gif");
+    }
+
+    @Test
+    void getFileContent_썸네일이_없는데_요청하면_FILE_404_THUMBNAIL_NOT_FOUND를_던진다() {
+        // 원본으로 폴백하면 pdf 요청에 20MB가 그대로 나가므로 명시적으로 끊는다
+        File file = File.upload(mock(GroupTerm.class), null, "계약서", "pdf", 1024L,
+                FileCategory.ACTIVITY_DOC, "files/2026/11/contract.pdf", null);
+        ReflectionTestUtils.setField(file, "id", 1L);
+        given(fileRepository.findActiveById(1L)).willReturn(Optional.of(file));
+
+        assertThatThrownBy(() -> fileService.getFileContent(1L, FileContentVariant.THUMBNAIL))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(FileErrorCode.FILE_404_THUMBNAIL_NOT_FOUND);
     }
 
     @Test
@@ -377,13 +530,13 @@ class FileServiceTest {
 
     private File newLedgerFile(GroupTerm groupTerm, Long id) {
         File file = File.upload(groupTerm, null, "장부", "xlsx", 1024L,
-                FileCategory.LEDGER_FILE, "files/2026/11/ledger-%d.xlsx".formatted(id));
+                FileCategory.LEDGER_FILE, "files/2026/11/ledger-%d.xlsx".formatted(id), null);
         ReflectionTestUtils.setField(file, "id", id);
         return file;
     }
 
     private File newFile() {
         return File.upload(mock(GroupTerm.class), null, "공연장 계약서", "pdf", 1024L,
-                FileCategory.ACTIVITY_DOC, "files/2026/11/contract.pdf");
+                FileCategory.ACTIVITY_DOC, "files/2026/11/contract.pdf", null);
     }
 }
