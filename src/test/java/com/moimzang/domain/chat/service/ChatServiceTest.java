@@ -135,10 +135,10 @@ class ChatServiceTest {
     void listChatRooms_조회된_대화방이_size_이하면_nextCursor가_null이다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(aiChatRoomRepository.search(eq(1L), eq(null), eq(null), eq(21)))
+        given(aiChatRoomRepository.search(eq(1L), eq(null), eq(null), eq(null), eq(21)))
                 .willReturn(List.of(chatRoom(1L, "첫 질문", LocalDateTime.of(2026, 11, 13, 21, 1))));
 
-        ChatRoomListResponse response = chatService.listChatRooms(1L, null, null);
+        ChatRoomListResponse response = chatService.listChatRooms(1L, null, null, null);
 
         assertThat(response.getChatRooms()).hasSize(1);
         assertThat(response.getChatRooms().get(0).getChatRoomId()).isEqualTo(1L);
@@ -156,9 +156,9 @@ class ChatServiceTest {
                 .toList();
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(aiChatRoomRepository.search(eq(1L), eq(null), eq(null), eq(3))).willReturn(fetched);
+        given(aiChatRoomRepository.search(eq(1L), eq(null), eq(null), eq(null), eq(3))).willReturn(fetched);
 
-        ChatRoomListResponse response = chatService.listChatRooms(1L, null, 2);
+        ChatRoomListResponse response = chatService.listChatRooms(1L, null, null, 2);
 
         assertThat(response.getChatRooms()).hasSize(2);
         // cursor는 잘라낸 페이지의 마지막(2번째) 방을 가리킨다
@@ -172,9 +172,9 @@ class ChatServiceTest {
         String cursor = CursorCodec.encode(cursorUpdatedAt.toString(), 5L);
 
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
-        given(aiChatRoomRepository.search(eq(1L), eq(cursorUpdatedAt), eq(5L), eq(21))).willReturn(List.of());
+        given(aiChatRoomRepository.search(eq(1L), eq(null), eq(cursorUpdatedAt), eq(5L), eq(21))).willReturn(List.of());
 
-        ChatRoomListResponse response = chatService.listChatRooms(1L, cursor, null);
+        ChatRoomListResponse response = chatService.listChatRooms(1L, null, cursor, null);
 
         assertThat(response.getChatRooms()).isEmpty();
         assertThat(response.getNextCursor()).isNull();
@@ -185,7 +185,7 @@ class ChatServiceTest {
         GroupTerm groupTerm = mock(GroupTerm.class);
         given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
 
-        assertThatThrownBy(() -> chatService.listChatRooms(1L, "깨진커서", null))
+        assertThatThrownBy(() -> chatService.listChatRooms(1L, null, "깨진커서", null))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
                 .isEqualTo(ChatErrorCode.CHAT_400_INVALID_CURSOR);
@@ -195,10 +195,55 @@ class ChatServiceTest {
     void listChatRooms_기수가_없으면_CHAT_404_GROUP_TERM_NOT_FOUND를_던진다() {
         given(groupTermRepository.findById(1L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> chatService.listChatRooms(1L, null, null))
+        assertThatThrownBy(() -> chatService.listChatRooms(1L, null, null, null))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
                 .isEqualTo(ChatErrorCode.CHAT_404_GROUP_TERM_NOT_FOUND);
+    }
+
+    @Test
+    void listChatRooms_첫_페이지면_전체_대화방_수를_함께_반환한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(aiChatRoomRepository.search(eq(1L), eq(null), eq(null), eq(null), eq(21)))
+                .willReturn(List.of(chatRoom(1L, "첫 질문", LocalDateTime.of(2026, 11, 13, 21, 1))));
+        given(aiChatRoomRepository.count(1L, null)).willReturn(3L);
+
+        ChatRoomListResponse response = chatService.listChatRooms(1L, null, null, null);
+
+        assertThat(response.getTotalCount()).isEqualTo(3L);
+    }
+
+    @Test
+    void listChatRooms_cursor가_있는_다음_페이지면_totalCount를_세지_않는다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        LocalDateTime cursorUpdatedAt = LocalDateTime.of(2026, 11, 13, 21, 1);
+        String cursor = CursorCodec.encode(cursorUpdatedAt.toString(), 5L);
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(aiChatRoomRepository.search(eq(1L), eq(null), eq(cursorUpdatedAt), eq(5L), eq(21)))
+                .willReturn(List.of());
+
+        ChatRoomListResponse response = chatService.listChatRooms(1L, null, cursor, null);
+
+        assertThat(response.getTotalCount()).isNull();
+        verify(aiChatRoomRepository, never()).count(any(), any());
+    }
+
+    @Test
+    void listChatRooms_keyword를_주면_검색어를_레포지토리에_그대로_전달한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(aiChatRoomRepository.search(eq(1L), eq("미입금"), eq(null), eq(null), eq(21)))
+                .willReturn(List.of(chatRoom(1L, "가을 공연 미입금자 확인", LocalDateTime.of(2026, 11, 13, 21, 1))));
+        given(aiChatRoomRepository.count(1L, "미입금")).willReturn(1L);
+
+        ChatRoomListResponse response = chatService.listChatRooms(1L, "미입금", null, null);
+
+        assertThat(response.getChatRooms()).hasSize(1);
+        assertThat(response.getChatRooms().get(0).getTitle()).isEqualTo("가을 공연 미입금자 확인");
+        // 목록과 totalCount가 같은 검색어로 세어져야 "총 N개"와 실제 목록이 어긋나지 않는다
+        assertThat(response.getTotalCount()).isEqualTo(1L);
     }
 
     @Test

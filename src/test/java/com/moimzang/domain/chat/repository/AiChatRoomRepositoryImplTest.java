@@ -54,7 +54,7 @@ class AiChatRoomRepositoryImplTest {
         AiChatRoom recent = persistChatRoom("최근 대화", LocalDateTime.of(2026, 11, 13, 21, 0));
         AiChatRoom middle = persistChatRoom("중간 대화", LocalDateTime.of(2026, 11, 7, 15, 0));
 
-        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), null, null, 10);
+        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), null, null, null, 10);
 
         assertThat(result).extracting(AiChatRoom::getId)
                 .containsExactly(recent.getId(), middle.getId(), old.getId());
@@ -66,7 +66,7 @@ class AiChatRoomRepositoryImplTest {
         GroupTerm otherTerm = persistGroupTerm(persistClubGroup("다른 동아리"), "25기");
         AiChatRoom other = em.persistAndFlush(AiChatRoom.create(otherTerm, "다른 기수 대화"));
 
-        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), null, null, 10);
+        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), null, null, null, 10);
 
         assertThat(result).extracting(AiChatRoom::getId)
                 .containsExactly(mine.getId())
@@ -81,7 +81,7 @@ class AiChatRoomRepositoryImplTest {
         persistChatRoom("3번째", sameTime);
 
         List<AiChatRoom> result = aiChatRoomRepository.search(
-                groupTerm.getId(), sameTime, second.getId(), 10);
+                groupTerm.getId(), null, sameTime, second.getId(), 10);
 
         // (updatedAt, id) 내림차순이므로 cursor(second) 다음은 id가 더 작은 first만 남는다
         assertThat(result).extracting(AiChatRoom::getId).containsExactly(first.getId());
@@ -94,7 +94,7 @@ class AiChatRoomRepositoryImplTest {
         AiChatRoom older = persistChatRoom("이전 대화", LocalDateTime.of(2026, 11, 7, 15, 0));
 
         List<AiChatRoom> result = aiChatRoomRepository.search(
-                groupTerm.getId(), newerTime, newer.getId(), 10);
+                groupTerm.getId(), null, newerTime, newer.getId(), 10);
 
         assertThat(result).extracting(AiChatRoom::getId).containsExactly(older.getId());
     }
@@ -105,9 +105,60 @@ class AiChatRoomRepositoryImplTest {
         persistChatRoom("2번째", LocalDateTime.of(2026, 11, 12, 21, 0));
         persistChatRoom("3번째", LocalDateTime.of(2026, 11, 11, 21, 0));
 
-        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), null, null, 2);
+        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), null, null, null, 2);
 
         assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void search_keyword는_제목에_부분_일치하는_방만_반환한다() {
+        AiChatRoom matched = persistChatRoom("가을 공연 미입금자 확인", LocalDateTime.of(2026, 11, 13, 21, 0));
+        AiChatRoom other = persistChatRoom("신입생 공연 공지문 작성", LocalDateTime.of(2026, 11, 12, 21, 0));
+
+        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), "미입금", null, null, 10);
+
+        assertThat(result).extracting(AiChatRoom::getId)
+                .containsExactly(matched.getId())
+                .doesNotContain(other.getId());
+    }
+
+    @Test
+    void search_제목이_없는_방은_keyword_검색에서_빠진다() {
+        // 대화방만 만들고 첫 질문을 보내지 않으면 title이 null로 남는다
+        persistChatRoom(null, LocalDateTime.of(2026, 11, 13, 21, 0));
+
+        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), "공연", null, null, 10);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void search_keyword가_비어_있으면_조건을_걸지_않는다() {
+        persistChatRoom("가을 공연", LocalDateTime.of(2026, 11, 13, 21, 0));
+        persistChatRoom(null, LocalDateTime.of(2026, 11, 12, 21, 0));
+
+        List<AiChatRoom> result = aiChatRoomRepository.search(groupTerm.getId(), "   ", null, null, 10);
+
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void count_cursor와_무관하게_검색어에_맞는_전체_건수를_센다() {
+        persistChatRoom("가을 공연 미입금자 확인", LocalDateTime.of(2026, 11, 13, 21, 0));
+        persistChatRoom("가을 공연 지출 검색", LocalDateTime.of(2026, 11, 12, 21, 0));
+        persistChatRoom("신입생 공지문 작성", LocalDateTime.of(2026, 11, 11, 21, 0));
+
+        assertThat(aiChatRoomRepository.count(groupTerm.getId(), null)).isEqualTo(3);
+        assertThat(aiChatRoomRepository.count(groupTerm.getId(), "가을 공연")).isEqualTo(2);
+    }
+
+    @Test
+    void count_다른_기수의_대화방은_세지_않는다() {
+        persistChatRoom("우리 기수 대화", LocalDateTime.of(2026, 11, 13, 21, 0));
+        GroupTerm otherTerm = persistGroupTerm(persistClubGroup("다른 동아리"), "25기");
+        em.persistAndFlush(AiChatRoom.create(otherTerm, "다른 기수 대화"));
+
+        assertThat(aiChatRoomRepository.count(groupTerm.getId(), null)).isEqualTo(1);
     }
 
     private ClubGroup persistClubGroup(String name) {

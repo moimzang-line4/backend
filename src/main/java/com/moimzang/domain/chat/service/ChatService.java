@@ -85,9 +85,10 @@ public class ChatService {
                 .build();
     }
 
-    // 기수의 대화방 목록을 최근 활동 순으로 cursor 페이지네이션 조회한다
-    public ChatRoomListResponse listChatRooms(Long termId, String cursor, Integer size) {
-        log.info("[AI 대화방 목록 조회] 조회를 시작합니다. termId = {}, cursor = {}", termId, cursor);
+    // 기수의 대화방 목록을 제목 검색어로 걸러 최근 활동 순으로 cursor 페이지네이션 조회한다
+    public ChatRoomListResponse listChatRooms(Long termId, String keyword, String cursor, Integer size) {
+        log.info("[AI 대화방 목록 조회] 조회를 시작합니다. termId = {}, keyword = {}, cursor = {}",
+                termId, keyword, cursor);
 
         groupTermRepository.findById(termId)
                 .orElseThrow(() -> {
@@ -112,7 +113,7 @@ public class ChatService {
         }
 
         // size + 1건을 조회해서 그중 마지막 1건이 있으면 "다음 페이지가 있다"는 뜻이다
-        List<AiChatRoom> fetched = aiChatRoomRepository.search(termId, cursorUpdatedAt, cursorId, limit + 1);
+        List<AiChatRoom> fetched = aiChatRoomRepository.search(termId, keyword, cursorUpdatedAt, cursorId, limit + 1);
 
         boolean hasNext = fetched.size() > limit;
         List<AiChatRoom> page = hasNext ? fetched.subList(0, limit) : fetched;
@@ -120,12 +121,16 @@ public class ChatService {
         List<ChatRoomSummaryResponse> chatRooms = chatMapper.toChatRoomSummaryResponses(page);
         String nextCursor = hasNext ? buildCursor(page.get(page.size() - 1)) : null;
 
+        // 첫 페이지(cursor 없음)에서만 count 쿼리를 날린다 — 스크롤마다 다시 세지 않는다
+        Long totalCount = cursor == null ? aiChatRoomRepository.count(termId, keyword) : null;
+
         log.info("[AI 대화방 목록 조회] 조회를 완료했습니다. termId = {}, count = {}, hasNext = {}",
                 termId, chatRooms.size(), hasNext);
 
         return ChatRoomListResponse.builder()
                 .chatRooms(chatRooms)
                 .nextCursor(nextCursor)
+                .totalCount(totalCount)
                 .build();
     }
 

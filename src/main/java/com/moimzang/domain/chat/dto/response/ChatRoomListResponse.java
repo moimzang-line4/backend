@@ -18,4 +18,7 @@ public class ChatRoomListResponse {
     @Schema(description = "다음 페이지 cursor. 다음 페이지가 없으면 null",
             example = "MjAyNi0xMS0xM1QyMTowMTowMA.8")
     private final String nextCursor;
+
+    @Schema(description = "전체 대화방 수. 첫 페이지에서만 값이 있고 이후 페이지는 null", example = "3")
+    private final Long totalCount;
 }
