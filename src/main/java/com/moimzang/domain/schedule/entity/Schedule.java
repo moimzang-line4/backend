@@ -120,4 +120,9 @@ public class Schedule extends BaseEntity {
             this.memo = memo.isEmpty() ? null : memo;
         }
     }
+
+    // 운영 공간을 켠다. 켠 운영 공간은 끄지 않는다 — 끄면 그 안의 메모·출석·정산 기록 처리가 함께 정해져야 한다
+    public void enableOperationSpace() {
+        this.hasOperationSpace = Boolean.TRUE;
+    }
 }

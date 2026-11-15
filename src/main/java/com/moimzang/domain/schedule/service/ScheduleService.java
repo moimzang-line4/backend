@@ -32,6 +32,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -166,10 +167,25 @@ public class ScheduleService {
         // 경로에 기수가 없으므로 수정 대상 일정이 속한 기수를 기준으로 카테고리를 찾는다
         ScheduleCategory category = findCategory(request.getCategoryId(), schedule.getGroupTerm().getId(), "일정 수정");
 
+        boolean hasOperationSpace = Boolean.TRUE.equals(schedule.getHasOperationSpace());
+        if (Boolean.FALSE.equals(request.getCreateOperationSpace()) && hasOperationSpace) {
+            log.warn("[일정 수정] 켜진 운영 공간은 끌 수 없습니다. scheduleId = {}", scheduleId);
+            throw new CustomException(ScheduleErrorCode.SCHEDULE_400_OPERATION_SPACE_CANNOT_DISABLE);
+        }
+
         schedule.update(category, stripOrNull(request.getTitle()),
                 request.getColor() == null ? null : request.getColor().name(), request.getIsAllDay(),
                 request.getStartAt(), request.getEndAt(), stripOrNull(request.getLocation()),
                 stripOrNull(request.getMemo()));
+
+        // 꺼진 운영 공간을 켜면 일정 등록 때와 같이 1차 차수를 만든다. 이미 차수가 있으면 새로 만들지 않는다
+        if (Boolean.TRUE.equals(request.getCreateOperationSpace()) && !hasOperationSpace) {
+            schedule.enableOperationSpace();
+            if (scheduleRoundRepository.findLastRounds(scheduleId, PageRequest.of(0, 1)).isEmpty()) {
+                scheduleRoundRepository.save(ScheduleRound.create(schedule, 1, "1차"));
+            }
+            log.info("[일정 수정] 운영 공간을 켰습니다. scheduleId = {}", scheduleId);
+        }
 
         log.info("[일정 수정] 수정을 완료했습니다. scheduleId = {}", scheduleId);
         return ScheduleUpdateResponse.builder()

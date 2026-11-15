@@ -323,6 +323,73 @@ class ScheduleServiceTest {
                 .isEqualTo(ScheduleErrorCode.SCHEDULE_404_NOT_FOUND);
     }
 
+    @Test
+    void updateSchedule_꺼진_운영_공간을_켜면_1차_차수를_만든다() {
+        Schedule schedule = schedule(10L, mock(GroupTerm.class), null, START, END);
+        ReflectionTestUtils.setField(schedule, "hasOperationSpace", false);
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findLastRounds(eq(10L), any())).willReturn(List.of());
+
+        scheduleService.updateSchedule(10L, ScheduleUpdateRequest.builder().createOperationSpace(true).build());
+
+        assertThat(schedule.getHasOperationSpace()).isTrue();
+        ArgumentCaptor<ScheduleRound> captor = ArgumentCaptor.forClass(ScheduleRound.class);
+        verify(scheduleRoundRepository).save(captor.capture());
+        assertThat(captor.getValue().getRoundNo()).isEqualTo(1);
+        assertThat(captor.getValue().getLabel()).isEqualTo("1차");
+    }
+
+    @Test
+    void updateSchedule_운영_공간을_켤_때_이미_차수가_있으면_새로_만들지_않는다() {
+        Schedule schedule = schedule(10L, mock(GroupTerm.class), null, START, END);
+        ReflectionTestUtils.setField(schedule, "hasOperationSpace", false);
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findLastRounds(eq(10L), any()))
+                .willReturn(List.of(ScheduleRound.create(schedule, 1, "1차")));
+
+        scheduleService.updateSchedule(10L, ScheduleUpdateRequest.builder().createOperationSpace(true).build());
+
+        assertThat(schedule.getHasOperationSpace()).isTrue();
+        verify(scheduleRoundRepository, never()).save(any());
+    }
+
+    @Test
+    void updateSchedule_이미_켜진_운영_공간을_다시_켜도_차수를_만들지_않는다() {
+        Schedule schedule = schedule(10L, mock(GroupTerm.class), null, START, END);
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+
+        scheduleService.updateSchedule(10L, ScheduleUpdateRequest.builder().createOperationSpace(true).build());
+
+        verify(scheduleRoundRepository, never()).save(any());
+    }
+
+    @Test
+    void updateSchedule_켜진_운영_공간을_끄려고_하면_SCHEDULE_400_OPERATION_SPACE_CANNOT_DISABLE() {
+        Schedule schedule = schedule(10L, mock(GroupTerm.class), null, START, END);
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+
+        assertThatThrownBy(() -> scheduleService.updateSchedule(10L, ScheduleUpdateRequest.builder()
+                .title("바뀐 제목")
+                .createOperationSpace(false)
+                .build()))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ScheduleErrorCode.SCHEDULE_400_OPERATION_SPACE_CANNOT_DISABLE);
+        assertThat(schedule.getTitle()).isEqualTo("가을 정기공연");
+    }
+
+    @Test
+    void updateSchedule_꺼진_운영_공간에_false를_보내면_그대로_둔다() {
+        Schedule schedule = schedule(10L, mock(GroupTerm.class), null, START, END);
+        ReflectionTestUtils.setField(schedule, "hasOperationSpace", false);
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+
+        scheduleService.updateSchedule(10L, ScheduleUpdateRequest.builder().createOperationSpace(false).build());
+
+        assertThat(schedule.getHasOperationSpace()).isFalse();
+        verify(scheduleRoundRepository, never()).save(any());
+    }
+
     private static final LocalDate NOV_1 = LocalDate.of(2026, 11, 1);
     private static final LocalDate NOV_30 = LocalDate.of(2026, 11, 30);
 

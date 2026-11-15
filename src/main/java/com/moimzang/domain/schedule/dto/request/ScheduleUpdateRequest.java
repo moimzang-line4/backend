@@ -44,4 +44,8 @@ public class ScheduleUpdateRequest {
 
     @Schema(description = "메모(선택). 빈 문자열을 보내면 지운다", example = "리허설 15시")
     private String memo;
+
+    @Schema(description = "운영 공간 켜기(선택). true면 꺼진 운영 공간을 켜고, 켜진 운영 공간을 false로 끌 수는 없다",
+            example = "true")
+    private Boolean createOperationSpace;
 }
