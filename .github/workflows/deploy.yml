@@ -9,7 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  # 테스트와 jar 빌드를 한 잡에서 끝내고 jar를 deploy 잡에 넘긴다.
+  # 이미지 안에서 Gradle을 돌리지 않으므로 docker build가 수 초로 끝난다
+  test-and-build:
     runs-on: ubuntu-latest
 
     env:
@@ -29,12 +31,29 @@ jobs:
 
       - run: ./gradlew test
 
+      - run: ./gradlew bootJar
+
+      - name: Upload JAR for deploy job
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: build/libs/*-SNAPSHOT.jar
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
-    needs: test
+    needs: test-and-build
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      # Dockerfile이 build/libs의 jar를 COPY하므로 같은 경로에 내려놓는다
+      - name: Download JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: build/libs
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
