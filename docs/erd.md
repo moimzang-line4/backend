@@ -243,6 +243,7 @@
 | size | BIGINT | | | ✅ | long | 크기 |
 | category | VARCHAR(20) | | | ✅ | FileCategory | ACTIVITY_DOC(활동문서)/BUDGET_PLAN(예산안)/PHOTO(활동사진)/LEDGER_FILE(장부파일, xlsx 첨부통합) |
 | storage_key | VARCHAR(500) | | | ✅ | String | S3/R2 객체 키. 다운로드·미리보기는 이 키로 서버가 직접 파일을 서빙한다(presigned URL 아님 — decisions #18) |
+| thumbnail_key | VARCHAR(500) | | | ❌ | String | 활동사진 그리드용 썸네일 객체 키(`{원본키}_thumb.{jpg\|png}`). 이미지가 아니거나(webp·문서) 생성에 실패하면 NULL — decisions #82 |
 | created_at | DATETIME | | | ✅ | LocalDateTime | |
 | updated_at | DATETIME | | | ✅ | LocalDateTime | |
 | deleted_at | DATETIME | | | ❌ | LocalDateTime | 소프트 삭제(되돌리기 지원) |

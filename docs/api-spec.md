@@ -176,6 +176,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | AI 회의 요약 | API-060, API-061 |
 | AI 챗 | API-076, API-077, API-078, API-079, API-040(카드의 입금 확인 버튼), `navigation`으로 정산·출석·메모·일정·회의록·자료실·장부 화면 이동 |
 | 자료 목록 / 문서 첨부 | API-064, API-063, API-065, API-080, API-066, API-067, API-068, API-062 |
+| 자료 목록 · 활동사진 그리드 뷰 | API-064(`thumbnailUrl`), API-080(`variant=THUMBNAIL`) |
 | 예산안 | API-069, API-070, API-071, API-072, API-073, API-074, API-075 |
 | 설정 · 운영진 관리 · 모임장 변경 | 범위 제외(decisions #1) — 매핑 API 없음 |
 
@@ -277,7 +278,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 |---|---|---|---|
 | LEDGER_409_AUTO_ENTRY_LOCKED | 409 | 자동 기록 내역은 수정할 수 없고, 원본이 살아있으면 삭제도 할 수 없습니다. | API-072, API-073 |
 
-### 문서함 (FileErrorCode) — API-063~068
+### 문서함 (FileErrorCode) — API-063~068, API-080
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
 | FILE_413_SIZE_EXCEEDED | 413 | 파일 용량이 허용 범위를 초과했습니다. | API-063 |
@@ -288,6 +289,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | FILE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-063, API-064, API-068 |
 | FILE_404_SCHEDULE_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-063 |
 | FILE_404_NOT_FOUND | 404 | 존재하지 않는 파일입니다. | API-065, API-080, API-066, API-067 |
+| FILE_404_THUMBNAIL_NOT_FOUND | 404 | 썸네일이 없는 자료입니다. | API-080(variant=THUMBNAIL) |
 | FILE_404_NO_DOWNLOADABLE_FILES | 404 | 다운로드할 파일이 없습니다. | API-068 |
 
 ### AI 채팅 (ChatErrorCode) — API-076~079
@@ -1107,6 +1109,11 @@ scheduleId(선택)
 
 자료명은 255자까지다(`file.name` 컬럼 길이).
 
+**Logics**: 확장자가 jpg/jpeg/png/gif면 업로드와 함께 **썸네일을 만들어 저장**한다(긴 변 512px,
+원본이 더 작으면 확대하지 않음). webp는 JDK ImageIO에 디코더가 없어 대상이 아니다. 생성에
+실패해도 **업로드는 그대로 성공**하고 썸네일만 없는 상태(`thumbnailUrl: null`)가 된다 —
+그리드 표시를 위한 최적화일 뿐이라 이것 때문에 업로드가 깨지면 안 된다(decisions #82).
+
 **Response data**: fileId, name
 **에러**: FILE_400_REQUIRED_FIELD_MISSING(필수 누락), FILE_400_NAME_TOO_LONG(자료명 256자 이상),
 FILE_400_EXTENSION_NOT_ALLOWED, FILE_404_GROUP_TERM_NOT_FOUND(기수 없음),
@@ -1125,9 +1132,14 @@ COMMON_400(file 파트 누락), COMMON_413(용량 초과)
 **Query**: category(ALL|ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE, 기본 ALL), keyword(선택),
 sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택), cursor(선택), size(선택, 기본 20)
 
-**Response data**: files[].fileId/name/extension/size/category/scheduleId/createdAt, nextCursor,
-totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-029 progress.totalCount·
-API-037 targetCount와 같은 패턴. 페이지네이션용 totalCount가 아니라 "총 N개" 표시용)
+**Response data**: files[].fileId/name/extension/size/category/scheduleId/thumbnailUrl/createdAt,
+nextCursor, totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-029
+progress.totalCount·API-037 targetCount와 같은 패턴. 페이지네이션용 totalCount가 아니라
+"총 N개" 표시용)
+
+`thumbnailUrl`은 활동사진 그리드 뷰가 쓰는 축소본 주소다(API-080의 `variant=THUMBNAIL`을 가리킨다).
+**썸네일이 없으면 null** — 이미지가 아닌 자료, webp, 생성에 실패한 자료가 여기 해당하고, 그때
+프론트는 리스트 뷰와 같은 파일 타입 아이콘을 그린다(decisions #82).
 
 cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 createdAt, NAME은 name.
 둘 다 id를 tiebreaker로 쓴다.
@@ -1151,13 +1163,22 @@ cursor 페이지네이션. sort별로 cursor 키가 다르다: LATEST/OLDEST는 
 클라이언트로 직접 호출하는 게 아니라, `<a href>`나 `<iframe src>`처럼 브라우저가 그 주소로
 직접 요청을 보내는 방식으로 쓰인다(ZIP인 API-068과 같은 패턴).
 
-**Query**: mode(PREVIEW|DOWNLOAD, 기본 DOWNLOAD)
+**Query**: mode(PREVIEW|DOWNLOAD, 기본 DOWNLOAD), variant(ORIGINAL|THUMBNAIL, 기본 ORIGINAL)
 
-**Response**: 파일 바이트 스트림(JSON 래퍼 없음). `Content-Type`은 파일 확장자로 추론,
+두 파라미터는 축이 다르다 — `mode`는 **어떻게 열지**(Content-Disposition)를, `variant`는
+**무엇을 내보낼지**(원본 바이트 / 축소본 바이트)를 정한다.
+
+**Response**: 파일 바이트 스트림(JSON 래퍼 없음). `Content-Type`은 **실제로 나가는 바이트의**
+확장자로 추론한다 — gif 원본의 썸네일은 png라 `image/png`가 되며, 원본 확장자를 쓰면 어긋난다.
 `Content-Disposition`은 `mode=DOWNLOAD`면 `attachment`(브라우저가 저장 대화상자를 띄움),
 `PREVIEW`면 `inline`(브라우저가 바로 열어서 보여줌)으로 서버가 강제한다.
 
-**에러**: FILE_404_NOT_FOUND(없는 파일, 소프트 삭제된 파일 — URL을 알고 있어도 열리지 않는다)
+**에러**: FILE_404_NOT_FOUND(없는 파일, 소프트 삭제된 파일 — URL을 알고 있어도 열리지 않는다.
+썸네일도 같이 막힌다), FILE_404_THUMBNAIL_NOT_FOUND(`variant=THUMBNAIL`인데 썸네일이 없는 자료),
+COMMON_400(enum에 없는 mode·variant 값)
+
+썸네일이 없을 때 원본으로 폴백하지 않는 건 의도다 — pdf에 썸네일을 요청했는데 20MB가 그대로
+나가는 쪽이 더 나쁘다(decisions #82).
 
 #### API-066 · DELETE /api/files/{fileId} · 파일 삭제
 인증: 불필요. 소프트 삭제(deleted_at). **에러**: FILE_404_NOT_FOUND(없는 파일)
