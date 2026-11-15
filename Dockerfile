@@ -1,19 +1,10 @@
-FROM eclipse-temurin:21-jdk AS build
-WORKDIR /app
-
-COPY gradlew gradlew
-COPY gradle gradle
-COPY build.gradle settings.gradle ./
-COPY src src
-
-# 테스트는 CI 잡에서 Testcontainers로 돌린다. 이미지 빌드 안에서 돌리려면
-# 도커 인 도커가 필요해져서 여기서는 건너뛴다
-RUN chmod +x gradlew && ./gradlew clean bootJar -x test --no-daemon
-
+# 미리 빌드된 jar를 담기만 한다. 이미지 안에서 Gradle을 돌리면 러너에 레이어 캐시가 없어
+# 매 배포마다 Gradle 배포판과 전체 의존성을 다시 받게 되므로, 빌드는 CI 잡에 맡긴다.
+# 로컬에서 이미지를 만들려면 ./gradlew bootJar 를 먼저 실행해야 한다.
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-COPY --from=build /app/build/libs/*-SNAPSHOT.jar app.jar
+COPY build/libs/*-SNAPSHOT.jar app.jar
 
 ENV PORT=8080
 EXPOSE 8080
