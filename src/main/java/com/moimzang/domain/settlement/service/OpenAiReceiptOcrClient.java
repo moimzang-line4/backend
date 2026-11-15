@@ -1,3 +1,4 @@
+
 package com.moimzang.domain.settlement.service;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -12,6 +13,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -41,6 +43,7 @@ public class OpenAiReceiptOcrClient implements ReceiptOcrClient {
     private final ReceiptOcrOpenAiProperties ocrProperties;
     private final RestClient restClient;
 
+    @Autowired
     public OpenAiReceiptOcrClient(OpenAiProperties openAiProperties, ReceiptOcrOpenAiProperties ocrProperties) {
         this(openAiProperties, ocrProperties, buildRestClient(ocrProperties));
     }
