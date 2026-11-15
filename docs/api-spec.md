@@ -237,6 +237,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | MEMBER_410_JOIN_CLOSED | 410 | 등록이 마감된 명단입니다. | API-021, API-022 |
 | MEMBER_400_PRIVACY_CONSENT_REQUIRED | 400 | 개인정보 수집·이용에 동의해 주세요. | API-022 |
 | MEMBER_400_REQUIRED_FIELD_MISSING | 400 | 필수 항목을 입력해 주세요. | API-022 |
+| MEMBER_409_ALREADY_REGISTERED | 409 | 이미 등록된 부원입니다. | API-022 |
 | MEMBER_400_INVALID_CURSOR | 400 | 잘못된 cursor입니다. | API-023 |
 | MEMBER_404_NOT_FOUND | 404 | 존재하지 않는 부원입니다. | API-025, API-026 |
 
@@ -640,9 +641,12 @@ fields.school/studentId/part/grade/phone(boolean, true면 폼에 노출하고 �
 
 **Response data**: memberId.
 **에러**: COMMON_400(이름·학과 누락, 길이 초과), MEMBER_400_PRIVACY_CONSENT_REQUIRED(개인정보 미동의),
-MEMBER_400_REQUIRED_FIELD_MISSING(켜진 항목 누락), MEMBER_404_JOIN_LINK_NOT_FOUND, MEMBER_410_JOIN_CLOSED
+MEMBER_400_REQUIRED_FIELD_MISSING(켜진 항목 누락), MEMBER_409_ALREADY_REGISTERED(중복 등록),
+MEMBER_404_JOIN_LINK_NOT_FOUND, MEMBER_410_JOIN_CLOSED
 
-> **미확정**: 동일인 중복 등록 처리 기준(이름+연락처 일치 시 덮어쓸지 거부할지)은 팀 확인 후 반영한다.
+**중복 등록**: 같은 명단방에 이름·전화번호가 모두 같은 부원이 있으면 409로 거부한다(덮어쓰지 않음).
+이름만 같은 건 동명이인일 수 있어 막지 않고, 전화번호를 받지 않는 명단방은 검사하지 않는다.
+운영진 직접 추가(API-024)는 검사하지 않는다.
 
 ---
 
@@ -1328,14 +1332,15 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 
 ## 7. 미확정(TBD) 항목 모음
 
-아래 19개 항목 중 **아직 정하지 않은 것은 6개**(1·3·12·15·18·19번)다. 나머지는
+아래 19개 항목 중 **아직 정하지 않은 것은 5개**(1·12·15·18·19번)다. 나머지는
 해소돼 각 항목에 결정 번호를 적어 뒀다. 번호는 한 번 붙이면 바꾸지 않는다 — 다른 문서·이슈가
 이 번호를 가리키기 때문에, 해소된 항목도 지우지 않고 "해소됨"으로 남긴다.
 구현 착수 전 미해소 항목에 들어가면 안 된다(§6에서 각 엔드포인트 자리에도 표시):
 
 1. API-004/007 `color` — 일정 색상 8종의 실제 값(영문 상수명) 미정, Figma엔 스와치만 있고 이름이 없음
 2. API-009 `operationMenuCount` 산정 기준 — 해소됨: 4개 고정(decisions #12)
-3. API-022 동일인 중복 등록 처리 기준
+3. ~~API-022 동일인 중복 등록 처리 기준~~ — **해소됨**: 같은 명단방에 이름·전화번호가 모두 같으면
+   409로 거부한다. 전화번호를 받지 않는 명단방과 운영진 직접 추가는 검사하지 않는다.
 4. ~~API-028 새 차수 생성 시 기존 참가자 자동 포함 여부~~ — **해소됨(decisions #72)**: 그 일정의
    기존 참가자 전원을 미출석 상태로 함께 포함한다.
 5. ~~API-044 선택 차수들의 계좌가 다를 때 처리 방식(API-045 정산 홈의 대표 계좌 표시도 같은

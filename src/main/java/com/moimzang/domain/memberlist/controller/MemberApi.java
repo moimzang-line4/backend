@@ -39,6 +39,8 @@ public interface MemberApi {
                      content = @Content(schema = @Schema(implementation = BaseResponse.class))),
         @ApiResponse(responseCode = "404", description = "MEMBER_404_JOIN_LINK_NOT_FOUND",
                      content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "MEMBER_409_ALREADY_REGISTERED(같은 명단방에 이름·전화번호가 같은 부원 있음)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
         @ApiResponse(responseCode = "410", description = "MEMBER_410_JOIN_CLOSED",
                      content = @Content(schema = @Schema(implementation = BaseResponse.class)))
     })
