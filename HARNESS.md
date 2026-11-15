@@ -28,12 +28,6 @@ AI 코딩 에이전트(Claude Code, Cursor, Windsurf 등)가 **스스로 빌드�
 **통과 기준**: `./gradlew build`가 0으로 종료하고(컴파일 + 테스트 전부 통과), 새로 추가/수정한
 기능에 대응하는 테스트가 실제로 존재한다. 테스트 없이 "구현 완료"로 보고하지 않는다.
 
-**알려진 선행 실패(2026-11-14 기준)**: `RoundAttendeeRepositoryImplTest.search_정렬은_createdAt_
-오름차순이고_cursor는_그_지점_이후부터_반환한다`가 플래키하게 실패한다(`created_at`이 `DATETIME`
-이라 소수점 초가 날아가는데 cursor로 넘기는 값은 나노초를 갖는다). `develop`에서도 재현되므로
-자기 변경 탓으로 오해하지 말고, 이 테스트만 실패했다면 그대로 보고한다. 이것 하나 때문에
-`./gradlew build`는 현재 실패로 끝난다 — 변경 범위의 테스트는 `--tests` 로 따로 돌려 확인한다.
-
 ## 테스트 DB
 
 Testcontainers로 MySQL을 띄운다(`spring-boot-testcontainers` + `org.testcontainers:mysql`).
