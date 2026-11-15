@@ -192,6 +192,31 @@ class MeetingRepositoryImplTest {
         return em.persistAndFlush(newCategory);
     }
 
+    @Test
+    void count_cursor와_무관하게_필터에_맞는_전체_건수를_센다() {
+        persistMeeting("1차 회의", LocalDate.of(2026, 10, 1), null, null);
+        persistMeeting("2차 회의", LocalDate.of(2026, 10, 20), null, null);
+        Meeting completed = persistMeeting("완료 회의", LocalDate.of(2026, 11, 7), null, null);
+        ReflectionTestUtils.setField(completed, "status", MeetingStatus.COMPLETED);
+        em.persistAndFlush(completed);
+
+        assertThat(meetingRepository.count(groupTerm.getId(), null, null, null, null)).isEqualTo(3);
+        assertThat(meetingRepository.count(groupTerm.getId(), MeetingStatus.COMPLETED, null, null, null))
+                .isEqualTo(1);
+        assertThat(meetingRepository.count(groupTerm.getId(), null, null, "2차", null)).isEqualTo(1);
+    }
+
+    @Test
+    void count_다른_기수의_회의는_세지_않는다() {
+        persistMeeting("우리 기수 회의", LocalDate.of(2026, 11, 7), null, null);
+        GroupTerm otherTerm = persistGroupTerm(persistClubGroup("다른 동아리"), "25기");
+        MeetingCategory otherCategory = persistCategory(otherTerm, "다른 기수 카테고리");
+        em.persistAndFlush(Meeting.create(otherTerm, null, otherCategory, "다른 기수 회의",
+                LocalDate.of(2026, 11, 7), null, null));
+
+        assertThat(meetingRepository.count(groupTerm.getId(), null, null, null, null)).isEqualTo(1);
+    }
+
     private Meeting persistMeeting(String title, LocalDate date, String listSummary, String attendees) {
         return persistMeeting(title, date, listSummary, attendees, null);
     }

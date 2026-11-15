@@ -373,6 +373,54 @@ class MeetingServiceTest {
     }
 
     @Test
+    void listMeetings_첫_페이지면_전체_회의_수를_함께_반환한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+
+        Meeting meeting = Meeting.create(groupTerm, null, category, "가을 정기공연 운영진 회의",
+                LocalDate.of(2026, 11, 7), null, null);
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+
+        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
+                .willReturn(List.of(meeting));
+        given(meetingAgendaRepository.countByMeetingIds(List.of(10L))).willReturn(Map.of());
+        given(meetingRepository.count(1L, null, null, null, null)).willReturn(4L);
+
+        MeetingListResponse response = meetingService.listMeetings(1L, null, null, null, null, null, null);
+
+        assertThat(response.getTotalCount()).isEqualTo(4L);
+    }
+
+    @Test
+    void listMeetings_cursor가_있는_다음_페이지면_totalCount를_세지_않는다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
+                .willReturn(List.of());
+
+        String cursor = CursorCodec.encode(LocalDate.of(2026, 11, 7).toString(), 10L);
+        MeetingListResponse response = meetingService.listMeetings(1L, null, null, null, null, cursor, null);
+
+        assertThat(response.getTotalCount()).isNull();
+        Mockito.verify(meetingRepository, Mockito.never()).count(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void listMeetings_필터를_준_채_조회하면_같은_필터로_totalCount를_센다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingRepository.search(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
+                .willReturn(List.of());
+        given(meetingRepository.count(1L, MeetingStatus.COMPLETED, 2L, "공연", 5L)).willReturn(7L);
+
+        MeetingListResponse response =
+                meetingService.listMeetings(1L, MeetingStatus.COMPLETED, 2L, "공연", 5L, null, null);
+
+        assertThat(response.getTotalCount()).isEqualTo(7L);
+    }
+
+    @Test
     void listLinkableAgendas_첫_페이지면_전체_후보_수를_함께_반환한다() {
         GroupTerm groupTerm = mock(GroupTerm.class);
         MeetingCategory category = mock(MeetingCategory.class);
