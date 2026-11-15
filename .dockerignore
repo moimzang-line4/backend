@@ -1,0 +1,14 @@
+.git
+.github
+.gradle
+.idea
+docs
+uploads
+plan.md
+.env
+.env.*
+src
+
+# 빌드 산출물 중 jar만 컨텍스트에 넣는다 — Dockerfile이 build/libs의 jar를 COPY한다
+build/*
+!build/libs

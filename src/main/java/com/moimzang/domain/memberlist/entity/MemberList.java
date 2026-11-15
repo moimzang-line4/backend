@@ -15,6 +15,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -29,6 +30,9 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "member_list")
 public class MemberList extends BaseEntity {
+
+    // 마감 여부는 한국 시간 기준으로 판단한다
+    private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
 
     // 명단방 ID
     @Id
@@ -72,7 +76,8 @@ public class MemberList extends BaseEntity {
     @Column(name = "collect_grade", nullable = false)
     private Boolean collectGrade;
 
-    // 명단방 상태(등록중/등록완료)
+    // 명단방 상태(등록중/등록완료). 생성 시 RECRUITING으로 저장하고 이후 갱신하지 않는다 —
+    // 실제 상태는 마감 일시와 링크 닫힘으로 정해지므로 getStatus()가 그때그때 계산해서 돌려준다
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private MemberListStatus status;
@@ -151,6 +156,12 @@ public class MemberList extends BaseEntity {
 
     public boolean collectsPhone() {
         return Boolean.TRUE.equals(collectPhone);
+    }
+
+    // 저장된 값 대신 지금 시각(한국 시간) 기준으로 계산한 상태를 돌려준다.
+    // 명단방 상태를 읽는 모든 곳(AI 비서 조회 등)이 마감 지난 명단방을 등록완료로 받게 하기 위함이다
+    public MemberListStatus getStatus() {
+        return effectiveStatus(LocalDateTime.now(SERVICE_ZONE));
     }
 
     // 링크를 닫았거나 마감일이 지났으면 더 이상 등록을 받지 않는다
