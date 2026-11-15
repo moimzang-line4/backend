@@ -1097,3 +1097,22 @@ Gemini 멀티모달로 영수증 이미지를 직접 분석하도록 구현했�
   으로 본다.
 - **이미지 MIME 타입 확인**: `ReceiptImageValidator`가 허용하는 확장자(`jpg`/`jpeg`/`png`/
   `webp`)는 전부 OpenAI 비전 입력이 지원하는 포맷이라 추가로 고칠 부분이 없었다.
+
+## 75. CORS는 환경변수로 주입하는 화이트리스트로 열고, 프록시 뒤 scheme은 forward-headers로 해결한다
+배포 후 프론트엔드가 API를 호출해야 하는데 저장소에 CORS 설정이 아예 없었다. 두 가지를 정했다
+(사용자 결정, 2026-11-15).
+
+허용 오리진은 `app.cors.allowed-origins`(`CorsProperties`)로 두고 `CORS_ALLOWED_ORIGINS`
+환경변수로 주입한다. 코드 기본값은 로컬 개발 주소(`http://localhost:3000`,
+`http://localhost:5173`)만 둔다 — 와일드카드를 기본값으로 두면 주입을 빠뜨렸을 때 전체 공개로
+열린 채 조용히 동작하므로, 반대로 프론트 호출이 막히는 쪽으로 실패하게 만든다. 프론트 배포
+주소가 정해지면 환경변수만 바꾸고 코드는 건드리지 않는다.
+
+`allowCredentials`는 켜지 않는다. 인증·쿠키를 쓰지 않는 서비스라 얻는 것이 없고, 켜는 순간
+오리진 와일드카드를 쓸 수 없게 되는 제약만 생긴다. 응답 헤더 중 `Content-Disposition`만
+`exposedHeaders`로 노출한다 — 파일 다운로드에서 프론트가 파일명을 읽어야 한다.
+
+nginx가 TLS를 종단하는 배포 구성이므로 `server.forward-headers-strategy: framework`를 켠다.
+이게 없으면 springdoc이 OpenAPI 문서의 server URL을 `http://`로 생성하고, https로 열린
+Swagger UI에서 "Try it out"이 mixed content로 차단된다. 프론트에 Swagger를 넘기는 것이
+배포의 목적이라 이 설정이 빠지면 배포 자체가 무의미해진다.
