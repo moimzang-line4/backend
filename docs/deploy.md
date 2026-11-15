@@ -8,7 +8,9 @@
  로컬
    │ git push → PR → develop 머지
    ▼
- GitHub Actions          ← 소스 체크아웃·테스트·Docker 이미지 빌드가 전부 여기서
+ GitHub Actions
+   │  test-and-build 잡: 테스트 → bootJar → jar를 아티팩트로 업로드
+   │  deploy 잡: jar를 내려받아 이미지에 COPY (Gradle을 돌리지 않아 수 초)
    │
    ├─[AWS 액세스 키]──▶ ECR            이미지 push (태그: 커밋 SHA)
    │
@@ -24,6 +26,25 @@
 
  브라우저 ─▶ api.chungs.store ─[DNS]─▶ EC2 ─▶ nginx:443 ─▶ app:8080
 ```
+
+## 이미지는 jar만 담는다
+
+`Dockerfile`은 단일 스테이지이고 **미리 빌드된 `build/libs/*-SNAPSHOT.jar`를 `COPY`만 한다.**
+이미지 안에서 Gradle을 돌리지 않는다.
+
+GitHub 러너는 매 실행마다 새로 뜨므로 Docker 레이어 캐시가 없다. 이미지 안에서 빌드하면
+배포마다 Gradle 배포판(~130MB)과 전체 의존성을 다시 받고 처음부터 컴파일해서 `docker build`
+하나가 10분 가까이 걸린다. 그래서 빌드는 `test-and-build` 잡이 하고(테스트와 같은 잡이라
+의존성 캐시를 공유한다) jar만 아티팩트로 `deploy` 잡에 넘긴다.
+
+**로컬에서 이미지를 만들려면 jar가 먼저 있어야 한다:**
+
+```bash
+./gradlew bootJar
+docker build -t moimzang-be:local .
+```
+
+`./gradlew bootJar` 없이 `docker build`만 하면 `COPY` 대상이 없어 실패한다.
 
 ## 서버에 소스가 없다
 
