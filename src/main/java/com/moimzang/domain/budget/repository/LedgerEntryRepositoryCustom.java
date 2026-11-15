@@ -18,6 +18,10 @@ public interface LedgerEntryRepositoryCustom {
     // API-069의 currentBalance·totalIncome·totalExpense가 전부 이 결과로 계산된다
     List<LedgerTypeTotal> aggregateByTypeForGroup(Long groupId);
 
+    // 같은 그룹에서 이 기수보다 먼저 생성된 기수(group_term_id가 더 작은 기수)들의 장부만 집계한다.
+    // 장부 엑셀 다운로드(API-075)의 "초기 잔액"(이 기수가 시작하기 전까지의 그룹 누적 잔액) 계산용
+    List<LedgerTypeTotal> aggregateByTypeForGroupBeforeTerm(Long groupId, Long termId);
+
     // 기수의 장부 내역을 cursor 페이지네이션으로 조회한다(API-069, 정렬: entryDate desc, id desc)
     List<LedgerEntry> search(Long groupTermId, LedgerType type, LocalDate cursorEntryDate, Long cursorId, int limit);
 

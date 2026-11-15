@@ -35,6 +35,12 @@ public class LedgerEntryRepositoryImpl implements LedgerEntryRepositoryCustom {
         return aggregateByTypeWhere(ledgerEntry.groupTerm.group.id.eq(groupId));
     }
 
+    @Override
+    public List<LedgerTypeTotal> aggregateByTypeForGroupBeforeTerm(Long groupId, Long termId) {
+        return aggregateByTypeWhere(ledgerEntry.groupTerm.group.id.eq(groupId)
+                .and(ledgerEntry.groupTerm.id.lt(termId)));
+    }
+
     // 수입만 있고 지출이 없는 기수(또는 그룹)처럼 한쪽 유형이 없으면 group by 결과에 행 자체가
     // 없다 — 호출하는 쪽에서 0으로 채운다
     private List<LedgerTypeTotal> aggregateByTypeWhere(BooleanExpression condition) {
