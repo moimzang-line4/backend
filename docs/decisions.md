@@ -1060,3 +1060,40 @@ Gemini 멀티모달로 영수증 이미지를 직접 분석하도록 구현했�
 조용히 처리하면 입금 상태가 의도치 않게 바뀔 수 있어, attendance의 #30과 같은 이유로 문서 누락으로
 간주한다(사용자 결정, 2026-11-15) — `PaymentConfirmRequest.paid`를 `@NotNull Boolean`으로
 검증하고, 누락 시 COMMON_400을 반환하도록 구현한다.
+
+## 74. API-036(영수증 AI 인식)의 고정 벤더를 Gemini에서 OpenAI로 바꾼다 — decisions #69를 갱신한다
+#69가 정한 "영수증 인식은 `app.ai.provider`와 무관하게 Gemini로 고정"이라는 결정을 OpenAI 고정으로
+바꾼다(사용자 결정, 2026-11-15). 요청·응답 형식(API-036 자체의 계약)과 502 판단 기준은 그대로다.
+
+- **구현체 교체**: `global/ai/gemini/GeminiReceiptOcrClient`·`GeminiReceiptOcrClientTest`를
+  삭제하고 `domain/settlement/service/OpenAiReceiptOcrClient`(`ReceiptOcrClient` 구현체)를
+  새로 뒀다. `SettlementService`는 인터페이스(`ReceiptOcrClient`)만 의존하므로 교체 영향이
+  없다. `global/ai/AiClient`·`GeminiClient`·`GeminiProperties`·`OpenAiClient`·
+  `OpenAiProperties`·`MeetingService`(meeting 담당, #69와 같은 이유)는 손대지 않았다 — OCR
+  전용 모델을 meeting의 `app.ai.openai.model`과 분리해야 해서, `apiKey`만 기존
+  `OpenAiProperties`에서 읽어 재사용하고 model/base-url/timeout은
+  `domain/settlement/service/ReceiptOcrOpenAiProperties`(`app.ocr.openai.*`)로 settlement
+  쪽에 새로 둔다. Gemini용 `GeminiClient`/`GeminiProperties`(meeting이 쓰는 `AiClient` 구현)와
+  그 설정(`app.ai.gemini.*`, `GEMINI_*`)은 OCR 전용 키가 아니었으므로 그대로 둔다 — 제거 대상
+  자체가 없었다.
+- **호출 방식·모델 설정**: Gemini 때와 동일하게 SDK 없이 `RestClient`를 직접 써서 Chat
+  Completions(`/v1/chat/completions`)를 호출한다(기존 `OpenAiClient` 패턴 재사용, 새 의존성
+  추가 없음). 이미지는 `recognize()` 시점엔 아직 저장 전이라(#69 "저장 순서") URL을 줄 수 없어
+  base64 `data:` URL로 인라인 전송한다. 모델 기본값은 `gpt-4o-mini`(비전 입력 지원, 저비용).
+  사용자 결정으로 새 환경변수를 늘리지 않기로 해서 `app.ocr.openai.model`/`base-url`/
+  `connect-timeout-ms`/`read-timeout-ms`는 `application.yml`에 리터럴 값으로만 두고(환경변수
+  바인딩 없음), 바꾸려면 그 파일을 직접 고친다. API 키만 기존 `OPENAI_API_KEY`(`.env`)를
+  그대로 재사용해 새 환경변수를 만들지 않았다.
+- **JSON 강제 방식**: Gemini의 `responseSchema` 강제를 OpenAI Structured Outputs
+  (`response_format: json_schema`, `strict: true`)로 대체했다. `storeName`/`transactedAt`은
+  `["string","null"]`, `totalAmount`는 `["integer","null"]` 타입으로 열어 세 필드 모두
+  `required`에 넣고 `additionalProperties: false`로 막는다 — Gemini의 nullable 스키마와
+  동등한 강제력이다.
+- **502 판단 기준은 #69 그대로 유지한다**: 호출 자체 실패(네트워크·타임아웃·HTTP 오류·키
+  미설정)와 응답 파싱 실패만 `RECEIPT_502_RECOGNITION_FAILED`다. OpenAI 응답에서
+  `refusal`이 채워졌거나 `content`가 비었거나 `choices[0].finish_reason`이 `stop`이
+  아니면(길이 제한 등으로 JSON이 끊겼을 수 있어서) 파싱 실패로 간주해 502로 묶는다 — 새
+  ErrorCode를 추가하지 않았다. 세 필드가 전부 null인 것 자체는 #69와 동일하게 인식 성공(200)
+  으로 본다.
+- **이미지 MIME 타입 확인**: `ReceiptImageValidator`가 허용하는 확장자(`jpg`/`jpeg`/`png`/
+  `webp`)는 전부 OpenAI 비전 입력이 지원하는 포맷이라 추가로 고칠 부분이 없었다.

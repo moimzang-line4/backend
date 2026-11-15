@@ -53,6 +53,16 @@ app:
       connect-timeout-ms: ${OPENAI_CONNECT_TIMEOUT_MS:10000}
       read-timeout-ms: ${OPENAI_READ_TIMEOUT_MS:30000}
 
+  # 영수증 인식(API-036) 전용 OpenAI 호출 설정 — api-key는 위 app.ai.openai 걸 그대로 쓰고
+  # model만 분리한다(meeting이 쓰는 app.ai.openai.model과 독립적으로 바꿀 수 있어야 해서).
+  # 새 환경변수를 늘리지 않기로 해서(사용자 결정) 값은 리터럴로 두고, 바꾸려면 이 파일을 고친다
+  ocr:
+    openai:
+      model: gpt-4o-mini
+      base-url: https://api.openai.com
+      connect-timeout-ms: 10000
+      read-timeout-ms: 30000
+
   storage:
     # local | s3 — 배포 시 환경변수만 바꿔서 전환
     type: ${STORAGE_TYPE:local}
