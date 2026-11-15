@@ -32,6 +32,17 @@ public class MeetingRepositoryImpl implements MeetingRepositoryCustom {
                 .fetch();
     }
 
+    // search와 같은 필터를 쓰되 cursor·정렬·limit만 빼고 건수를 센다
+    @Override
+    public long count(Long groupTermId, MeetingStatus status, Long categoryId, String keyword, Long scheduleId) {
+        Long count = queryFactory.select(meeting.count())
+                .from(meeting)
+                .where(baseConditions(groupTermId, status, categoryId, keyword, scheduleId))
+                .fetchOne();
+
+        return count == null ? 0 : count;
+    }
+
     // 일정 상세 화면의 회의록 카드와 같은 집합이다. 카테고리명을 함께 쓰므로 fetch join한다
     @Override
     public List<Meeting> findByScheduleForAssistant(Long scheduleId) {

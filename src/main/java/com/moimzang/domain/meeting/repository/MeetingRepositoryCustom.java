@@ -12,6 +12,9 @@ public interface MeetingRepositoryCustom {
     List<Meeting> search(Long groupTermId, MeetingStatus status, Long categoryId, String keyword,
                           Long scheduleId, LocalDate cursorMeetingDate, Long cursorId, int limit);
 
+    // 목록 totalCount용 — cursor 조건 없이 "현재 필터에 맞는 전체 건수"만 센다
+    long count(Long groupTermId, MeetingStatus status, Long categoryId, String keyword, Long scheduleId);
+
     // 일정에 속한 회의록을 전부 조회한다(AI 비서 조회용, 읽기 전용)
     List<Meeting> findByScheduleForAssistant(Long scheduleId);
 

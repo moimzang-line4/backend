@@ -174,12 +174,18 @@ public class MeetingService {
 
         String nextCursor = hasNext ? buildCursor(page.get(page.size() - 1)) : null;
 
+        // 첫 페이지(cursor 없음)에서만 count 쿼리를 날린다 — 스크롤마다 다시 세지 않는다
+        Long totalCount = cursor == null
+                ? meetingRepository.count(termId, status, categoryId, keyword, scheduleId)
+                : null;
+
         log.info("[회의 목록 조회] 조회를 완료했습니다. termId = {}, count = {}, hasNext = {}",
                 termId, summaries.size(), hasNext);
 
         return MeetingListResponse.builder()
                 .meetings(summaries)
                 .nextCursor(nextCursor)
+                .totalCount(totalCount)
                 .build();
     }
 

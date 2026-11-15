@@ -36,7 +36,9 @@ public interface ChatApi {
 
     @Operation(summary = "AI 대화방 목록 조회",
                description = "기수의 대화 기록을 최근 활동 순으로 cursor 페이지네이션 조회한다. "
-                           + "로그인이 없어 그 기수 운영진 전체가 공유한다.")
+                           + "로그인이 없어 그 기수 운영진 전체가 공유한다. "
+                           + "keyword를 주면 제목이 일치하는 대화방만 내려주며, 아직 첫 질문을 "
+                           + "보내지 않아 제목이 없는 대화방은 검색 결과에서 빠진다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공"),
         @ApiResponse(responseCode = "400", description = "CHAT_400_INVALID_CURSOR",
@@ -46,6 +48,8 @@ public interface ChatApi {
     })
     ResponseEntity<BaseResponse<ChatRoomListResponse>> listChatRooms(
             @Parameter(description = "기수 ID", example = "1") Long termId,
+            @Parameter(description = "대화방 제목 검색어(선택). 부분 일치, 대소문자 무시",
+                       example = "미입금") String keyword,
             @Parameter(description = "이전 응답의 nextCursor. 생략하면 첫 페이지",
                        example = "MjAyNi0xMS0xM1QyMTowMTowMA.8") String cursor,
             @Parameter(description = "페이지 크기(기본 20, 최대 100)", example = "20") Integer size);

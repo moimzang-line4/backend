@@ -41,10 +41,11 @@ public class ChatController implements ChatApi {
     @GetMapping("/api/terms/{termId}/ai/chat-rooms")
     public ResponseEntity<BaseResponse<ChatRoomListResponse>> listChatRooms(
             @PathVariable Long termId,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer size
     ) {
-        ChatRoomListResponse response = chatService.listChatRooms(termId, cursor, size);
+        ChatRoomListResponse response = chatService.listChatRooms(termId, keyword, cursor, size);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 

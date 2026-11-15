@@ -261,6 +261,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 ### 회의 / 안건 (MeetingErrorCode, AgendaErrorCode) — API-051~061, 056~058, 081~083
 | 코드 | HTTP | 메시지 | 발생 API |
 |---|---|---|---|
+| MEETING_400_INVALID_CURSOR | 400 | cursor 형식이 올바르지 않습니다. | API-052, API-083 |
 | MEETING_409_ALREADY_ENDED | 409 | 이미 종료된 회의입니다. | API-054, API-056, API-057, API-058, API-059 |
 | MEETING_502_SUMMARY_FAILED | 502 | AI 요약에 실패했습니다. 다시 시도해 주세요. | API-060 |
 | MEETING_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 회의 카테고리입니다. | API-051 |
@@ -498,7 +499,7 @@ totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지�
 cursor 페이지네이션(정렬 기준: 회의 ID 내림차순 + 안건 ID 오름차순 — 최근 회의가 먼저 오고 한 회의
 안에서는 "안건1 → 안건2" 순서가 유지된다).
 
-**에러**: COMMON_400(잘못된 cursor), MEETING_404_GROUP_TERM_NOT_FOUND
+**에러**: MEETING_400_INVALID_CURSOR(잘못된 cursor), MEETING_404_GROUP_TERM_NOT_FOUND(기수 없음)
 
 ### 운영 공간
 
@@ -993,7 +994,9 @@ MEETING_404_SCHEDULE_NOT_FOUND(일정 없음)
 cursor(선택), size(선택, 기본 20)
 
 **Response data**: meetings[].meetingId/title/meetingDate/categoryName/
-listSummary/status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt, nextCursor
+listSummary/status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt, nextCursor,
+totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-064와 같은 패턴.
+목록 상단의 "회의 목록 N개" 표시용, `docs/decisions.md` #19)
 
 cursor 페이지네이션(정렬 기준: meetingDate 내림차순 — 최근 회의가 먼저).
 
@@ -1001,7 +1004,7 @@ cursor 페이지네이션(정렬 기준: meetingDate 내림차순 — 최근 회
 섹션에서 회의록 카드를 그릴 때 쓴다(같은 섹션의 개별 연결 안건은 API-015). 주지 않으면 일정 소속
 여부와 무관하게 전부 포함한다(decisions #44).
 
-**에러**: COMMON_400(잘못된 cursor)
+**에러**: MEETING_400_INVALID_CURSOR(잘못된 cursor), MEETING_404_GROUP_TERM_NOT_FOUND(기수 없음)
 
 ---
 
@@ -1291,13 +1294,20 @@ cursor 페이지네이션(정렬 기준: entryDate 내림차순, 동일 시 id �
 #### API-077 · GET /api/terms/{termId}/ai/chat-rooms · AI 대화방 목록 조회
 인증: 불필요. 기수 단위(로그인이 없어 그 기수 운영진 전체가 공유).
 
-**Query**: cursor(선택), size(선택, 기본 20)
+**Query**: keyword(선택), cursor(선택), size(선택, 기본 20)
 
-**Response data**: chatRooms[].chatRoomId/title/updatedAt, nextCursor
+**Response data**: chatRooms[].chatRoomId/title/updatedAt, nextCursor,
+totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-064와 같은 패턴.
+대화 기록 시트 상단의 "총 N개" 표시용, `docs/decisions.md` #19)
 
 cursor 페이지네이션(정렬 기준: updatedAt 내림차순 — 최근 대화한 방이 먼저).
 
-**에러**: COMMON_400(잘못된 cursor)
+**Logics**: `keyword`는 대화방 **제목**에만 건다(부분 일치, 대소문자 무시). 대화방을 만들고 아직
+첫 질문을 보내지 않으면 제목이 null이라, 그런 방은 `keyword`를 준 검색 결과에서 빠진다 —
+첫 질문을 보내는 순간 제목이 채워지므로(실패해도 질문 원문으로 폴백) 실제로 사라지는 건
+"아직 아무것도 묻지 않은 빈 방"뿐이다.
+
+**에러**: CHAT_400_INVALID_CURSOR(잘못된 cursor), CHAT_404_GROUP_TERM_NOT_FOUND(기수 없음)
 
 ---
 
@@ -1313,10 +1323,10 @@ navigation, cardType, card(결과 카드 — 예: 미입금자 조회)
 | navigation.type | string | SETTLEMENT / ATTENDANCE / NOTE / SCHEDULE / MEETING / FILE / BUDGET |
 | navigation.targetId | number | SETTLEMENT·ATTENDANCE·NOTE·SCHEDULE은 일정 ID, MEETING은 회의 ID, 기수 단위 화면인 FILE·BUDGET은 null |
 
-**에러**: COMMON_400(내용 없음), COMMON_404
+**에러**: COMMON_400(내용 없음), CHAT_404_NOT_FOUND(없는 대화방), CHAT_502_AI_FAILED(AI 호출 실패)
 
-> **미확정**: 미입금자 조회 외 다른 카드 유형(공지 작성·일정 조회 등)의 `card` 포맷은 구현 시점에
-> 화면이 나오는 대로 정한다.
+카드는 미입금자 조회 하나만 만든다 — 공지 작성·일정 조회 같은 나머지 의도는 카드 없이 텍스트로만
+답한다. 포맷이 확정된 카드가 그것뿐이기 때문이다(decisions #33, §7 13번).
 
 ---
 
@@ -1327,7 +1337,7 @@ navigation, cardType, card(결과 카드 — 예: 미입금자 조회)
 
 cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순서대로).
 
-**에러**: COMMON_404, COMMON_400(잘못된 cursor)
+**에러**: CHAT_404_NOT_FOUND(없는 대화방), CHAT_400_INVALID_CURSOR(잘못된 cursor)
 
 `navigation`은 API-078과 같은 형식이다. 대화를 다시 열어도 "…로 이동 →" 버튼이 보여야 하므로
 메시지에 함께 저장해 두고 목록에서도 그대로 내려준다.
