@@ -67,12 +67,16 @@ public class File extends BaseEntity {
     @Column(name = "storage_key", nullable = false, length = 500)
     private String storageKey;
 
+    // 썸네일 객체 키(활동사진 그리드용). 이미지가 아니거나 생성에 실패하면 null이다
+    @Column(name = "thumbnail_key", length = 500)
+    private String thumbnailKey;
+
     // 소프트 삭제 일시(되돌리기 지원)
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
     public static File upload(GroupTerm groupTerm, Schedule schedule, String name, String extension,
-                               long size, FileCategory category, String storageKey) {
+                               long size, FileCategory category, String storageKey, String thumbnailKey) {
         return File.builder()
                 .groupTerm(groupTerm)
                 .schedule(schedule)
@@ -81,6 +85,7 @@ public class File extends BaseEntity {
                 .size(size)
                 .category(category)
                 .storageKey(storageKey)
+                .thumbnailKey(thumbnailKey)
                 .build();
     }
 
