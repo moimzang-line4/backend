@@ -5,9 +5,10 @@ on:
     branches:
       - develop
       - main
+  # develop push은 제외한다 — deploy.yml의 test-and-build 잡이 같은 테스트를 이미 돌리므로
+  # 같은 커밋에서 두 번 실행되는 걸 막는다. main은 배포 트리거가 없어 여기서 검증한다
   push:
     branches:
-      - develop
       - main
 
 permissions:
