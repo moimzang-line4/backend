@@ -35,6 +35,7 @@ public class LedgerExportService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final LedgerExportExcelGenerator excelGenerator;
     private final LedgerExportKeyGenerator keyGenerator;
+    private final LedgerExportReceiptCollector receiptCollector;
     private final FileStorage fileStorage;
 
     public LedgerExportResponse export(Long termId) {
@@ -46,14 +47,17 @@ public class LedgerExportService {
                     return new CustomException(CommonErrorCode.NOT_FOUND);
                 });
 
-        // 행은 이 기수 내역만(API-069의 entries와 같은 범위), 요약은 그룹 전체 누적(API-069의
-        // currentBalance·totalIncome·totalExpense와 같은 집계, decisions #68)
+        // 행은 이 기수 내역만(API-069의 entries와 같은 범위). 초기 잔액은 같은 그룹에서 이 기수보다
+        // 먼저 생성된 기수들의 누적 잔액이고(decisions #76), 누적 수입·누적 지출·현재 잔액·행별
+        // 잔액은 전부 LedgerSheetWriter가 엑셀 수식으로 채운다 — 여기서 미리 더하지 않는다
         List<LedgerEntry> entries = ledgerEntryRepository.findAllForExport(termId);
-        List<LedgerTypeTotal> groupTotals = ledgerEntryRepository.aggregateByTypeForGroup(groupTerm.getGroup().getId());
-        long totalIncome = totalFor(groupTotals, LedgerType.INCOME);
-        long totalExpense = totalFor(groupTotals, LedgerType.EXPENSE);
+        List<LedgerTypeTotal> beforeTermTotals =
+                ledgerEntryRepository.aggregateByTypeForGroupBeforeTerm(groupTerm.getGroup().getId(), termId);
+        long initialBalance = totalFor(beforeTermTotals, LedgerType.INCOME) - totalFor(beforeTermTotals, LedgerType.EXPENSE);
 
-        byte[] excelBytes = excelGenerator.generate(totalIncome, totalExpense, totalIncome - totalExpense, entries);
+        ReceiptLinkingResult receiptLinking = receiptCollector.collect(entries);
+
+        byte[] excelBytes = excelGenerator.generate(groupTerm, initialBalance, entries, receiptLinking);
 
         String key = keyGenerator.generate();
         fileStorage.store(key, new ByteArrayInputStream(excelBytes), excelBytes.length, XLSX_CONTENT_TYPE);
