@@ -13,7 +13,7 @@ AI 코딩 에이전트(Claude Code, Cursor, Windsurf 등)가 **스스로 빌드�
   버전에 의존하지 않는다
 - 로컬 실행 전 `.env.example`을 `.env`로 복사해 `DB_USERNAME`/`DB_PASSWORD`를 채우고, MySQL에
   `moimzang` 데이터베이스(`utf8mb4`)를 미리 만들어 둔다. 테이블은 `./gradlew bootRun` 시 Flyway가
-  `src/main/resources/db/migration/`의 마이그레이션(V1~V4)을 순서대로 적용해 만든다
+  `src/main/resources/db/migration/`의 마이그레이션을 순서대로 전부 적용해 만든다
 
 ## 빌드 · 테스트
 
