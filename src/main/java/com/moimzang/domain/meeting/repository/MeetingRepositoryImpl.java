@@ -89,13 +89,12 @@ public class MeetingRepositoryImpl implements MeetingRepositoryCustom {
         return categoryId == null ? null : meeting.meetingCategory.id.eq(categoryId);
     }
 
-    // keyword 검색 조건을 만든다. 제목·목록 요약·참석자 중 하나라도 일치하면 노출한다
+    // keyword 검색 조건을 만든다. 제목·참석자 중 하나라도 일치하면 노출한다
     private BooleanExpression keywordContains(String keyword) {
         if (!StringUtils.hasText(keyword)) {
             return null;
         }
         return meeting.title.containsIgnoreCase(keyword)
-                .or(meeting.listSummary.containsIgnoreCase(keyword))
                 .or(meeting.attendees.containsIgnoreCase(keyword));
     }
 

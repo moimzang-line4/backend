@@ -82,13 +82,9 @@ public class Meeting extends BaseEntity {
     @Column(name = "ended_at")
     private LocalDateTime endedAt;
 
-    // 회의 목록 카드에 표시되는 한 줄 설명
-    @Column(name = "list_summary", length = 100)
-    private String listSummary;
-
     // 생성 직후에는 안건을 논의하지 않은 상태이므로 항상 진행중으로 시작한다
     public static Meeting create(GroupTerm groupTerm, Schedule schedule, MeetingCategory meetingCategory,
-                                  String title, LocalDate meetingDate, String attendees, String listSummary) {
+                                  String title, LocalDate meetingDate, String attendees) {
         return Meeting.builder()
                 .groupTerm(groupTerm)
                 .schedule(schedule)
@@ -96,14 +92,13 @@ public class Meeting extends BaseEntity {
                 .title(title)
                 .meetingDate(meetingDate)
                 .attendees(attendees)
-                .listSummary(listSummary)
                 .status(MeetingStatus.IN_PROGRESS)
                 .build();
     }
 
     // 회의 정보를 부분 수정한다 — 인자가 null인 필드는 바꾸지 않는다
     public void updateInfo(MeetingCategory meetingCategory, String title, LocalDate meetingDate,
-                           String attendees, String listSummary) {
+                           String attendees) {
         if (meetingCategory != null) {
             this.meetingCategory = meetingCategory;
         }
@@ -115,9 +110,6 @@ public class Meeting extends BaseEntity {
         }
         if (attendees != null) {
             this.attendees = attendees;
-        }
-        if (listSummary != null) {
-            this.listSummary = listSummary;
         }
     }
 
