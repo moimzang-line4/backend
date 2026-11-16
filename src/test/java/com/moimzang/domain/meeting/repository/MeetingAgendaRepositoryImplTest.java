@@ -137,6 +137,20 @@ class MeetingAgendaRepositoryImplTest {
         assertThat(result).extracting(MeetingAgenda::getId).containsExactly(target.getId());
     }
 
+    // 안건 내용은 여러 줄이 정상이라 저장할 때도 검색할 때도 펴지 않는다(decisions #84).
+    // 누군가 다른 조건 빌더에 맞춰 contentContains에 정규화를 넣으면 이 테스트가 깨진다
+    @Test
+    void searchLinkable_안건_내용의_줄바꿈은_펴지_않으므로_그대로_검색된다() {
+        Meeting meeting = persistMeeting("회의");
+        MeetingAgenda target = em.persistAndFlush(
+                MeetingAgenda.create(meeting, "관객 참여 이벤트\n세부 기획", 0));
+
+        List<MeetingAgenda> result = meetingAgendaRepository.searchLinkable(
+                groupTerm.getId(), "이벤트\n세부", null, null, 10);
+
+        assertThat(result).extracting(MeetingAgenda::getId).containsExactly(target.getId());
+    }
+
     @Test
     void searchLinkable_최근_회의부터_같은_회의_안에서는_안건_순서대로_반환한다() {
         Meeting older = persistMeeting("이전 회의");

@@ -146,6 +146,27 @@ class MeetingRepositoryImplTest {
     }
 
     @Test
+    void search_검색어의_연속_공백도_접어서_저장값과_맞춘다() {
+        // 저장값은 한 칸으로 접히므로(decisions #84) 검색어만 안 접으면 0건이 된다
+        Meeting target = persistMeeting("가을 정기공연 운영진 회의", LocalDate.of(2026, 11, 7), null);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, null, "가을  정기공연   운영진 회의", null, null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(target.getId());
+    }
+
+    @Test
+    void search_검색어의_앞뒤_공백은_무시한다() {
+        Meeting target = persistMeeting("가을 정기공연", LocalDate.of(2026, 11, 7), null);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, null, "  가을 정기공연  ", null, null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(target.getId());
+    }
+
+    @Test
     void search_scheduleId를_주면_그_일정에_속한_회의만_반환한다() {
         Schedule schedule = persistSchedule("가을 정기공연");
         Meeting owned = persistMeeting("일정에서 만든 회의", LocalDate.of(2026, 11, 7), null, schedule);
