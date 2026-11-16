@@ -63,7 +63,6 @@ public class MeetingDetailTool implements ChatTool {
                 meeting.getMeetingCategory() == null ? null : meeting.getMeetingCategory().getName(),
                 meeting.getStatus().name(),
                 meeting.getAttendees(),
-                meeting.getListSummary(),
                 meeting.getSummaryContent(),
                 agendas.size(),
                 (int) doneCount,
@@ -71,7 +70,7 @@ public class MeetingDetailTool implements ChatTool {
     }
 
     private record Result(Long meetingId, String title, String meetingDate, String categoryName, String status,
-                          String attendees, String listSummary, String aiSummary,
+                          String attendees, String aiSummary,
                           int agendaCount, int doneAgendaCount, List<Row> agendas) {}
 
     private record Row(Long agendaId, int orderNo, String content, String discussionNote, String decision,
