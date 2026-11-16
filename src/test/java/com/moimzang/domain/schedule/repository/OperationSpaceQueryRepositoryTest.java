@@ -149,7 +149,7 @@ class OperationSpaceQueryRepositoryTest {
     }
 
     private Meeting persistMeeting(String title, LocalDate date, MeetingStatus status) {
-        Meeting meeting = Meeting.create(groupTerm, null, category, title, date, null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, category, title, date, null);
         ReflectionTestUtils.setField(meeting, "status", status);
         return em.persist(meeting);
     }

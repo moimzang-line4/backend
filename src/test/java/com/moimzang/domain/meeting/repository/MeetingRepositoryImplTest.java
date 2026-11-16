@@ -85,7 +85,7 @@ class MeetingRepositoryImplTest {
     void search_categoryId로_필터링하면_해당_카테고리의_회의만_반환한다() {
         MeetingCategory otherCategory = persistCategory(groupTerm, "홍보팀 회의");
         Meeting target = persistMeeting("운영진 회의", LocalDate.of(2026, 11, 7), null, null);
-        Meeting other = Meeting.create(groupTerm, null, otherCategory, "홍보팀 회의", LocalDate.of(2026, 11, 6), null, null);
+        Meeting other = Meeting.create(groupTerm, null, otherCategory, "홍보팀 회의", LocalDate.of(2026, 11, 6), null);
         em.persistAndFlush(other);
 
         List<Meeting> result = meetingRepository.search(
@@ -95,17 +95,16 @@ class MeetingRepositoryImplTest {
     }
 
     @Test
-    void search_keyword가_title_listSummary_attendees_중_하나라도_일치하면_반환한다() {
-        Meeting byTitle = persistMeeting("정기 운영진 회의", LocalDate.of(2026, 11, 7), null, null);
-        Meeting byListSummary = persistMeeting("1차 회의", LocalDate.of(2026, 11, 6), "운영진 일정 조율", null);
-        Meeting byAttendees = persistMeeting("2차 회의", LocalDate.of(2026, 11, 5), null, "운영진 전원");
-        Meeting notMatched = persistMeeting("무관한 회의", LocalDate.of(2026, 11, 4), "행사 준비", "홍보팀");
+    void search_keyword가_title_attendees_중_하나라도_일치하면_반환한다() {
+        Meeting byTitle = persistMeeting("정기 운영진 회의", LocalDate.of(2026, 11, 7), null);
+        Meeting byAttendees = persistMeeting("2차 회의", LocalDate.of(2026, 11, 5), "운영진 전원");
+        Meeting notMatched = persistMeeting("무관한 회의", LocalDate.of(2026, 11, 4), "홍보팀");
 
         List<Meeting> result = meetingRepository.search(
                 groupTerm.getId(), null, null, "운영진", null, null, null, 10);
 
         assertThat(result).extracting(Meeting::getId)
-                .containsExactlyInAnyOrder(byTitle.getId(), byListSummary.getId(), byAttendees.getId())
+                .containsExactlyInAnyOrder(byTitle.getId(), byAttendees.getId())
                 .doesNotContain(notMatched.getId());
     }
 
@@ -137,7 +136,7 @@ class MeetingRepositoryImplTest {
     @Test
     void search_scheduleId를_주면_그_일정에_속한_회의만_반환한다() {
         Schedule schedule = persistSchedule("가을 정기공연");
-        Meeting owned = persistMeeting("일정에서 만든 회의", LocalDate.of(2026, 11, 7), null, null, schedule);
+        Meeting owned = persistMeeting("일정에서 만든 회의", LocalDate.of(2026, 11, 7), null, schedule);
         persistMeeting("일정과 무관한 회의", LocalDate.of(2026, 11, 8), null, null);
 
         List<Meeting> result = meetingRepository.search(
@@ -149,7 +148,7 @@ class MeetingRepositoryImplTest {
     @Test
     void search_scheduleId가_없으면_일정_소속_회의도_함께_반환한다() {
         Schedule schedule = persistSchedule("가을 정기공연");
-        Meeting owned = persistMeeting("일정에서 만든 회의", LocalDate.of(2026, 11, 7), null, null, schedule);
+        Meeting owned = persistMeeting("일정에서 만든 회의", LocalDate.of(2026, 11, 7), null, schedule);
         Meeting free = persistMeeting("일정과 무관한 회의", LocalDate.of(2026, 11, 8), null, null);
 
         List<Meeting> result = meetingRepository.search(
@@ -162,9 +161,9 @@ class MeetingRepositoryImplTest {
     void findByScheduleForAssistant_그_일정에_속한_회의만_최근_순서로_반환한다() {
         Schedule schedule = persistSchedule("가을 정기공연");
         Schedule other = persistSchedule("MT");
-        Meeting older = persistMeeting("1차 회의", LocalDate.of(2026, 10, 1), null, null, schedule);
-        Meeting newer = persistMeeting("2차 회의", LocalDate.of(2026, 11, 7), null, null, schedule);
-        persistMeeting("MT 회의", LocalDate.of(2026, 11, 8), null, null, other);
+        Meeting older = persistMeeting("1차 회의", LocalDate.of(2026, 10, 1), null, schedule);
+        Meeting newer = persistMeeting("2차 회의", LocalDate.of(2026, 11, 7), null, schedule);
+        persistMeeting("MT 회의", LocalDate.of(2026, 11, 8), null, other);
         persistMeeting("일정과 무관한 회의", LocalDate.of(2026, 11, 9), null, null);
 
         List<Meeting> result = meetingRepository.findByScheduleForAssistant(schedule.getId());
@@ -212,18 +211,17 @@ class MeetingRepositoryImplTest {
         GroupTerm otherTerm = persistGroupTerm(persistClubGroup("다른 동아리"), "25기");
         MeetingCategory otherCategory = persistCategory(otherTerm, "다른 기수 카테고리");
         em.persistAndFlush(Meeting.create(otherTerm, null, otherCategory, "다른 기수 회의",
-                LocalDate.of(2026, 11, 7), null, null));
+                LocalDate.of(2026, 11, 7), null));
 
         assertThat(meetingRepository.count(groupTerm.getId(), null, null, null, null)).isEqualTo(1);
     }
 
-    private Meeting persistMeeting(String title, LocalDate date, String listSummary, String attendees) {
-        return persistMeeting(title, date, listSummary, attendees, null);
+    private Meeting persistMeeting(String title, LocalDate date, String attendees) {
+        return persistMeeting(title, date, attendees, null);
     }
 
-    private Meeting persistMeeting(String title, LocalDate date, String listSummary, String attendees,
-                                   Schedule schedule) {
-        Meeting meeting = Meeting.create(groupTerm, schedule, category, title, date, attendees, listSummary);
+    private Meeting persistMeeting(String title, LocalDate date, String attendees, Schedule schedule) {
+        Meeting meeting = Meeting.create(groupTerm, schedule, category, title, date, attendees);
         return em.persistAndFlush(meeting);
     }
 
