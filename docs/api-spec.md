@@ -1361,21 +1361,68 @@ cursor 페이지네이션(정렬 기준: updatedAt 내림차순 — 최근 대�
 ---
 
 #### API-078 · POST /api/ai/chat-rooms/{chatRoomId}/messages · AI 메시지 전송
-인증: 불필요. **Request**: content. **Response data**: messageId, role(USER|ASSISTANT), content,
-navigation, cardType, card(결과 카드 — 예: 미입금자 조회)
+인증: 불필요. **Request**: content. **Response data**: messageId, role, content, navigation,
+cardType, card, createdAt
 
-`navigation`은 답변 아래 "…로 이동 →" 버튼이 가리킬 화면이다. 이동할 곳이 없으면 null.
-경로(URL)는 내려주지 않고 화면 종류와 대상 ID만 준다(decisions #34).
+AI가 자유롭게 쓰는 건 `content` 하나뿐이다. `navigation`·`cardType`·`card`는 모델이 고르지 않고
+백엔드가 "어떤 도구가 실행됐는지"로 정하므로, FE가 받을 수 있는 값의 범위가 아래 표로 닫혀 있다.
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
+| messageId | number | 저장된 AI 답변 메시지 ID |
+| role | string | 항상 ASSISTANT — 보낸 질문이 아니라 AI 답변만 돌려준다 |
+| content | string | 답변 텍스트. 형식을 강제하지 않는다(구조화된 값은 navigation·card로 내려간다) |
+| navigation | object | 답변 아래 "…로 이동 →" 버튼. 이동할 곳이 없으면 null |
 | navigation.type | string | SETTLEMENT / ATTENDANCE / NOTE / SCHEDULE / MEETING / FILE / BUDGET |
 | navigation.targetId | number | SETTLEMENT·ATTENDANCE·NOTE·SCHEDULE은 일정 ID, MEETING은 회의 ID, 기수 단위 화면인 FILE·BUDGET은 null |
+| cardType | string | 결과 카드 유형. 현재 "미입금자 조회" 하나뿐이고, 카드가 없으면 null |
+| card | object | 카드 상세. cardType별 스키마는 아래 참고. 카드가 없으면 null |
+| createdAt | string | 답변 생성 시각 |
 
-**에러**: COMMON_400(내용 없음), CHAT_404_NOT_FOUND(없는 대화방), CHAT_502_AI_FAILED(AI 호출 실패)
+`navigation`은 경로(URL)를 내려주지 않고 화면 종류와 대상 ID만 준다(decisions #40).
+다음 세 경우에 null이다 — ① 화면을 가리키는 도구가 실행되지 않았을 때(일정·회의 검색만 돌았거나
+어느 일정인지 되묻는 답변일 때), ② 같은 도구가 서로 다른 대상으로 두 번 이상 실행돼 어느 일정·회의로
+보낼지 정할 수 없을 때, ③ 대상 ID가 필요한 화면인데 도구 인자에 그 ID가 없을 때(예: 일정을 고르지
+않은 메모 검색).
+
+**cardType이 "미입금자 조회"일 때 `card` 스키마**
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| title | string | 카드 제목(예: "가을공연·미입금") |
+| totalAmount | number | 미입금 총액(대상자별 미납 금액의 합) |
+| count | number | 미입금 인원 |
+| items[].attendeeId | number | 참가자 ID. 카드의 '입금 확인' 버튼이 API-040 호출에 쓴다 |
+| items[].name | string | 이름 |
+| items[].affiliation | string | 학과·소속 |
+| items[].phoneLast4 | string | 전화번호 뒤 4자리 |
+| items[].amount | number | 아직 내지 않은 금액(이미 납부한 차수는 제외한 미납분) |
+
+```json
+{
+  "success": true, "code": "COMMON_200", "message": "요청에 성공했습니다.",
+  "data": {
+    "messageId": 201,
+    "role": "ASSISTANT",
+    "content": "가을공연 미입금자는 2명이고, 아직 100,000원이 남았어요.",
+    "navigation": { "type": "SETTLEMENT", "targetId": 10 },
+    "cardType": "미입금자 조회",
+    "card": {
+      "title": "가을공연·미입금", "totalAmount": 100000, "count": 2,
+      "items": [
+        { "attendeeId": 401, "name": "강민준", "affiliation": "광고홍보학과", "phoneLast4": "1140", "amount": 70000 },
+        { "attendeeId": 402, "name": "서윤호", "affiliation": "경영학과", "phoneLast4": "2087", "amount": 30000 }
+      ]
+    },
+    "createdAt": "2026-11-13T21:01:00"
+  }
+}
+```
 
 카드는 미입금자 조회 하나만 만든다 — 공지 작성·일정 조회 같은 나머지 의도는 카드 없이 텍스트로만
-답한다. 포맷이 확정된 카드가 그것뿐이기 때문이다(decisions #33, §7 13번).
+답한다. 포맷이 확정된 카드가 그것뿐이기 때문이다(decisions #33, §7 13번). 입금 현황 도구가 돌았어도
+전원 납부 완료라 보여줄 대상이 없으면 카드를 만들지 않는다.
+
+**에러**: COMMON_400(내용 없음), CHAT_404_NOT_FOUND(없는 대화방), CHAT_502_AI_FAILED(AI 호출 실패)
 
 ---
 
@@ -1391,8 +1438,12 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 `navigation`은 API-078과 같은 형식이다. 대화를 다시 열어도 "…로 이동 →" 버튼이 보여야 하므로
 메시지에 함께 저장해 두고 목록에서도 그대로 내려준다.
 
-`card`는 전송 시점의 스냅샷(`content_json`)이라 이후 상태(예: 입금 여부)가 바뀌어도 갱신되지
-않는다. FE가 최신값이 필요하면 해당 조회 API(예: 입금 현황 조회)를 다시 호출하는 것을 권장한다.
+`cardType`·`card`도 API-078과 같은 형식이다. 단 `card`는 전송 시점의 스냅샷(`content_json`)이라
+이후 상태(예: 입금 여부)가 바뀌어도 갱신되지 않는다. FE가 최신값이 필요하면 해당 조회 API(예: 입금
+현황 조회)를 다시 호출하는 것을 권장한다.
+
+`role`은 이 API에서만 USER와 ASSISTANT 둘 다 나온다 — 보낸 질문과 받은 답변을 번갈아 내려주기
+때문이다. USER 메시지는 navigation·cardType·card가 항상 null이다.
 
 ---
 
