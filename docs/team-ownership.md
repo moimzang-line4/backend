@@ -82,8 +82,8 @@ API-051의 `scheduleId`, API-052의 `scheduleId` 필터, 연결 후보 조회 AP
   `/api/files/{id}/content`에서 막은 삭제 차단이 이 경로로 우회된다. **B 담당과 합의가 필요하다**:
   정산 영수증 `imageUrl`이 이 정적 URL을 쓰고 있어서(decisions #41) 핸들러를 그냥 떼면 영수증
   이미지가 깨진다. 영수증 이미지도 통제되는 서빙 경로로 모을지 결정한 뒤 진행한다
-- 미확정 2건이 남아 `meeting`에서 추가 구현 여부가 열려 있다 — `docs/api-spec.md` §7의 18번
-  (`listSummary` 입력 경로)과 19번(회의 목록 "참석자 수" 산정 기준)
+- 미확정 1건이 남아 `meeting`에서 추가 구현 여부가 열려 있다 — `docs/api-spec.md` §7의 19번
+  (회의 목록 "참석자 수" 산정 기준). 18번(`listSummary` 입력 경로)은 필드를 폐기해 해소됐다
 - HTTP Range(206) 미지원 — `/api/files/{id}/content`는 `Range` 헤더를 무시하고 전체 바이트를
   보낸다. 업로드 상한이 20MB라 지금은 체감되지 않아 이슈로 등록하지 않았다. S3를 실제 운영에
   쓰기로 하면 presigned URL 전환과 함께 다시 본다(decisions #18·#42)

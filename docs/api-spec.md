@@ -975,7 +975,7 @@ cursor 페이지네이션(정렬 기준: createdAt 내림차순 — 최근에 �
 
 #### API-051 · POST /api/terms/{termId}/meetings · 회의 만들기
 인증: 불필요. **Request**: title, meetingDate, categoryId(`meeting_category`, 일정 카테고리와
-별도 운영 — decisions #21), attendees(자유 텍스트, 선택), listSummary(목록 한 줄 설명, 선택),
+별도 운영 — decisions #21), attendees(자유 텍스트, 선택),
 agendas(string[], 안건 내용 목록), scheduleId(선택)
 
 **Logics**: `scheduleId`는 화면 경로를 가른다 — 운영 공간에서 만든 회의록은 보내지 않고(일정과 무관),
@@ -992,11 +992,11 @@ MEETING_404_SCHEDULE_NOT_FOUND(일정 없음)
 #### API-052 · GET /api/terms/{termId}/meetings · 회의 목록 조회
 인증: 불필요.
 
-**Query**: status(진행중|완료, 선택), categoryId(선택), keyword(선택), scheduleId(선택),
-cursor(선택), size(선택, 기본 20)
+**Query**: status(진행중|완료, 선택), keyword(선택 — **제목·참석자** 부분 일치, 대소문자 무시),
+categoryId(선택), scheduleId(선택), cursor(선택), size(선택, 기본 20)
 
 **Response data**: meetings[].meetingId/title/meetingDate/categoryName/
-listSummary/status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt, nextCursor,
+status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt, nextCursor,
 totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-064와 같은 패턴.
 목록 상단의 "회의 목록 N개" 표시용, `docs/decisions.md` #19)
 
@@ -1030,7 +1030,7 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 인증: 불필요. 제목·날짜·카테고리·참석자만 수정(안건은 API-056/057/058로 별도 처리). 보낸 필드만 수정.
 일정 소속(`scheduleId`)은 받지 않는다 — 생성 시점에 확정하고 옮기지 않는다(decisions #44).
 
-**Request**: title, meetingDate, categoryId, attendees, listSummary
+**Request**: title, meetingDate, categoryId, attendees
 **Response data**: meetingId
 **에러**: COMMON_400, MEETING_404_NOT_FOUND, MEETING_404_CATEGORY_NOT_FOUND, MEETING_409_ALREADY_ENDED
 
@@ -1370,7 +1370,7 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
 
 ## 7. 미확정(TBD) 항목 모음
 
-아래 19개 항목 중 **아직 정하지 않은 것은 4개**(1·12·18·19번)다. 나머지는
+아래 19개 항목 중 **아직 정하지 않은 것은 3개**(1·12·19번)다. 나머지는
 해소돼 각 항목에 결정 번호를 적어 뒀다. 번호는 한 번 붙이면 바꾸지 않는다 — 다른 문서·이슈가
 이 번호를 가리키기 때문에, 해소된 항목도 지우지 않고 "해소됨"으로 남긴다.
 구현 착수 전 미해소 항목에 들어가면 안 된다(§6에서 각 엔드포인트 자리에도 표시):
@@ -1409,10 +1409,10 @@ cursor 페이지네이션(정렬 기준: createdAt 오름차순 — 대화 순�
     **해소됨(2026-11-12)**: meeting 쪽은 벤더 하나로 확정하지 않고 Gemini/OpenAI를
     `app.ai.provider` 설정값으로 전환하는 구조로 구현(decisions #26). 영수증 인식·AI 채팅이
     같은 구조를 재사용할지는 그 도메인 구현 시점에 별도 결정.
-18. API-051/052/053/054 `listSummary`(회의 목록 카드 한 줄 요약) 입력 경로 — 사용자가 직접
-    입력하는지, AI 요약(API-060/061)에서 자동 생성하는지 미정. 필드·API는 이미 있고 입력
-    UI만 아직 없다(2026-11-11, 피그마 회의 만들기 화면 재확인으로 발견) — 17번(AI 벤더)
-    확정과 맞물려 있을 가능성이 있어 같이 검토 필요.
+18. ~~API-051/052/053/054 `listSummary`(회의 목록 카드 한 줄 요약) 입력 경로~~ —
+    **해소됨(2026-11-16, decisions #83)**: 입력 경로를 정하는 대신 **필드 자체를 폐기**했다.
+    끝내 입력 UI가 생기지 않았고 AI 자동 생성도 택하지 않았다. `meeting.list_summary` 컬럼까지
+    지웠고(Flyway V8), API-052의 keyword 검색 대상도 제목·참석자 2컬럼으로 줄었다.
 19. API-052 `attendees` 자유 텍스트 vs 목록 화면 "참석자 수" 표시 요구 — Notion PRD(MEET-004)는
     회의 목록에서 "참석자 수"를 확인한다고 명시하는데, `attendees`는 "김가은, 홍보팀"처럼
     자유 텍스트라 콤마 개수로 세면 실제 인원수와 안 맞을 수 있다(팀은 사람 수가 아님).
