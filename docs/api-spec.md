@@ -479,6 +479,8 @@ SCHEDULE_404_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND
 인증: 불필요. 일정 카테고리(API-010)와 별도 테이블(meeting_category)로 운영한다(decisions #21).
 **Request**: name. **Response**: categoryId, name. **에러**: COMMON_400, MEETING_404_GROUP_TERM_NOT_FOUND
 
+`name`은 배지로 한 줄 렌더되므로 저장 전에 한 줄로 정규화된다(decisions #84).
+
 #### API-082 · GET /api/terms/{termId}/meeting-categories · 회의 카테고리 목록 조회
 인증: 불필요. 회의 만들기·수정의 카테고리 선택 바텀시트에서 쓰는 목록.
 **Response data**: categories[].categoryId/name. **에러**: MEETING_404_GROUP_TERM_NOT_FOUND
@@ -978,7 +980,11 @@ cursor 페이지네이션(정렬 기준: createdAt 내림차순 — 최근에 �
 별도 운영 — decisions #21), attendees(자유 텍스트, 선택),
 agendas(string[], 안건 내용 목록), scheduleId(선택)
 
-**Logics**: `scheduleId`는 화면 경로를 가른다 — 운영 공간에서 만든 회의록은 보내지 않고(일정과 무관),
+**Logics**: `title`·`attendees`는 저장 전에 한 줄로 정규화된다 — 줄바꿈·탭을 공백으로 바꾸고
+연속 공백을 한 칸으로 접는다. 거부하지 않고 조용히 편다(decisions #84). 안건 `content`는
+여러 줄이 정상이라 그대로 둔다.
+
+`scheduleId`는 화면 경로를 가른다 — 운영 공간에서 만든 회의록은 보내지 않고(일정과 무관),
 일정 상세의 "회의록 작성하기"로 만든 회의록은 그 일정 ID를 보낸다. 보낸 경우 그 회의의 안건 전체가
 일정에 속하고, 안건 연결(API-013) 후보에서도 빠진다(decisions #44). 소속은 생성 시점에 확정되며
 이후 바꿀 수 없다.
@@ -1031,6 +1037,9 @@ status(PENDING|IN_PROGRESS|COMPLETED), summaryContent, summaryGeneratedAt
 일정 소속(`scheduleId`)은 받지 않는다 — 생성 시점에 확정하고 옮기지 않는다(decisions #44).
 
 **Request**: title, meetingDate, categoryId, attendees
+
+`title`·`attendees`는 API-051과 같게 저장 전에 한 줄로 정규화된다(decisions #84).
+
 **Response data**: meetingId
 **에러**: COMMON_400, MEETING_404_NOT_FOUND, MEETING_404_CATEGORY_NOT_FOUND, MEETING_409_ALREADY_ENDED
 
@@ -1107,7 +1116,8 @@ scheduleId가 있으면 일정 자료로 연결되고 문서함에도 자동 노
 **Request**: file(multipart/form-data), name, category(ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE),
 scheduleId(선택)
 
-자료명은 255자까지다(`file.name` 컬럼 길이).
+자료명은 255자까지다(`file.name` 컬럼 길이). 길이 검증을 통과한 뒤 한 줄로 정규화해 저장한다
+(줄바꿈·탭 → 공백, 연속 공백 → 한 칸. decisions #84).
 
 **Logics**: 확장자가 jpg/jpeg/png/gif면 업로드와 함께 **썸네일을 만들어 저장**한다(긴 변 512px,
 원본이 더 작으면 확대하지 않음). webp는 JDK ImageIO에 디코더가 없어 대상이 아니다. 생성에
@@ -1311,6 +1321,9 @@ cursor 페이지네이션(정렬 기준: entryDate 내림차순, 동일 시 id �
 #### API-076 · POST /api/terms/{termId}/ai/chat-rooms · AI 대화방 생성
 인증: 불필요. **Request**: title. **Response data**: chatRoomId. 대화방은 기수당 여러 개 유지하며
 단일화하지 않는다(결정 완료, 현행 구조 그대로 — `docs/decisions.md` #11).
+
+`title`은 저장 전에 한 줄로 정규화된다(decisions #84). 보내지 않으면 null로 두고, 첫 질문을
+보낼 때 그 질문으로 지은 제목이 채워진다.
 
 #### API-077 · GET /api/terms/{termId}/ai/chat-rooms · AI 대화방 목록 조회
 인증: 불필요. 기수 단위(로그인이 없어 그 기수 운영진 전체가 공유).

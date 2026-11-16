@@ -37,10 +37,11 @@ global/            config, entity, exception, response, storage(local, s3)
 도메인 10개: `group`, `schedule`, `memberlist`, `attendance`, `settlement`, `note`,
 `meeting`, `file`, `budget`, `chat`. 전부 엔티티(ERD 필드 전체 포함)·레포지토리와
 Controller/Api/Service/Mapper/ErrorCode 틀을 갖추고 있고, 비즈니스 로직은 도메인마다 진행도가
-다르다 — `file`·`meeting`·`chat`은 구현 완료, `attendance`·`settlement`는 진행 중, 나머지는
-아직 껍데기다(도메인별 상세 상태는 `HARNESS.md`, 담당·남은 작업은 `docs/team-ownership.md`). 어느 도메인을 건드리기 전에 그 패키지에 `dto/request`·`dto/response`와 Service
-구현이 있는지 먼저 확인한다(없으면 그 시점에 추가한다). 구조·DTO·예외 처리 세부 규칙은
-`my-spring-conventions`(Claude Code 스킬) 또는 동급 컨벤션 문서를 따른다.
+다르다 — **열 도메인 모두 DTO·Service·테스트를 갖췄고**, 남은 일은 도메인 단위가 아니라 개별
+항목 단위다(도메인별 상세 상태는 `HARNESS.md`, 담당·지금 열린 작업은 `docs/team-ownership.md`).
+어느 도메인을 건드리기 전에 그 패키지의 기존 패턴(DTO 구성·ErrorCode·테스트 레벨)을 먼저 읽고
+그대로 따른다. 구조·DTO·예외 처리 세부 규칙은 `my-spring-conventions`(Claude Code 스킬) 또는
+동급 컨벤션 문서를 따른다.
 
 ## 참조 문서
 
