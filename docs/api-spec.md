@@ -495,6 +495,9 @@ SCHEDULE_404_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND
 
 **Query**: keyword(선택, 안건 내용 검색), cursor(선택), size(선택, 기본 20)
 
+`keyword`는 다른 목록 API와 달리 **정규화하지 않고 그대로** 검색한다 — 안건 내용은 여러 줄이
+정상이라 저장할 때도 펴지 않기 때문이다. 검색어만 펴면 오히려 안 걸린다(decisions #84).
+
 **Response data**: agendas[].agendaId/meetingId/meetingTitle/meetingDate/orderNo/
 content/status(PENDING|IN_PROGRESS|COMPLETED)/discussionNote/decision/hasDecision, nextCursor,
 totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-064와 같은 패턴.
@@ -1001,6 +1004,9 @@ MEETING_404_SCHEDULE_NOT_FOUND(일정 없음)
 **Query**: status(진행중|완료, 선택), keyword(선택 — **제목·참석자** 부분 일치, 대소문자 무시),
 categoryId(선택), scheduleId(선택), cursor(선택), size(선택, 기본 20)
 
+`keyword`는 저장값과 같은 규칙으로 정규화해서 비교한다 — 공백을 몇 칸 치든, 앞뒤에 공백이
+붙든 같은 결과가 나온다(decisions #84).
+
 **Response data**: meetings[].meetingId/title/meetingDate/categoryName/
 status(IN_PROGRESS|COMPLETED)/agendaCount/attendees/createdAt, nextCursor,
 totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-064와 같은 패턴.
@@ -1139,8 +1145,11 @@ COMMON_400(file 파트 누락), COMMON_413(용량 초과)
 #### API-064 · GET /api/terms/{termId}/files · 파일 목록 조회
 인증: 불필요. deleted_at IS NULL인 파일만.
 
-**Query**: category(ALL|ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE, 기본 ALL), keyword(선택),
-sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택), cursor(선택), size(선택, 기본 20)
+**Query**: category(ALL|ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE, 기본 ALL),
+keyword(선택, 자료명 부분 일치), sort(LATEST|OLDEST|NAME, 기본 LATEST), scheduleId(선택),
+cursor(선택), size(선택, 기본 20)
+
+`keyword`는 저장값과 같은 규칙으로 정규화해서 비교한다(decisions #84).
 
 **Response data**: files[].fileId/name/extension/size/category/scheduleId/thumbnailUrl/createdAt,
 nextCursor, totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-029
@@ -1210,6 +1219,10 @@ COMMON_400(enum에 없는 mode·variant 값)
 인증: 불필요. 현재 검색·분류 조건에 맞는 파일을 ZIP으로 스트리밍.
 
 **Query**: category(ALL|ACTIVITY_DOC|BUDGET_PLAN|PHOTO|LEDGER_FILE, 기본 ALL), keyword(선택)
+
+`keyword`는 API-064와 **같은 조건 빌더**를 타므로 목록에 보이는 자료 집합이 그대로 ZIP에 담긴다
+(검색어 정규화도 동일 — decisions #84).
+
 **Response**: `Content-Type: application/zip` 파일 스트림(JSON 래퍼 없음). 파일명 형식:
 `{기수}자료{N}개.zip`.
 **에러**: FILE_404_GROUP_TERM_NOT_FOUND(기수 없음), FILE_404_NO_DOWNLOADABLE_FILES(다운로드할 파일 없음)
@@ -1328,7 +1341,9 @@ cursor 페이지네이션(정렬 기준: entryDate 내림차순, 동일 시 id �
 #### API-077 · GET /api/terms/{termId}/ai/chat-rooms · AI 대화방 목록 조회
 인증: 불필요. 기수 단위(로그인이 없어 그 기수 운영진 전체가 공유).
 
-**Query**: keyword(선택), cursor(선택), size(선택, 기본 20)
+**Query**: keyword(선택, 대화방 제목 부분 일치), cursor(선택), size(선택, 기본 20)
+
+`keyword`는 저장값과 같은 규칙으로 정규화해서 비교한다(decisions #84).
 
 **Response data**: chatRooms[].chatRoomId/title/updatedAt, nextCursor,
 totalCount(cursor 없는 첫 페이지에서만 값이 있고, 이후 페이지는 null — API-064와 같은 패턴.
