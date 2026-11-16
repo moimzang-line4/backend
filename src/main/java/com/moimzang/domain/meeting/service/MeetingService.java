@@ -96,7 +96,7 @@ public class MeetingService {
 
         Meeting meeting = meetingRepository.save(Meeting.create(
                 groupTerm, schedule, category, request.getTitle(), request.getMeetingDate(),
-                request.getAttendees(), request.getListSummary()));
+                request.getAttendees()));
 
         // 요청에 적힌 순서를 그대로 안건의 orderNo로 쓴다 — 회의 진행 화면의 안건 탭 순서가 이 순서다
         List<Long> agendaIds = new ArrayList<>();
@@ -309,7 +309,7 @@ public class MeetingService {
         }
 
         meeting.updateInfo(category, request.getTitle(), request.getMeetingDate(),
-                request.getAttendees(), request.getListSummary());
+                request.getAttendees());
 
         log.info("[회의 정보 수정] 수정을 완료했습니다. meetingId = {}", meetingId);
         return MeetingUpdateResponse.builder()

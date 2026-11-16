@@ -26,8 +26,6 @@ public class MeetingSummaryResponse {
     @Schema(description = "회의 카테고리명", example = "운영진 회의")
     private final String categoryName;
 
-    @Schema(description = "회의 목록 카드에 표시되는 한 줄 설명", example = "가을 공연 준비 논의")
-    private final String listSummary;
 
     @Schema(description = "회의 상태", example = "IN_PROGRESS")
     private final MeetingStatus status;

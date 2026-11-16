@@ -32,7 +32,4 @@ public class MeetingUpdateRequest {
     @Size(max = 500)
     private String attendees;
 
-    @Schema(description = "회의 목록 카드에 표시되는 한 줄 설명(선택)", example = "가을 공연 준비 논의")
-    @Size(max = 100)
-    private String listSummary;
 }

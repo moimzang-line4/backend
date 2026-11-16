@@ -41,9 +41,6 @@ public class MeetingCreateRequest {
     @Size(max = 500)
     private String attendees;
 
-    @Schema(description = "회의 목록 카드에 표시되는 한 줄 설명(선택)", example = "가을 공연 준비 논의")
-    @Size(max = 100)
-    private String listSummary;
 
     @Schema(description = "안건 내용 목록. 등록 순서가 그대로 안건 순서(orderNo)가 된다",
             example = "[\"관객 참여 이벤트\", \"공연 홍보 계획\"]")
