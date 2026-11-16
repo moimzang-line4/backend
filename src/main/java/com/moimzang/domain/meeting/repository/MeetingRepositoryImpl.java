@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import com.moimzang.global.text.SingleLineText;
 import org.springframework.util.StringUtils;
 
 @RequiredArgsConstructor
@@ -89,13 +90,16 @@ public class MeetingRepositoryImpl implements MeetingRepositoryCustom {
         return categoryId == null ? null : meeting.meetingCategory.id.eq(categoryId);
     }
 
-    // keyword 검색 조건을 만든다. 제목·참석자 중 하나라도 일치하면 노출한다
+    // keyword 검색 조건을 만든다. 제목·참석자 중 하나라도 일치하면 노출한다.
+    // 검색어도 저장값과 같은 규칙으로 편다 — 제목은 연속 공백을 접어 저장하므로(decisions #84)
+    // 검색어만 안 펴면 "가을  정기공연"처럼 공백을 두 번 친 입력이 0건이 된다
     private BooleanExpression keywordContains(String keyword) {
         if (!StringUtils.hasText(keyword)) {
             return null;
         }
-        return meeting.title.containsIgnoreCase(keyword)
-                .or(meeting.attendees.containsIgnoreCase(keyword));
+        String normalized = SingleLineText.normalize(keyword);
+        return meeting.title.containsIgnoreCase(normalized)
+                .or(meeting.attendees.containsIgnoreCase(normalized));
     }
 
     // 다음 페이지 cursor 조건을 만든다 — (meetingDate, id) 복합 비교. 내림차순이라 lt를 쓴다.
