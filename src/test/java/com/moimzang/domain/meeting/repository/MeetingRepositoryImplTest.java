@@ -133,6 +133,18 @@ class MeetingRepositoryImplTest {
         assertThat(result).extracting(Meeting::getId).containsExactly(older.getId());
     }
 
+    // 줄바꿈이 섞인 제목이 저장돼 전체 문장으로 검색이 안 되던 회귀를 막는다.
+    // 서비스가 저장 전에 한 줄로 펴므로 DB에는 공백으로 들어간다
+    @Test
+    void search_한_줄로_펴진_제목은_전체_문장_keyword로_걸린다() {
+        Meeting flattened = persistMeeting("가을 정기공연 운영진 회의", LocalDate.of(2026, 11, 7), null);
+
+        List<Meeting> result = meetingRepository.search(
+                groupTerm.getId(), null, null, "가을 정기공연 운영진 회의", null, null, null, 10);
+
+        assertThat(result).extracting(Meeting::getId).containsExactly(flattened.getId());
+    }
+
     @Test
     void search_scheduleId를_주면_그_일정에_속한_회의만_반환한다() {
         Schedule schedule = persistSchedule("가을 정기공연");

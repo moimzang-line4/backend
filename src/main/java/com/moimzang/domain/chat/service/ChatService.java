@@ -33,6 +33,7 @@ import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.ai.AiClientException;
 import com.moimzang.global.cursor.CursorCodec;
+import com.moimzang.global.text.SingleLineText;
 import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
@@ -75,7 +76,7 @@ public class ChatService {
                     return new CustomException(ChatErrorCode.CHAT_404_GROUP_TERM_NOT_FOUND);
                 });
 
-        String title = request == null ? null : request.getTitle();
+        String title = request == null ? null : SingleLineText.normalize(request.getTitle());
         AiChatRoom chatRoom = aiChatRoomRepository.save(AiChatRoom.create(groupTerm, title));
 
         log.info("[AI 대화방 생성] 생성을 완료했습니다. termId = {}, chatRoomId = {}", termId, chatRoom.getId());

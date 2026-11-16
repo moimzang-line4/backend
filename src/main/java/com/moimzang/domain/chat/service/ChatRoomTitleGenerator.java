@@ -1,6 +1,7 @@
 package com.moimzang.domain.chat.service;
 
 import com.moimzang.global.ai.AiClient;
+import com.moimzang.global.text.SingleLineText;
 import com.moimzang.global.ai.AiClientException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,7 +51,7 @@ public class ChatRoomTitleGenerator {
         if (raw == null) {
             return "";
         }
-        String text = raw.replace('\n', ' ').replace('\r', ' ').trim();
+        String text = SingleLineText.normalize(raw);
         text = text.replaceFirst("^(제목|Title)\\s*[:：]\\s*", "");
         text = text.replaceAll("^[\"'“”‘’`*]+", "").replaceAll("[\"'“”‘’`*]+$", "");
         text = text.replaceAll("[.。]+$", "").trim();
@@ -58,7 +59,8 @@ public class ChatRoomTitleGenerator {
     }
 
     private String fallbackFrom(String firstQuestion) {
-        String text = firstQuestion == null ? "" : firstQuestion.trim();
+        // 질문 원문을 제목으로 쓸 때도 한 줄로 편다 — 여러 줄 질문이 그대로 제목이 되면 목록이 깨진다
+        String text = firstQuestion == null ? "" : SingleLineText.normalize(firstQuestion);
         return text.isEmpty() ? FALLBACK : truncate(text);
     }
 

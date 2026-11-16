@@ -136,6 +136,61 @@ class MeetingServiceTest {
     }
 
     @Test
+    void createMeeting_제목과_참석자의_줄바꿈을_한_줄로_펴서_저장한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        MeetingCreateRequest request = MeetingCreateRequest.builder()
+                .title("가을 정기공연\n운영진 회의")
+                .meetingDate(LocalDate.of(2026, 11, 7))
+                .categoryId(1L)
+                .attendees("김가은,\r\n홍보팀")
+                .agendas(List.of("관객 참여 이벤트"))
+                .build();
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingCategoryRepository.findByIdAndGroupTermId(1L, 1L)).willReturn(Optional.of(category));
+        given(meetingRepository.save(any(Meeting.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(meetingAgendaRepository.save(any(MeetingAgenda.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        meetingService.createMeeting(1L, request);
+
+        ArgumentCaptor<Meeting> captor = ArgumentCaptor.forClass(Meeting.class);
+        Mockito.verify(meetingRepository).save(captor.capture());
+        assertThat(captor.getValue().getTitle()).isEqualTo("가을 정기공연 운영진 회의");
+        assertThat(captor.getValue().getAttendees()).isEqualTo("김가은, 홍보팀");
+    }
+
+    @Test
+    void updateMeeting_제목의_줄바꿈도_한_줄로_편다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MeetingCategory category = mock(MeetingCategory.class);
+        Meeting meeting = Meeting.create(groupTerm, null, category, "원래 제목",
+                LocalDate.of(2026, 11, 7), "원래 참석자");
+        ReflectionTestUtils.setField(meeting, "id", 10L);
+        given(meetingRepository.findById(10L)).willReturn(Optional.of(meeting));
+
+        meetingService.updateMeeting(10L, MeetingUpdateRequest.builder()
+                .title("바뀐\n제목")
+                .build());
+
+        assertThat(meeting.getTitle()).isEqualTo("바뀐 제목");
+    }
+
+    @Test
+    void createCategory_카테고리명의_줄바꿈도_한_줄로_편다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(meetingCategoryRepository.save(any(MeetingCategory.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        meetingService.createCategory(1L, MeetingCategoryCreateRequest.builder().name("정기\n회의").build());
+
+        ArgumentCaptor<MeetingCategory> captor = ArgumentCaptor.forClass(MeetingCategory.class);
+        Mockito.verify(meetingCategoryRepository).save(captor.capture());
+        assertThat(captor.getValue().getName()).isEqualTo("정기 회의");
+    }
+
+    @Test
     void createMeeting_기수가_없으면_MEETING_404_GROUP_TERM_NOT_FOUND를_던진다() {
         MeetingCreateRequest request = MeetingCreateRequest.builder()
                 .title("회의")

@@ -201,6 +201,21 @@ class FileServiceTest {
     }
 
     @Test
+    void upload_자료명의_줄바꿈을_한_줄로_펴서_저장한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        MultipartFile multipartFile = new MockMultipartFile("file", "계약서.pdf", "application/pdf", "content".getBytes());
+
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(fileRepository.save(any(File.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        fileService.upload(1L, multipartFile, "공연장\n계약서", FileCategory.ACTIVITY_DOC, null);
+
+        ArgumentCaptor<File> captor = ArgumentCaptor.forClass(File.class);
+        verify(fileRepository).save(captor.capture());
+        assertThat(captor.getValue().getName()).isEqualTo("공연장 계약서");
+    }
+
+    @Test
     void upload_자료명이_상한을_넘으면_FILE_400_NAME_TOO_LONG를_던진다() {
         MultipartFile multipartFile = new MockMultipartFile("file", "계약서.pdf", "application/pdf", "content".getBytes());
         String tooLong = "가".repeat(FileUploadPolicy.MAX_NAME_LENGTH + 1);

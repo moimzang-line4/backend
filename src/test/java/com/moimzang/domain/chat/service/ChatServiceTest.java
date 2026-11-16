@@ -42,6 +42,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.BeanUtils;
@@ -119,6 +120,25 @@ class ChatServiceTest {
         ChatRoomCreateResponse response = chatService.createChatRoom(1L, null);
 
         assertThat(response.getChatRoomId()).isEqualTo(9L);
+    }
+
+    @Test
+    void createChatRoom_제목의_줄바꿈을_한_줄로_펴서_저장한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTermRepository.findById(1L)).willReturn(Optional.of(groupTerm));
+        given(aiChatRoomRepository.save(any(AiChatRoom.class))).willAnswer(invocation -> {
+            AiChatRoom saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 8L);
+            return saved;
+        });
+
+        chatService.createChatRoom(1L, ChatRoomCreateRequest.builder()
+                .title("가을공연\n미입금자 확인")
+                .build());
+
+        ArgumentCaptor<AiChatRoom> captor = ArgumentCaptor.forClass(AiChatRoom.class);
+        verify(aiChatRoomRepository).save(captor.capture());
+        assertThat(captor.getValue().getTitle()).isEqualTo("가을공연 미입금자 확인");
     }
 
     @Test
