@@ -207,7 +207,6 @@
 | summary_generated_at | DATETIME | | | ❌ | LocalDateTime | |
 | status | VARCHAR(20) | | | ✅ | MeetingStatus | default 'IN_PROGRESS'. IN_PROGRESS(진행중)/COMPLETED(완료) |
 | ended_at | DATETIME | | | ❌ | LocalDateTime | |
-| list_summary | VARCHAR(100) | | | ❌ | String | 회의 목록 카드에 표시되는 한 줄 설명. summary_content(AI 전체 요약)와는 별개 필드 |
 
 ### meeting_agenda (안건)
 | 컬럼 | 타입 | PK | FK | NOT NULL | 도메인 | 설명 |
