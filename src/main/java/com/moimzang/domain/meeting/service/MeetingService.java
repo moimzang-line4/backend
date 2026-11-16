@@ -39,6 +39,7 @@ import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.global.ai.AiClient;
 import com.moimzang.global.ai.AiClientException;
 import com.moimzang.global.cursor.CursorCodec;
+import com.moimzang.global.text.SingleLineText;
 import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CustomException;
 import java.time.LocalDate;
@@ -94,9 +95,12 @@ public class MeetingService {
         // 그 일정에 속하고 안건 연결 후보에서 빠진다. 운영 공간에서 만들면 값이 없어 일정과 무관하다
         Schedule schedule = resolveSchedule(termId, request.getScheduleId());
 
+        // 제목·참석자는 한 줄 입력란이다 — 붙여넣기로 섞여 들어온 줄바꿈을 펴 두지 않으면
+        // 사용자가 자연스럽게 친 문장으로 keyword 검색이 되지 않는다
         Meeting meeting = meetingRepository.save(Meeting.create(
-                groupTerm, schedule, category, request.getTitle(), request.getMeetingDate(),
-                request.getAttendees()));
+                groupTerm, schedule, category,
+                SingleLineText.normalize(request.getTitle()), request.getMeetingDate(),
+                SingleLineText.normalize(request.getAttendees())));
 
         // 요청에 적힌 순서를 그대로 안건의 orderNo로 쓴다 — 회의 진행 화면의 안건 탭 순서가 이 순서다
         List<Long> agendaIds = new ArrayList<>();
@@ -308,8 +312,8 @@ public class MeetingService {
                     });
         }
 
-        meeting.updateInfo(category, request.getTitle(), request.getMeetingDate(),
-                request.getAttendees());
+        meeting.updateInfo(category, SingleLineText.normalize(request.getTitle()),
+                request.getMeetingDate(), SingleLineText.normalize(request.getAttendees()));
 
         log.info("[회의 정보 수정] 수정을 완료했습니다. meetingId = {}", meetingId);
         return MeetingUpdateResponse.builder()
@@ -365,7 +369,8 @@ public class MeetingService {
                     return new CustomException(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
                 });
 
-        MeetingCategory saved = meetingCategoryRepository.save(MeetingCategory.create(groupTerm, request.getName()));
+        MeetingCategory saved = meetingCategoryRepository.save(
+                MeetingCategory.create(groupTerm, SingleLineText.normalize(request.getName())));
 
         log.info("[회의 카테고리 생성] 생성을 완료했습니다. categoryId = {}", saved.getId());
         return meetingMapper.toCategoryResponse(saved);

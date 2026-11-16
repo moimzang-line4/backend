@@ -26,6 +26,7 @@ import com.moimzang.global.cursor.CursorCodec;
 import com.moimzang.global.cursor.CursorPageConstants;
 import com.moimzang.global.exception.CustomException;
 import com.moimzang.global.storage.FileStorage;
+import com.moimzang.global.text.SingleLineText;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -89,6 +90,9 @@ public class FileService {
             throw new CustomException(FileErrorCode.FILE_400_NAME_TOO_LONG);
         }
 
+        // 자료명은 한 줄 입력란이다 — 길이 검증을 통과한 뒤에 편다(정규화는 길이를 늘리지 않는다)
+        String normalizedName = SingleLineText.normalize(name);
+
         // 확장자 검증 — 허용 목록(FileUploadPolicy)에 없으면 거부
         String extension = extractExtension(file.getOriginalFilename());
         if (!FileUploadPolicy.isAllowed(extension)) {
@@ -145,7 +149,8 @@ public class FileService {
 
         // 새 레코드 저장 및 응답 변환
         File saved = fileRepository.save(
-                File.upload(groupTerm, schedule, name, extension, file.getSize(), category, storageKey, thumbnailKey));
+                File.upload(groupTerm, schedule, normalizedName, extension, file.getSize(), category,
+                        storageKey, thumbnailKey));
         log.info("[파일 업로드] 업로드를 완료했습니다. termId = {}, fileId = {}", termId, saved.getId());
         return fileMapper.toUploadResponse(saved);
     }
