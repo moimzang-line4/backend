@@ -69,19 +69,16 @@ Flyway가 `ddl-auto: validate`와 충돌 없이 마이그레이션을 끝내고 
 `NoClassDefFoundError`가 나면 대개 QueryDSL jakarta classifier 누락 또는 springdoc 버전 불일치다
 — `project-init` 스킬의 "좌표는 외우지 말고 확인한다" 절차대로 BOM과 실제 해석 결과를 대조한다.
 
-## 현재 구현 상태 (2026-11-14 기준)
+## 현재 구현 상태 (2026-11-16 기준)
 
-10개 도메인 전부 엔티티·레포지토리·Controller/Api/Service/Mapper/ErrorCode 틀은 갖추고 있고,
-비즈니스 로직 진행도는 다르다. 담당자별 배정과 남은 작업은 `docs/team-ownership.md`를 본다.
+**10개 도메인 전부 DTO·Service·테스트를 갖췄다.** 더 이상 "껍데기" 도메인은 없다.
+담당자별 배정과 지금 열려 있는 작업은 `docs/team-ownership.md`를 본다.
 
-| 도메인 | 상태 |
-|---|---|
-| `meeting`, `file`, `chat` | 구현 완료(DTO·Service·테스트 있음). `file`은 결함 수정까지 끝남(decisions #42·#43) |
-| `attendance`, `settlement` | 진행 중 — 차수·출석·영수증까지 구현됨, 정산(API-037~045)은 미구현 |
-| `group`, `schedule`, `memberlist`, `note`, `budget` | 아직 껍데기 — DTO·Service 로직 없음 |
+남은 작업은 도메인 단위가 아니라 개별 항목 단위로만 남아 있다 — 열린 GitHub 이슈와
+`docs/api-spec.md` §7의 미확정 항목을 본다.
 
-새 도메인을 건드리기 전에 그 패키지에 `dto/request`·`dto/response`와 Service 구현이 있는지
-먼저 확인한다(없으면 그 시점에 추가한다).
+도메인을 건드리기 전에 그 패키지의 기존 패턴(DTO 구성·ErrorCode·테스트 레벨)을 먼저 읽고
+그대로 따른다.
 
 테스트는 구현된 도메인마다 존재한다 — Service 단위 테스트(Mockito)가 기본이고, QueryDSL
 커스텀 쿼리나 JPQL은 `@DataJpaTest` + Testcontainers 슬라이스 테스트로 따로 검증한다.
