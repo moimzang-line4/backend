@@ -159,7 +159,7 @@ class ScheduleCascadeDeleterTest {
     }
 
     private Meeting meeting(Schedule schedule, String title) {
-        return Meeting.create(groupTerm, schedule, meetingCategory, title, LocalDate.of(2026, 11, 7), null, null);
+        return Meeting.create(groupTerm, schedule, meetingCategory, title, LocalDate.of(2026, 11, 7), null);
     }
 
     private ScheduleAgendaLink link(Schedule schedule, MeetingAgenda agenda) {

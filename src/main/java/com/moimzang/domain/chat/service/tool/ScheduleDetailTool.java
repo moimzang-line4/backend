@@ -147,7 +147,7 @@ public class ScheduleDetailTool implements ChatTool {
 
     // 이 일정에서 만든 회의록. 안건 내용까지는 싣지 않는다 — 필요하면 AI가 get_meeting_detail로 더 판다
     private record MeetingRow(Long meetingId, String title, String meetingDate, String categoryName,
-                              String status, String listSummary, long agendaCount) {
+                              String status, long agendaCount) {
 
         static MeetingRow from(Meeting meeting, long agendaCount) {
             return new MeetingRow(
@@ -156,7 +156,6 @@ public class ScheduleDetailTool implements ChatTool {
                     meeting.getMeetingDate() == null ? null : meeting.getMeetingDate().toString(),
                     meeting.getMeetingCategory() == null ? null : meeting.getMeetingCategory().getName(),
                     meeting.getStatus().name(),
-                    meeting.getListSummary(),
                     agendaCount);
         }
     }

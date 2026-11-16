@@ -130,7 +130,7 @@ class ScheduleAgendaLinkRepositoryImplTest {
     }
 
     private Meeting persistMeeting(String title, LocalDate meetingDate) {
-        return em.persistAndFlush(Meeting.create(groupTerm, null, meetingCategory, title, meetingDate, null, null));
+        return em.persistAndFlush(Meeting.create(groupTerm, null, meetingCategory, title, meetingDate, null));
     }
 
     private MeetingAgenda persistAgenda(Meeting meeting, String content, int orderNo) {

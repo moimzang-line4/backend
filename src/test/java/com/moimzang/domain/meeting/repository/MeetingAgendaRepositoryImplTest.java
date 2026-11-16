@@ -200,7 +200,7 @@ class MeetingAgendaRepositoryImplTest {
     }
 
     private Meeting persistMeeting(String title, Schedule schedule) {
-        Meeting meeting = Meeting.create(groupTerm, schedule, category, title, LocalDate.of(2026, 11, 7), null, null);
+        Meeting meeting = Meeting.create(groupTerm, schedule, category, title, LocalDate.of(2026, 11, 7), null);
         return em.persistAndFlush(meeting);
     }
 

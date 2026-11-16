@@ -124,7 +124,6 @@ class MeetingDetailToolTest {
         ReflectionTestUtils.setField(meeting, "title", "3차 정기회의");
         ReflectionTestUtils.setField(meeting, "meetingDate", LocalDate.of(2026, 11, 10));
         ReflectionTestUtils.setField(meeting, "attendees", "운영진 6명");
-        ReflectionTestUtils.setField(meeting, "listSummary", "가을공연 역할 분담");
         ReflectionTestUtils.setField(meeting, "summaryContent", "가을공연 역할을 분담했다.");
         ReflectionTestUtils.setField(meeting, "status", MeetingStatus.COMPLETED);
         return meeting;

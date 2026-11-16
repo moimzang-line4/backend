@@ -27,7 +27,7 @@ public class MeetingSearchTool implements ChatTool {
     public AiTool definition() {
         return new AiTool(
                 "search_meetings",
-                "이 기수의 회의를 제목·참석자·한 줄 요약으로 검색해 회의 ID·제목·날짜·카테고리·"
+                "이 기수의 회의를 제목·참석자로 검색해 회의 ID·제목·날짜·카테고리·"
                         + "상태·참석자·안건 진행률을 반환한다. 회의에서 무엇을 논의했는지 알려면 "
                         + "이 도구로 회의 ID를 먼저 얻은 뒤 get_meeting_detail을 호출해야 한다. "
                         + "검색 결과가 0건이면 availableTitles에 등록된 회의 제목이 함께 오므로, "
@@ -86,7 +86,7 @@ public class MeetingSearchTool implements ChatTool {
     private record Result(int count, boolean truncated, List<Row> meetings, List<String> availableTitles) {}
 
     private record Row(Long meetingId, String title, String meetingDate, String categoryName, String status,
-                       String attendees, String listSummary, boolean hasSummary,
+                       String attendees, boolean hasSummary,
                        long agendaCount, long doneAgendaCount, int progressPercentage) {
 
         static Row from(Meeting meeting, long agendaCount, long doneAgendaCount) {
@@ -97,7 +97,6 @@ public class MeetingSearchTool implements ChatTool {
                     meeting.getMeetingCategory() == null ? null : meeting.getMeetingCategory().getName(),
                     meeting.getStatus().name(),
                     meeting.getAttendees(),
-                    meeting.getListSummary(),
                     meeting.getSummaryContent() != null,
                     agendaCount,
                     doneAgendaCount,

@@ -304,7 +304,7 @@ class OperationSpaceServiceTest {
     }
 
     private Meeting meeting(Long id, String title, LocalDate date) {
-        Meeting meeting = Meeting.create(groupTerm, null, mock(MeetingCategory.class), title, date, null, null);
+        Meeting meeting = Meeting.create(groupTerm, null, mock(MeetingCategory.class), title, date, null);
         ReflectionTestUtils.setField(meeting, "id", id);
         return meeting;
     }
