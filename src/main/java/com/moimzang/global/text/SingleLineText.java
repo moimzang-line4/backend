@@ -1,5 +1,7 @@
 package com.moimzang.global.text;
 
+import java.util.regex.Pattern;
+
 /**
  * 한 줄 입력란에 들어온 값을 한 줄로 정규화한다.
  *
@@ -13,6 +15,11 @@ package com.moimzang.global.text;
  */
 public final class SingleLineText {
 
+    // 자바 기본 \s는 [ \t\n\x0B\f\r]뿐이라 붙여넣기로 실제로 딸려 오는 구분자를 놓친다.
+    // 특히 U+2028(LINE SEPARATOR)은 진짜 줄바꿈인데 \s로는 안 잡혀 검색이 그대로 어긋난다.
+    // \p{Z}로 NBSP·이데오그래픽 공백까지 덮고, 줄 구분자 세 개를 따로 더한다
+    private static final Pattern SEPARATORS = Pattern.compile("[\\s\\p{Z}\\u0085\\u2028\\u2029]+");
+
     private SingleLineText() {
     }
 
@@ -21,6 +28,6 @@ public final class SingleLineText {
             return null;
         }
         // 줄바꿈만 공백으로 바꾸면 "a\n b"가 "a  b"로 남는다 — 연속 공백까지 한 칸으로 접는다
-        return raw.replaceAll("\\s+", " ").trim();
+        return SEPARATORS.matcher(raw).replaceAll(" ").trim();
     }
 }

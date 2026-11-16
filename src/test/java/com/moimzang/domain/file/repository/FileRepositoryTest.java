@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.moimzang.domain.file.entity.File;
 import com.moimzang.domain.file.enums.FileCategory;
+import com.moimzang.domain.file.enums.FileSortOption;
 import com.moimzang.domain.group.entity.ClubGroup;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.global.config.JpaAuditingConfig;
 import com.moimzang.global.config.QuerydslConfig;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -81,6 +83,39 @@ class FileRepositoryTest {
         Optional<File> result = fileRepository.findActiveById(999L);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void search_검색어의_연속_공백도_접어서_저장값과_맞춘다() {
+        // 자료명도 한 칸으로 접어 저장하므로(decisions #84) 검색어만 안 접으면 0건이 된다
+        File target = persistFile("공연장 계약서");
+
+        List<File> result = fileRepository.search(groupTerm.getId(), null, "공연장  계약서", null,
+                FileSortOption.LATEST, null, null, null, 10);
+
+        assertThat(result).extracting(File::getId).containsExactly(target.getId());
+    }
+
+    @Test
+    void searchAll_ZIP_경로도_목록과_같은_검색어_규칙을_쓴다() {
+        // search와 searchAll이 같은 조건 빌더를 타므로 목록에 뜨는 자료는 ZIP에도 담겨야 한다
+        File target = persistFile("공연장 계약서");
+
+        List<File> listed = fileRepository.search(groupTerm.getId(), null, "공연장  계약서", null,
+                FileSortOption.LATEST, null, null, null, 10);
+        List<File> zipped = fileRepository.searchAll(groupTerm.getId(), null, "공연장  계약서");
+
+        assertThat(zipped).extracting(File::getId).containsExactly(target.getId());
+        assertThat(zipped).extracting(File::getId)
+                .containsExactlyElementsOf(listed.stream().map(File::getId).toList());
+    }
+
+    @Test
+    void count_목록과_같은_검색어_규칙으로_센다() {
+        persistFile("공연장 계약서");
+        persistFile("무관한 자료");
+
+        assertThat(fileRepository.count(groupTerm.getId(), null, "공연장  계약서", null)).isEqualTo(1);
     }
 
     private File persistFile(String name) {

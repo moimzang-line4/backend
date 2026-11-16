@@ -25,6 +25,23 @@ class SingleLineTextTest {
     }
 
     @Test
+    void normalize_자바_기본_공백이_아닌_유니코드_구분자도_편다() {
+        // 붙여넣기로 실제로 딸려 오는 것들이다. 자바 기본 \s로는 하나도 안 잡힌다
+        assertThat(SingleLineText.normalize("가을\u00A0공연")).isEqualTo("가을 공연");   // NBSP
+        assertThat(SingleLineText.normalize("가을\u3000공연")).isEqualTo("가을 공연");   // 이데오그래픽 공백
+        assertThat(SingleLineText.normalize("가을\u0085공연")).isEqualTo("가을 공연");   // NEL
+    }
+
+    @Test
+    void normalize_유니코드_줄_구분자도_편다() {
+        // U+2028은 진짜 줄바꿈이다 — 이게 남으면 decisions #84가 막으려던 검색 누락이 그대로 난다
+        assertThat(SingleLineText.normalize("가을 정기공연\u2028운영진 회의"))
+                .isEqualTo("가을 정기공연 운영진 회의");
+        assertThat(SingleLineText.normalize("가을 정기공연\u2029운영진 회의"))
+                .isEqualTo("가을 정기공연 운영진 회의");
+    }
+
+    @Test
     void normalize_연속_공백을_한_칸으로_접는다() {
         assertThat(SingleLineText.normalize("가을    정기공연")).isEqualTo("가을 정기공연");
     }

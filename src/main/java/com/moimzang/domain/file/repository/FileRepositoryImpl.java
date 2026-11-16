@@ -11,6 +11,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import com.moimzang.global.text.SingleLineText;
 import org.springframework.util.StringUtils;
 
 @RequiredArgsConstructor
@@ -62,8 +63,12 @@ public class FileRepositoryImpl implements FileRepositoryCustom {
         return category == null ? null : file.category.eq(category);
     }
 
+    // 자료명도 연속 공백을 접어 저장하므로(decisions #84) 검색어를 같은 규칙으로 편다.
+    // 이 조건은 목록(search)·ZIP(searchAll)·개수(count)가 함께 쓰므로 셋이 늘 같은 집합을 본다
     private BooleanExpression nameContains(String keyword) {
-        return StringUtils.hasText(keyword) ? file.name.containsIgnoreCase(keyword) : null;
+        return StringUtils.hasText(keyword)
+                ? file.name.containsIgnoreCase(SingleLineText.normalize(keyword))
+                : null;
     }
 
     private BooleanExpression scheduleIdEq(Long scheduleId) {

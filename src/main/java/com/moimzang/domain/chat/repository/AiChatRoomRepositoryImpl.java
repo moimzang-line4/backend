@@ -8,6 +8,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import com.moimzang.global.text.SingleLineText;
 import org.springframework.util.StringUtils;
 
 @RequiredArgsConstructor
@@ -46,9 +47,12 @@ public class AiChatRoomRepositoryImpl implements AiChatRoomRepositoryCustom {
         };
     }
 
-    // 제목 검색 조건을 만든다. 제목이 아직 없는 방(첫 질문 전)은 LIKE가 NULL을 거르므로 결과에서 빠진다
+    // 제목 검색 조건을 만든다. 제목이 아직 없는 방(첫 질문 전)은 LIKE가 NULL을 거르므로 결과에서 빠진다.
+    // 제목도 연속 공백을 접어 저장하므로(decisions #84) 검색어를 같은 규칙으로 편다
     private BooleanExpression titleContains(String keyword) {
-        return StringUtils.hasText(keyword) ? aiChatRoom.title.containsIgnoreCase(keyword) : null;
+        return StringUtils.hasText(keyword)
+                ? aiChatRoom.title.containsIgnoreCase(SingleLineText.normalize(keyword))
+                : null;
     }
 
     // 다음 페이지 cursor 조건 — (updatedAt, id) 복합 비교. 내림차순이라 lt를 쓴다.

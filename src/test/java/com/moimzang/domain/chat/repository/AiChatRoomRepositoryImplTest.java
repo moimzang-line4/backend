@@ -123,6 +123,16 @@ class AiChatRoomRepositoryImplTest {
     }
 
     @Test
+    void search_검색어의_연속_공백도_접어서_저장값과_맞춘다() {
+        AiChatRoom target = persistChatRoom("가을 공연 미입금자 확인", LocalDateTime.of(2026, 11, 13, 21, 0));
+
+        List<AiChatRoom> result =
+                aiChatRoomRepository.search(groupTerm.getId(), "가을  공연", null, null, 10);
+
+        assertThat(result).extracting(AiChatRoom::getId).containsExactly(target.getId());
+    }
+
+    @Test
     void search_제목이_없는_방은_keyword_검색에서_빠진다() {
         // 대화방만 만들고 첫 질문을 보내지 않으면 title이 null로 남는다
         persistChatRoom(null, LocalDateTime.of(2026, 11, 13, 21, 0));

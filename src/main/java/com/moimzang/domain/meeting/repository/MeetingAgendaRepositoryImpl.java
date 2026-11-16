@@ -75,7 +75,11 @@ public class MeetingAgendaRepositoryImpl implements MeetingAgendaRepositoryCusto
         return conditions;
     }
 
-    // 안건 내용 검색 조건을 만든다. 값이 없으면 조건을 걸지 않는다
+    // 안건 내용 검색 조건을 만든다. 값이 없으면 조건을 걸지 않는다.
+    //
+    // 여기만 검색어를 SingleLineText로 펴지 않는다 — 일부러다. 안건 내용은 여러 줄이 정상이라
+    // 저장할 때도 펴지 않기 때문이다(decisions #84). 저장값에 줄바꿈이 살아 있는데 검색어만 펴면
+    // 오히려 안 걸린다. 다른 조건 빌더(제목·자료명·대화방 제목)와 달라 보여도 맞추지 말 것
     private BooleanExpression contentContains(String keyword) {
         return StringUtils.hasText(keyword) ? meetingAgenda.content.containsIgnoreCase(keyword) : null;
     }
