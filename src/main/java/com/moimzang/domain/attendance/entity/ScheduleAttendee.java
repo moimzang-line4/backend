@@ -72,4 +72,17 @@ public class ScheduleAttendee extends BaseEntity {
                 .source(AttendeeSource.ON_SITE)
                 .build();
     }
+
+    // 명단방의 부원을 불러와 참가자로 만든다. 이름·소속·전화번호는 그 시점 부원 정보의
+    // 스냅샷이고, member 연결을 남겨 중복 불러오기를 막는 기준으로 쓴다
+    public static ScheduleAttendee createFromMember(Schedule schedule, Member member, String name, String affiliation, String phoneLast4) {
+        return ScheduleAttendee.builder()
+                .schedule(schedule)
+                .member(member)
+                .name(name)
+                .affiliation(affiliation)
+                .phoneLast4(phoneLast4)
+                .source(AttendeeSource.LINK)
+                .build();
+    }
 }

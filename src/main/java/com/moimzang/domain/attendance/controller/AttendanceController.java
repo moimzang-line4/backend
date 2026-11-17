@@ -1,7 +1,9 @@
 package com.moimzang.domain.attendance.controller;
 
 import com.moimzang.domain.attendance.dto.request.AttendeeCheckInRequest;
+import com.moimzang.domain.attendance.dto.request.MemberListImportRequest;
 import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
+import com.moimzang.domain.attendance.dto.response.MemberListImportResponse;
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendeeCheckInResponse;
@@ -66,6 +68,17 @@ public class AttendanceController implements AttendanceApi {
             @Valid @RequestBody OnSiteAttendeeAddRequest request
     ) {
         OnSiteAttendeeAddResponse response = attendanceService.addOnSiteAttendee(roundId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 명단방의 부원 전체를 그 차수에 미출석 상태로 불러온다
+    @Override
+    @PostMapping("/api/rounds/{roundId}/attendees/import")
+    public ResponseEntity<BaseResponse<MemberListImportResponse>> importMemberListAttendees(
+            @PathVariable Long roundId,
+            @Valid @RequestBody MemberListImportRequest request
+    ) {
+        MemberListImportResponse response = attendanceService.importMemberListAttendees(roundId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 

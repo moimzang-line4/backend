@@ -1,7 +1,9 @@
 package com.moimzang.domain.attendance.controller;
 
 import com.moimzang.domain.attendance.dto.request.AttendeeCheckInRequest;
+import com.moimzang.domain.attendance.dto.request.MemberListImportRequest;
 import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
+import com.moimzang.domain.attendance.dto.response.MemberListImportResponse;
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendeeCheckInResponse;
@@ -71,6 +73,19 @@ public interface AttendanceApi {
     ResponseEntity<BaseResponse<OnSiteAttendeeAddResponse>> addOnSiteAttendee(
             @Parameter(description = "차수 ID", example = "1") Long roundId,
             @Valid OnSiteAttendeeAddRequest request);
+
+    @Operation(summary = "명단방 불러오기", description = "명단방의 부원 전체를 그 차수에 미출석 상태로 불러온다. 같은 "
+            + "일정에 이미 그 부원으로 연결된 참가자가 있으면 재사용하고, 그 참가자가 이미 이 차수에 있으면 건너뛴다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "불러오기 성공(부원이 0명이면 addedCount 0으로 성공)"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(검증 실패, 그 일정과 다른 기수의 명단방)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "COMMON_404(존재하지 않는 차수·명단방)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MemberListImportResponse>> importMemberListAttendees(
+            @Parameter(description = "차수 ID", example = "1") Long roundId,
+            @Valid MemberListImportRequest request);
 
     @Operation(summary = "출석 처리·되돌리기", description = "그 차수 참가자의 출석 상태를 isCheckedIn 값으로 지정한다(토글이 "
             + "아니다). 이미 같은 상태로 재요청하면 멱등하게 처리하고 checkedInAt을 바꾸지 않는다.")
