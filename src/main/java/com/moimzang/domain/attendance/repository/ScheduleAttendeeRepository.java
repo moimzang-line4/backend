@@ -2,6 +2,7 @@ package com.moimzang.domain.attendance.repository;
 
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -14,6 +15,10 @@ public interface ScheduleAttendeeRepository extends JpaRepository<ScheduleAttend
 
     // 현장 인원 추가(API-030) 동명이인 체크 — 같은 일정 전체 기준
     boolean existsByScheduleIdAndName(Long scheduleId, String name);
+
+    // 명단방 불러오기(API-084) 중복 생성 방지 — 같은 일정에 그 부원이 이미 참가자로 연결돼
+    // 있으면 재사용하고, 없을 때만 새로 만든다
+    Optional<ScheduleAttendee> findByScheduleIdAndMemberId(Long scheduleId, Long memberId);
 
     // 일정의 참가자를 이름순으로 조회한다(AI 비서 조회용, 읽기 전용)
     List<ScheduleAttendee> findByScheduleIdOrderByNameAsc(Long scheduleId);

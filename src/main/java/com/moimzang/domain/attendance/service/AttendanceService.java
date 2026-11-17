@@ -1,7 +1,9 @@
 package com.moimzang.domain.attendance.service;
 
 import com.moimzang.domain.attendance.dto.request.AttendeeCheckInRequest;
+import com.moimzang.domain.attendance.dto.request.MemberListImportRequest;
 import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
+import com.moimzang.domain.attendance.dto.response.MemberListImportResponse;
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceProgressResponse;
@@ -15,10 +17,14 @@ import com.moimzang.domain.attendance.entity.ScheduleRound;
 import com.moimzang.domain.attendance.enums.AttendanceStatusFilter;
 import com.moimzang.domain.attendance.exception.AttendanceErrorCode;
 import com.moimzang.domain.attendance.mapper.AttendanceMapper;
+import com.moimzang.domain.attendance.repository.MemberListMemberQueryRepository;
 import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.attendance.entity.RoundAttendee;
+import com.moimzang.domain.memberlist.entity.Member;
+import com.moimzang.domain.memberlist.entity.MemberList;
+import com.moimzang.domain.memberlist.repository.MemberListRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.domain.settlement.entity.SettlementTarget;
@@ -33,6 +39,7 @@ import com.moimzang.global.exception.CustomException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +61,11 @@ public class AttendanceService {
     private final AttendanceMapper attendanceMapper;
     private final SettlementTargetRepository settlementTargetRepository;
     private final BilledAmountCalculator billedAmountCalculator;
+    private final MemberListRepository memberListRepository;
+    private final MemberListMemberQueryRepository memberListMemberQueryRepository;
+
+    // 전화번호 뒤 4자리 추출 길이
+    private static final int PHONE_SUFFIX_LENGTH = 4;
 
     // 일정의 차수 목록을 roundNo 오름차순으로 조회한다
     public ScheduleRoundListResponse listRounds(Long scheduleId) {
@@ -201,6 +213,73 @@ public class AttendanceService {
 
         log.info("[현장 인원 추가] 추가를 완료했습니다. roundId = {}, attendeeId = {}", roundId, attendee.getId());
         return attendanceMapper.toOnSiteAttendeeAddResponse(attendee, false);
+    }
+
+    // 명단방의 부원 전체를 그 차수에 미출석 상태로 불러온다. 같은 일정에 이미 그 부원으로 연결된
+    // 참가자가 있으면 새로 만들지 않고 재사용하고(member_id 기준 중복 판별), 그 참가자가 이미
+    // 이 차수에 있으면 건너뛴다(skippedCount). 현장 추가와 달리 이름 중복은 검사하지 않는다 —
+    // 이 API는 memberListId 하나로 전원을 일괄 처리해 사람마다 확인받을 수 없기 때문이다
+    @Transactional
+    public MemberListImportResponse importMemberListAttendees(Long roundId, MemberListImportRequest request) {
+        log.info("[명단방 불러오기] 불러오기를 시작합니다. roundId = {}, memberListId = {}", roundId, request.getMemberListId());
+
+        ScheduleRound round = scheduleRoundRepository.findById(roundId)
+                .orElseThrow(() -> {
+                    log.warn("[명단방 불러오기] 존재하지 않는 차수입니다. roundId = {}", roundId);
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        MemberList memberList = memberListRepository.findById(request.getMemberListId())
+                .orElseThrow(() -> {
+                    log.warn("[명단방 불러오기] 존재하지 않는 명단방입니다. memberListId = {}", request.getMemberListId());
+                    return new CustomException(CommonErrorCode.NOT_FOUND);
+                });
+
+        Schedule schedule = round.getSchedule();
+        if (!schedule.getGroupTerm().getId().equals(memberList.getGroupTerm().getId())) {
+            log.warn("[명단방 불러오기] 그 일정과 다른 기수의 명단방입니다. roundId = {}, memberListId = {}",
+                    roundId, request.getMemberListId());
+            throw new CustomException(CommonErrorCode.BAD_REQUEST);
+        }
+
+        List<Member> members = memberListMemberQueryRepository.findAllByMemberListId(memberList.getId());
+
+        List<OnSiteAttendeeAddResponse> added = new ArrayList<>();
+        int skippedCount = 0;
+        for (Member member : members) {
+            ScheduleAttendee attendee = scheduleAttendeeRepository.findByScheduleIdAndMemberId(schedule.getId(), member.getId())
+                    .orElseGet(() -> scheduleAttendeeRepository.save(ScheduleAttendee.createFromMember(
+                            schedule, member, member.getName(), member.getDepartment(), extractPhoneLast4(member.getPhone()))));
+
+            if (roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(roundId, attendee.getId()).isPresent()) {
+                skippedCount++;
+                continue;
+            }
+
+            roundAttendeeRepository.save(RoundAttendee.create(round, attendee));
+            added.add(attendanceMapper.toOnSiteAttendeeAddResponse(attendee, false));
+        }
+
+        RoundAttendanceProgressResponse progress = calculateProgress(roundId);
+
+        log.info("[명단방 불러오기] 불러오기를 완료했습니다. roundId = {}, addedCount = {}, skippedCount = {}",
+                roundId, added.size(), skippedCount);
+        return MemberListImportResponse.builder()
+                .addedCount(added.size())
+                .skippedCount(skippedCount)
+                .attendees(added)
+                .progress(progress)
+                .build();
+    }
+
+    // 하이픈이 섞인 번호("010-1234-5678")도 들어오므로 숫자만 남기고 뒤 4자리를 자른다.
+    // 번호를 아직 안 받았거나(null) 4자리가 안 되면 null로 둔다
+    private String extractPhoneLast4(String phone) {
+        if (phone == null) {
+            return null;
+        }
+        String digits = phone.replaceAll("\\D", "");
+        return digits.length() < PHONE_SUFFIX_LENGTH ? null : digits.substring(digits.length() - PHONE_SUFFIX_LENGTH);
     }
 
     // 그 차수 참가자의 출석 상태를 처리·되돌린다. 이미 같은 상태면 멱등하게 아무 것도 바꾸지
