@@ -63,6 +63,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 82�
 | API-030 | POST | /api/rounds/{roundId}/attendees | 현장 인원 추가 | schedule_attendee | 불필요 |
 | API-031 | PATCH | /api/rounds/{roundId}/attendees/{attendeeId} | 출석 처리·되돌리기 | round_attendee | 불필요 |
 | API-032 | DELETE | /api/rounds/{roundId}/attendees/{attendeeId} | 차수에서 참가자 제외 | round_attendee | 불필요 |
+| API-084 | POST | /api/rounds/{roundId}/attendees/import | 명단방 불러오기 | schedule_attendee, round_attendee | 불필요 |
 | API-033 | GET | /api/rounds/{roundId}/receipt | 영수증 조회 | schedule_round | 불필요 |
 | API-034 | PUT | /api/rounds/{roundId}/receipt | 영수증 등록 | schedule_round | 불필요 |
 | API-035 | DELETE | /api/rounds/{roundId}/receipt | 영수증 삭제 | schedule_round, settlement_target, round_attendee | 불필요 |
@@ -751,6 +752,29 @@ checkedInAt, progress. **에러**: COMMON_400(isCheckedIn 누락), COMMON_404
 청구액을 재계산한다.
 
 **Response**: 200 + `BaseResponse.success()`(COMMON_200).
+
+---
+
+#### API-084 · POST /api/rounds/{roundId}/attendees/import · 명단방 불러오기
+인증: 불필요.
+
+**Request**: memberListId
+
+**Logics**: 요청한 명단방(memberListId)의 부원 전체를 그 차수에 미출석 상태로 불러온다. 부원의
+이름·학과·전화번호를 참가자 정보로 스냅샷해 source=LINK로 저장한다(전화번호는 숫자만 남겨 뒤
+4자리를 쓰고, 번호가 없거나 4자리가 안 되면 null). 같은 일정에 그 부원으로 연결된 참가자가
+이미 있으면 새로 만들지 않고 재사용하고(중복 판별은 member_id 기준), 그 참가자가 이미 이
+차수에 있으면 건너뛴다(skippedCount). 다른 차수에서 제외됐던 부원도 이 차수에는 없으므로
+다시 추가된다. 현장 인원 추가(API-030)와 달리 이름 중복은 검사하지 않는다 — 명단방 전체를
+한 번에 불러오는 일괄 처리라 사람마다 확인받는 흐름이 없기 때문이다. 명단방의 부원이 0명이면
+addedCount 0으로 성공 처리한다(에러 아님). 그 일정과 명단방의 기수가 다르면 거부한다.
+
+**Response data**: addedCount, skippedCount, attendees[].attendeeId/name/affiliation/
+phoneLast4/isCheckedIn(새로 추가된 참가자만, 건너뛴 인원은 포함하지 않는다), progress.
+checkedCount/totalCount/rate(API-029와 같은 패턴 — 이 호출 이후 그 차수 전체 기준)
+
+**에러**: COMMON_400(검증 실패, 그 일정과 다른 기수의 명단방), COMMON_404(존재하지 않는
+차수·명단방)
 
 ### 정산
 
