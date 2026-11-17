@@ -1282,6 +1282,7 @@ Figma 샘플 스펙에 직접 쓰여 있지 않아 코딩 전에 확인한 나�
   createSheet`가 예외를 던질 수 있다. `LedgerExportExcelGenerator.sanitizeSheetName`에서
   방어적으로 다듬었다 — 문서에 없는 가정이 아니라 Excel 포맷 자체의 제약이라 별도 확인 없이
   처리했다.
+
 ## 82. 활동사진 썸네일은 업로드 시점에 ImageIO로 만들고, 실패해도 업로드를 막지 않는다
 Figma에 `활동사진파트` 섹션이 새로 생겨 문서함에 리스트⇄그리드 토글과 썸네일 그리드가
 추가됐다(2026-11-16 사용자 결정). 목록 응답에 이미지 주소가 없어 그리드를 그릴 수 없었고,
@@ -1396,3 +1397,61 @@ Figma에 `활동사진파트` 섹션이 새로 생겨 문서함에 리스트⇄�
   개수(count)에 모두 쓰이므로, 조건 빌더에 두면 **셋이 늘 같은 집합을 본다는 것이 구조로
   보장된다**. Service에 두면 진입점 네 곳을 각각 손봐야 하고 `downloadZip`을 빠뜨리면
   목록에는 뜨는데 ZIP에는 안 담기는 어긋남이 생긴다.
+
+
+## 85. API-084(명단방 불러오기) 설계 — 중복 판별, source, 현재 차수 한정, 정산 명단과의 관계
+출석 화면에서 "현장 추가"만 있던 인원 추가 방식에 명단방(부원 명단) 전체를 불러오는 경로를
+추가하면서, api-spec에 없던 세부사항을 구현 전에 확인했다(사용자 결정, 2026-11-17).
+
+- **중복 판별은 `schedule_attendee.member_id` 기준이다**: 이름+전화번호 비교 같은 간접 방식을
+  쓰지 않는다 — `ScheduleAttendee.member`(FK `member_id`, nullable)가 이미 있어 그 부원으로
+  연결된 참가자가 있는지 바로 확인할 수 있다. 이 컬럼이 이미 있어 이번 기능에 마이그레이션은
+  필요 없었다(V7 미사용).
+- **이전 차수에서 제외됐던 부원도 다시 포함된다**: `schedule_attendee`가 이미 있으면 새로 만들지
+  않고 재사용하지만, 재사용 여부와 "이 차수에 포함할지"는 별개로 본다 — 그 참가자가 **이 차수**
+  `round_attendee`에 없으면 새로 추가한다(있으면 건너뛰고 skippedCount에 센다). 사용자가 명단방
+  불러오기를 명시적으로 눌렀다는 것 자체가 "이번엔 넣어달라"는 의도로 판단했다.
+- **source는 기존 `AttendeeSource.LINK`를 재사용한다**: 새 enum 값을 만들지 않았다. 다만
+  `docs/api-spec.md` §3 CRUD 커버리지 표의 "schedule_attendee/round_attendee는 API-022·024
+  등록 시 자동 생성"이라는 문구는 여전히 사실이 아니다(API-022/024 어디에도 그런 코드가 없다) —
+  이번 작업은 그 문구를 구현한 게 아니라 **별도의 명시적 API(API-084)로 LINK를 처음 생성**한
+  것이고, 그 문구 자체는 규칙상 수정하지 않고 그대로 뒀다. 코드를 읽는 사람은 "LINK가 자동
+  생성된다"는 문서 문구를 신뢰하면 안 되고, 실제로 LINK가 생기는 경로는 API-084뿐이다.
+- **필드 매핑은 `department`(학과) → `affiliation`**: `member.school`(학교)은 매핑하지 않는다 —
+  기존 현장 추가(API-030)의 `affiliation` 예시가 이미 학과("컴퓨터공학과")라 일관성을 맞췄다.
+- **`phoneLast4`는 null을 허용한다**: `member.phone`이 null이거나(명단방이 전화번호를 수집하지
+  않음), 숫자만 남겼을 때 4자리가 안 되면 null로 둔다(`AttendanceService.extractPhoneLast4`,
+  chat 도메인 `MemberSearchTool.phoneLast4`와 같은 추출 로직). `schedule_attendee.phone_last4`는
+  `VARCHAR(4) NULL`이라 이미 nullable이고, API-029·API-039·정산 명단·입금 현황 등 phoneLast4를
+  내려주는 기존 응답들도 전부 단순 String 필드라 null이 그대로 JSON null로 나가도 문제없다.
+- **현장 추가(API-030)와 달리 이름 중복 검사를 하지 않는다**: API-030은 1명씩 추가하며
+  `allowSameName` 확인 UI가 있지만, API-084는 명단방 전체를 한 번에 처리하는 일괄 작업이라
+  N명 중 일부만 이름이 겹칠 때 그 사람만 막는 설계가 복잡해진다. 이름이 같아도 별개 인원으로
+  추가한다.
+- **다른 기수의 명단방은 COMMON_400으로 거부한다**: 전용 ErrorCode를 신설하지 않고
+  decisions #49(정산 명단 저장 시 다른 일정 소속 attendeeId 처리)와 같은 기준을 따른다.
+- **부원이 0명인 명단방도 200으로 성공 처리한다**: addedCount 0으로 응답하고 에러로 보지 않는다.
+- **정산 명단(`settlement_target`)에는 자동으로 들어가지 않는다**: API-030(현장 추가)도
+  `settlement_target`을 만들지 않는 것과 같은 패턴이다. 이번에 불러온 사람을 정산 대상에
+  포함하려면 운영진이 API-038(정산 명단 저장)을 다시 호출해야 한다 — decisions #47~58의
+  `settlement_target` 생성·검증 로직과 충돌하지 않는다.
+- **`memberlist` 도메인의 `MemberRepository`는 수정하지 않는다**: 부원 조회에 필요한
+  `findByMemberListId` 메서드가 없었지만, 다른 파트 파일 수정 금지 규칙 때문에 그 레포지토리에
+  메서드를 추가하지 않았다. 대신 attendance 도메인에 `MemberListMemberQueryRepository`를 새로
+  만들어 `JPAQueryFactory`로 `Member` 엔티티를 직접 조회한다(QueryDSL Q클래스는 엔티티 소속
+  도메인과 무관하게 전역에서 생성되므로 가능했다).
+- **명단방 삭제 흐름은 보고만 하고 건드리지 않았다**: `MemberListService.deleteMemberList`(다른
+  파트)는 `roundAttendeeRepository.deleteAllByMemberListId` → `settlementTargetRepository.
+  deleteAllByMemberListId` → `scheduleAttendeeRepository.deleteAllByMemberListId` →
+  `memberRepository.deleteAllByMemberListId` → `memberListRepository.deleteById` 순으로
+  **조건 없이** 지운다. 이 중 뒤의 세 메서드는 attendance·settlement(내 파트) 소유라 전부 이미
+  `member.memberList.id` 체인으로 LINK 참가자를 정확히 겨냥하도록 구현돼 있었다 — 이번 기능
+  전에는 LINK 참가자가 전혀 없어 이 경로가 사실상 죽은 코드였는데, API-084로 LINK가 처음
+  생기면서 실제로 동작하게 된다. **API-032·API-038에 있는 입금 완료(PAID) 잠금
+  (`SETTLEMENT_423_PAID_MEMBER_LOCKED`)이 이 삭제 흐름에는 없다** — 명단방을 삭제하면 그
+  부원과 연결된 `settlement_target`이 PAID 상태여도 함께 삭제된다. 이건 이번 기능이 새로
+  만든 문제가 아니라 기존 삭제 흐름의 기존 동작이고, `memberlist` 도메인 파일(`MemberListService`)
+  수정은 이번 작업 범위 밖이라 그대로 두고 보고만 남긴다. `MemberService.deleteMember`(부원
+  1명 삭제)는 `clearMemberReference`로 `schedule_attendee.member`만 null로 끊고
+  `round_attendee`·`settlement_target`은 그대로 둬 영향이 더 작다.
+
