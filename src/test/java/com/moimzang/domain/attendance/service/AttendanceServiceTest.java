@@ -3,6 +3,7 @@ package com.moimzang.domain.attendance.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -13,7 +14,9 @@ import com.moimzang.domain.attendance.entity.RoundAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleAttendee;
 import com.moimzang.domain.attendance.entity.ScheduleRound;
 import com.moimzang.domain.attendance.dto.request.AttendeeCheckInRequest;
+import com.moimzang.domain.attendance.dto.request.MemberListImportRequest;
 import com.moimzang.domain.attendance.dto.request.OnSiteAttendeeAddRequest;
+import com.moimzang.domain.attendance.dto.response.MemberListImportResponse;
 import com.moimzang.domain.attendance.dto.response.OnSiteAttendeeAddResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendanceListResponse;
 import com.moimzang.domain.attendance.dto.response.RoundAttendeeCheckInResponse;
@@ -22,9 +25,14 @@ import com.moimzang.domain.attendance.dto.response.ScheduleRoundListResponse;
 import com.moimzang.domain.attendance.enums.AttendanceStatusFilter;
 import com.moimzang.domain.attendance.exception.AttendanceErrorCode;
 import com.moimzang.domain.attendance.mapper.AttendanceMapper;
+import com.moimzang.domain.attendance.repository.MemberListMemberQueryRepository;
 import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
+import com.moimzang.domain.group.entity.GroupTerm;
+import com.moimzang.domain.memberlist.entity.Member;
+import com.moimzang.domain.memberlist.entity.MemberList;
+import com.moimzang.domain.memberlist.repository.MemberListRepository;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.domain.settlement.entity.SettlementTarget;
@@ -34,9 +42,11 @@ import com.moimzang.domain.settlement.repository.SettlementTargetRepository;
 import com.moimzang.domain.settlement.service.BilledAmountCalculator;
 import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
+import com.moimzang.domain.attendance.enums.AttendeeSource;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -69,6 +79,12 @@ class AttendanceServiceTest {
     @Mock
     private BilledAmountCalculator billedAmountCalculator;
 
+    @Mock
+    private MemberListRepository memberListRepository;
+
+    @Mock
+    private MemberListMemberQueryRepository memberListMemberQueryRepository;
+
     // mapper는 mock하지 않는다 — 매핑 누락을 테스트에서도 실제 생성 코드로 검증한다
     private final AttendanceMapper attendanceMapper = Mappers.getMapper(AttendanceMapper.class);
 
@@ -78,7 +94,8 @@ class AttendanceServiceTest {
     void setUp() {
         attendanceService = new AttendanceService(
                 scheduleAttendeeRepository, scheduleRoundRepository, roundAttendeeRepository,
-                scheduleRepository, attendanceMapper, settlementTargetRepository, billedAmountCalculator);
+                scheduleRepository, attendanceMapper, settlementTargetRepository, billedAmountCalculator,
+                memberListRepository, memberListMemberQueryRepository);
     }
 
     private ScheduleRound roundWithId(Long id, Schedule schedule, Integer roundNo, String label) {
@@ -101,6 +118,15 @@ class AttendanceServiceTest {
         ReflectionTestUtils.setField(roundAttendee, "id", id);
         ReflectionTestUtils.setField(roundAttendee, "createdAt", createdAt);
         return roundAttendee;
+    }
+
+    private Member memberWithId(Long id, String name, String department, String phone) {
+        Member member = BeanUtils.instantiateClass(Member.class);
+        ReflectionTestUtils.setField(member, "id", id);
+        ReflectionTestUtils.setField(member, "name", name);
+        ReflectionTestUtils.setField(member, "department", department);
+        ReflectionTestUtils.setField(member, "phone", phone);
+        return member;
     }
 
     @Test
@@ -432,6 +458,293 @@ class AttendanceServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void importMemberListAttendees_정상_부원_전체를_미출석으로_불러온다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getId()).willReturn(10L);
+        given(schedule.getGroupTerm()).willReturn(groupTerm);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+
+        MemberList memberList = mock(MemberList.class);
+        given(memberList.getId()).willReturn(5L);
+        given(memberList.getGroupTerm()).willReturn(groupTerm);
+
+        Member member1 = memberWithId(100L, "김모임", "컴퓨터공학과", "010-1234-5678");
+        Member member2 = memberWithId(101L, "박모임", "경영학과", null);
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(memberListRepository.findById(5L)).willReturn(Optional.of(memberList));
+        given(memberListMemberQueryRepository.findAllByMemberListId(5L)).willReturn(List.of(member1, member2));
+        given(scheduleAttendeeRepository.findByScheduleIdAndMemberId(eq(10L), any())).willReturn(Optional.empty());
+
+        AtomicLong idSeq = new AtomicLong(200L);
+        given(scheduleAttendeeRepository.save(any(ScheduleAttendee.class))).willAnswer(invocation -> {
+            ScheduleAttendee saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", idSeq.getAndIncrement());
+            return saved;
+        });
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(eq(1L), any())).willReturn(Optional.empty());
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(2L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
+
+        MemberListImportResponse response = attendanceService.importMemberListAttendees(1L, request);
+
+        assertThat(response.getAddedCount()).isEqualTo(2);
+        assertThat(response.getSkippedCount()).isEqualTo(0);
+        assertThat(response.getAttendees()).hasSize(2);
+        assertThat(response.getAttendees().get(0).getName()).isEqualTo("김모임");
+        assertThat(response.getAttendees().get(0).getAffiliation()).isEqualTo("컴퓨터공학과");
+        assertThat(response.getAttendees().get(0).getPhoneLast4()).isEqualTo("5678");
+        assertThat(response.getAttendees().get(0).getIsCheckedIn()).isFalse();
+        assertThat(response.getAttendees().get(1).getPhoneLast4()).isNull();
+        assertThat(response.getProgress().getTotalCount()).isEqualTo(2L);
+
+        ArgumentCaptor<ScheduleAttendee> savedCaptor = ArgumentCaptor.forClass(ScheduleAttendee.class);
+        verify(scheduleAttendeeRepository, times(2)).save(savedCaptor.capture());
+        assertThat(savedCaptor.getAllValues()).allSatisfy(a -> assertThat(a.getSource()).isEqualTo(AttendeeSource.LINK));
+        verify(scheduleAttendeeRepository, never()).existsByScheduleIdAndName(any(), any());
+    }
+
+    @Test
+    void importMemberListAttendees_이름이_같아도_동명이인_체크_없이_모두_추가한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getId()).willReturn(10L);
+        given(schedule.getGroupTerm()).willReturn(groupTerm);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+
+        MemberList memberList = mock(MemberList.class);
+        given(memberList.getId()).willReturn(5L);
+        given(memberList.getGroupTerm()).willReturn(groupTerm);
+
+        Member member1 = memberWithId(100L, "김모임", "컴퓨터공학과", "1234");
+        Member member2 = memberWithId(101L, "김모임", "경영학과", "5678");
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(memberListRepository.findById(5L)).willReturn(Optional.of(memberList));
+        given(memberListMemberQueryRepository.findAllByMemberListId(5L)).willReturn(List.of(member1, member2));
+        given(scheduleAttendeeRepository.findByScheduleIdAndMemberId(eq(10L), any())).willReturn(Optional.empty());
+        given(scheduleAttendeeRepository.save(any(ScheduleAttendee.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(eq(1L), any())).willReturn(Optional.empty());
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(2L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
+
+        MemberListImportResponse response = attendanceService.importMemberListAttendees(1L, request);
+
+        assertThat(response.getAddedCount()).isEqualTo(2);
+        verify(scheduleAttendeeRepository, never()).existsByScheduleIdAndName(any(), any());
+    }
+
+    @Test
+    void importMemberListAttendees_같은_명단방_다시_불러오면_중복_생성_안_된다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getId()).willReturn(10L);
+        given(schedule.getGroupTerm()).willReturn(groupTerm);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+
+        MemberList memberList = mock(MemberList.class);
+        given(memberList.getId()).willReturn(5L);
+        given(memberList.getGroupTerm()).willReturn(groupTerm);
+
+        Member member = memberWithId(100L, "김모임", "컴퓨터공학과", "1234");
+        ScheduleAttendee existingAttendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(memberListRepository.findById(5L)).willReturn(Optional.of(memberList));
+        given(memberListMemberQueryRepository.findAllByMemberListId(5L)).willReturn(List.of(member));
+        given(scheduleAttendeeRepository.findByScheduleIdAndMemberId(10L, 100L)).willReturn(Optional.of(existingAttendee));
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L)).willReturn(
+                Optional.of(roundAttendeeWithId(1L, round, existingAttendee, LocalDateTime.now())));
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(1L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
+
+        MemberListImportResponse response = attendanceService.importMemberListAttendees(1L, request);
+
+        assertThat(response.getAddedCount()).isEqualTo(0);
+        assertThat(response.getSkippedCount()).isEqualTo(1);
+        assertThat(response.getAttendees()).isEmpty();
+        verify(scheduleAttendeeRepository, never()).save(any());
+        verify(roundAttendeeRepository, never()).save(any());
+    }
+
+    @Test
+    void importMemberListAttendees_일정에는_있지만_이_차수에는_없는_부원은_다시_추가한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getId()).willReturn(10L);
+        given(schedule.getGroupTerm()).willReturn(groupTerm);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+
+        MemberList memberList = mock(MemberList.class);
+        given(memberList.getId()).willReturn(5L);
+        given(memberList.getGroupTerm()).willReturn(groupTerm);
+
+        Member member = memberWithId(100L, "김모임", "컴퓨터공학과", "1234");
+        ScheduleAttendee existingAttendee = attendeeWithId(200L, "김모임", "컴퓨터공학과", "1234");
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(memberListRepository.findById(5L)).willReturn(Optional.of(memberList));
+        given(memberListMemberQueryRepository.findAllByMemberListId(5L)).willReturn(List.of(member));
+        given(scheduleAttendeeRepository.findByScheduleIdAndMemberId(10L, 100L)).willReturn(Optional.of(existingAttendee));
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(1L, 200L)).willReturn(Optional.empty());
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(1L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
+
+        MemberListImportResponse response = attendanceService.importMemberListAttendees(1L, request);
+
+        assertThat(response.getAddedCount()).isEqualTo(1);
+        assertThat(response.getSkippedCount()).isEqualTo(0);
+        verify(scheduleAttendeeRepository, never()).save(any());
+
+        ArgumentCaptor<RoundAttendee> captor = ArgumentCaptor.forClass(RoundAttendee.class);
+        verify(roundAttendeeRepository).save(captor.capture());
+        assertThat(captor.getValue().getScheduleAttendee()).isEqualTo(existingAttendee);
+    }
+
+    @Test
+    void importMemberListAttendees_전화번호_숫자가_4자리_미만이면_phoneLast4를_null로_둔다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getId()).willReturn(10L);
+        given(schedule.getGroupTerm()).willReturn(groupTerm);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+
+        MemberList memberList = mock(MemberList.class);
+        given(memberList.getId()).willReturn(5L);
+        given(memberList.getGroupTerm()).willReturn(groupTerm);
+
+        Member member = memberWithId(100L, "김모임", "컴퓨터공학과", "12-3");
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(memberListRepository.findById(5L)).willReturn(Optional.of(memberList));
+        given(memberListMemberQueryRepository.findAllByMemberListId(5L)).willReturn(List.of(member));
+        given(scheduleAttendeeRepository.findByScheduleIdAndMemberId(10L, 100L)).willReturn(Optional.empty());
+        given(scheduleAttendeeRepository.save(any(ScheduleAttendee.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(roundAttendeeRepository.findByScheduleRoundIdAndScheduleAttendeeId(eq(1L), any())).willReturn(Optional.empty());
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(1L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
+
+        MemberListImportResponse response = attendanceService.importMemberListAttendees(1L, request);
+
+        assertThat(response.getAttendees().get(0).getPhoneLast4()).isNull();
+    }
+
+    @Test
+    void importMemberListAttendees_차수가_없으면_COMMON_404를_던진다() {
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> attendanceService.importMemberListAttendees(1L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void importMemberListAttendees_명단방이_없으면_COMMON_404를_던진다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(memberListRepository.findById(5L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> attendanceService.importMemberListAttendees(1L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void importMemberListAttendees_다른_기수의_명단방이면_COMMON_400을_던진다() {
+        GroupTerm scheduleGroupTerm = mock(GroupTerm.class);
+        given(scheduleGroupTerm.getId()).willReturn(1L);
+        GroupTerm memberListGroupTerm = mock(GroupTerm.class);
+        given(memberListGroupTerm.getId()).willReturn(2L);
+
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getGroupTerm()).willReturn(scheduleGroupTerm);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+
+        MemberList memberList = mock(MemberList.class);
+        given(memberList.getGroupTerm()).willReturn(memberListGroupTerm);
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(memberListRepository.findById(5L)).willReturn(Optional.of(memberList));
+
+        assertThatThrownBy(() -> attendanceService.importMemberListAttendees(1L, request))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+        verify(memberListMemberQueryRepository, never()).findAllByMemberListId(any());
+    }
+
+    @Test
+    void importMemberListAttendees_부원이_0명이면_0명_추가로_성공한다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        Schedule schedule = mock(Schedule.class);
+        given(schedule.getGroupTerm()).willReturn(groupTerm);
+        ScheduleRound round = roundWithId(1L, schedule, 1, "1차");
+
+        MemberList memberList = mock(MemberList.class);
+        given(memberList.getId()).willReturn(5L);
+        given(memberList.getGroupTerm()).willReturn(groupTerm);
+        MemberListImportRequest request = MemberListImportRequest.builder().memberListId(5L).build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(memberListRepository.findById(5L)).willReturn(Optional.of(memberList));
+        given(memberListMemberQueryRepository.findAllByMemberListId(5L)).willReturn(List.of());
+        given(roundAttendeeRepository.countByScheduleRoundId(1L)).willReturn(0L);
+        given(roundAttendeeRepository.countCheckedIn(1L)).willReturn(0L);
+
+        MemberListImportResponse response = attendanceService.importMemberListAttendees(1L, request);
+
+        assertThat(response.getAddedCount()).isEqualTo(0);
+        assertThat(response.getSkippedCount()).isEqualTo(0);
+        assertThat(response.getAttendees()).isEmpty();
+        verify(scheduleAttendeeRepository, never()).save(any());
+    }
+
+    @Test
+    void importMemberListAttendees로_생긴_LINK_참가자도_이후_차수_추가에_자동_포함된다() {
+        Schedule schedule = mock(Schedule.class);
+        ScheduleRound lastRound = roundWithId(5L, schedule, 1, "1차");
+        Member member = memberWithId(100L, "김모임", "컴퓨터공학과", "1234");
+        ScheduleAttendee linkAttendee = ScheduleAttendee.createFromMember(schedule, member, "김모임", "컴퓨터공학과", "1234");
+        ReflectionTestUtils.setField(linkAttendee, "id", 200L);
+
+        given(scheduleRepository.findById(10L)).willReturn(Optional.of(schedule));
+        given(scheduleRoundRepository.findLastRounds(10L, PageRequest.of(0, 1))).willReturn(List.of(lastRound));
+        given(scheduleRoundRepository.save(any(ScheduleRound.class))).willAnswer(invocation -> {
+            ScheduleRound saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 300L);
+            return saved;
+        });
+        given(scheduleAttendeeRepository.findByScheduleId(10L)).willReturn(List.of(linkAttendee));
+
+        ScheduleRoundCreateResponse response = attendanceService.createRound(10L);
+
+        assertThat(response.getRoundNo()).isEqualTo(2);
+        ArgumentCaptor<RoundAttendee> captor = ArgumentCaptor.forClass(RoundAttendee.class);
+        verify(roundAttendeeRepository).save(captor.capture());
+        assertThat(captor.getValue().getScheduleAttendee()).isEqualTo(linkAttendee);
+        assertThat(captor.getValue().getScheduleAttendee().getSource()).isEqualTo(AttendeeSource.LINK);
     }
 
     @Test
