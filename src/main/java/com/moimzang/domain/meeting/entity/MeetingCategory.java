@@ -46,4 +46,9 @@ public class MeetingCategory extends BaseEntity {
                 .name(name)
                 .build();
     }
+
+    // 카테고리 이름을 바꾼다. 이 카테고리를 쓰는 회의에도 바뀐 이름이 그대로 보인다
+    public void updateName(String name) {
+        this.name = name;
+    }
 }
