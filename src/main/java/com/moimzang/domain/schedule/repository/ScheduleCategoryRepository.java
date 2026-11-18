@@ -15,4 +15,7 @@ public interface ScheduleCategoryRepository extends JpaRepository<ScheduleCatego
 
     // 같은 기수에 같은 이름의 카테고리가 있는지 확인한다
     boolean existsByGroupTermIdAndName(Long groupTermId, String name);
+
+    // 이름 수정 시 자기 자신을 뺀 같은 기수 카테고리 중 같은 이름이 있는지 확인한다
+    boolean existsByGroupTermIdAndNameAndIdNot(Long groupTermId, String name, Long id);
 }

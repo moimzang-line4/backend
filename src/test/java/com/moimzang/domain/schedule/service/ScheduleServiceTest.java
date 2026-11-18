@@ -16,6 +16,7 @@ import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.schedule.dto.request.ScheduleCategoryCreateRequest;
+import com.moimzang.domain.schedule.dto.request.ScheduleCategoryUpdateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleUpdateRequest;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryListResponse;
@@ -122,6 +123,49 @@ class ScheduleServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
                 .isEqualTo(ScheduleErrorCode.SCHEDULE_404_GROUP_TERM_NOT_FOUND);
+    }
+
+    @Test
+    void updateCategory_이름을_공백을_빼고_바꾼다() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        ScheduleCategory category = category(5L, groupTerm, "공연");
+        given(scheduleCategoryRepository.findById(5L)).willReturn(Optional.of(category));
+        given(scheduleCategoryRepository.existsByGroupTermIdAndNameAndIdNot(1L, "정기공연", 5L)).willReturn(false);
+
+        ScheduleCategoryResponse response = scheduleService.updateCategory(5L,
+                ScheduleCategoryUpdateRequest.builder().name(" 정기공연 ").build());
+
+        assertThat(category.getName()).isEqualTo("정기공연");
+        assertThat(response.getCategoryId()).isEqualTo(5L);
+        assertThat(response.getName()).isEqualTo("정기공연");
+    }
+
+    @Test
+    void updateCategory_같은_기수에_같은_이름이_있으면_SCHEDULE_409_CATEGORY_DUPLICATED() {
+        GroupTerm groupTerm = mock(GroupTerm.class);
+        given(groupTerm.getId()).willReturn(1L);
+        ScheduleCategory category = category(5L, groupTerm, "공연");
+        given(scheduleCategoryRepository.findById(5L)).willReturn(Optional.of(category));
+        given(scheduleCategoryRepository.existsByGroupTermIdAndNameAndIdNot(1L, "뒤풀이", 5L)).willReturn(true);
+
+        assertThatThrownBy(() -> scheduleService.updateCategory(5L,
+                ScheduleCategoryUpdateRequest.builder().name("뒤풀이").build()))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ScheduleErrorCode.SCHEDULE_409_CATEGORY_DUPLICATED);
+        assertThat(category.getName()).isEqualTo("공연");
+    }
+
+    @Test
+    void updateCategory_없는_카테고리면_SCHEDULE_404_CATEGORY_NOT_FOUND() {
+        given(scheduleCategoryRepository.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> scheduleService.updateCategory(99L,
+                ScheduleCategoryUpdateRequest.builder().name("공연").build()))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(ScheduleErrorCode.SCHEDULE_404_CATEGORY_NOT_FOUND);
     }
 
     @Test

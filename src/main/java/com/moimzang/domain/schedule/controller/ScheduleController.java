@@ -2,6 +2,7 @@ package com.moimzang.domain.schedule.controller;
 
 import com.moimzang.domain.schedule.dto.request.AgendaLinkCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCategoryCreateRequest;
+import com.moimzang.domain.schedule.dto.request.ScheduleCategoryUpdateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleUpdateRequest;
 import com.moimzang.domain.schedule.dto.response.AgendaLinkCreateResponse;
@@ -103,6 +104,17 @@ public class ScheduleController implements ScheduleApi {
             @Valid @RequestBody ScheduleCategoryCreateRequest request
     ) {
         ScheduleCategoryResponse response = scheduleService.createCategory(termId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 일정 카테고리 이름을 수정한다
+    @Override
+    @PatchMapping("/api/categories/{categoryId}")
+    public ResponseEntity<BaseResponse<ScheduleCategoryResponse>> updateCategory(
+            @PathVariable Long categoryId,
+            @Valid @RequestBody ScheduleCategoryUpdateRequest request
+    ) {
+        ScheduleCategoryResponse response = scheduleService.updateCategory(categoryId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 

@@ -64,6 +64,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 82�
 | API-031 | PATCH | /api/rounds/{roundId}/attendees/{attendeeId} | 출석 처리·되돌리기 | round_attendee | 불필요 |
 | API-032 | DELETE | /api/rounds/{roundId}/attendees/{attendeeId} | 차수에서 참가자 제외 | round_attendee | 불필요 |
 | API-084 | POST | /api/rounds/{roundId}/attendees/import | 명단방 불러오기 | schedule_attendee, round_attendee | 불필요 |
+| API-085 | PATCH | /api/categories/{categoryId} | 일정 카테고리 수정 | schedule_category | 불필요 |
 | API-033 | GET | /api/rounds/{roundId}/receipt | 영수증 조회 | schedule_round | 불필요 |
 | API-034 | PUT | /api/rounds/{roundId}/receipt | 영수증 등록 | schedule_round | 불필요 |
 | API-035 | DELETE | /api/rounds/{roundId}/receipt | 영수증 삭제 | schedule_round, settlement_target, round_attendee | 불필요 |
@@ -122,7 +123,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 82�
 |---|---|---|---|---|---|
 | club_group | 없음(그룹 1개만 다룸) | API-002 | API-001 | API-003 | 없음(탈퇴 기능 보류, decisions #1) |
 | group_term | API-002 응답에 포함 | API-002 응답에 포함 | API-003(그룹 수정 시 생성) | 없음 | 없음 |
-| schedule_category | API-011 | 없음(목록에서 충분) | API-010 | 없음(화면에 수정 버튼 없음) | 없음(화면에 삭제 버튼 없음) |
+| schedule_category | API-011 | 없음(목록에서 충분) | API-010 | API-085 | 없음(화면에 삭제 버튼 없음) |
 | schedule | API-005, API-009 | API-006 | API-004 | API-007 | API-008 |
 | member_list | API-018 | API-019 | API-017 | 없음(화면에 수정 버튼 없음, 재생성만) | API-020 |
 | member | API-023 | 없음(수정 화면이 상세 역할) | API-022(공개), API-024(운영진) | API-025 | API-026 |
@@ -206,9 +207,9 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | SCHEDULE_400_END_BEFORE_START | 400 | 종료 시간이 시작 시간보다 빠릅니다. | API-004, API-007 |
 | SCHEDULE_400_OPERATION_SPACE_CANNOT_DISABLE | 400 | 운영 공간은 끌 수 없습니다. | API-007 |
 | SCHEDULE_404_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-006, API-007, API-008 |
-| SCHEDULE_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 일정 카테고리입니다. | API-004, API-007 |
+| SCHEDULE_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 일정 카테고리입니다. | API-004, API-007, API-085 |
 | SCHEDULE_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-004, API-005, API-009, API-010, API-011 |
-| SCHEDULE_409_CATEGORY_DUPLICATED | 409 | 이미 있는 카테고리입니다. | API-010 |
+| SCHEDULE_409_CATEGORY_DUPLICATED | 409 | 이미 있는 카테고리입니다. | API-010, API-085 |
 
 ### 정산 (SettlementErrorCode) — API-034~045
 | 코드 | HTTP | 메시지 | 발생 API |
@@ -471,6 +472,12 @@ SCHEDULE_404_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND
 #### API-010 · POST /api/terms/{termId}/categories · 카테고리 추가
 인증: 불필요. **Request**: name. **Response**: categoryId, name. 같은 기수에 같은 이름(앞뒤 공백 제거 후)이 있으면 거부한다.
 **에러**: COMMON_400, SCHEDULE_404_GROUP_TERM_NOT_FOUND, SCHEDULE_409_CATEGORY_DUPLICATED
+
+#### API-085 · PATCH /api/categories/{categoryId} · 일정 카테고리 수정
+인증: 불필요. 일정 등록 화면 카테고리 선택의 연필 버튼. **Request**: name. **Response**: categoryId, name.
+이름만 바꾼다. 같은 기수에 같은 이름(앞뒤 공백 제거 후, 자기 자신 제외)이 있으면 거부한다. 이 카테고리를 쓰는
+일정에는 바뀐 이름이 그대로 보인다.
+**에러**: COMMON_400, SCHEDULE_404_CATEGORY_NOT_FOUND, SCHEDULE_409_CATEGORY_DUPLICATED
 
 #### API-011 · GET /api/terms/{termId}/categories · 카테고리 목록 조회
 인증: 불필요. 일정 등록에서 쓰는 목록(회의 카테고리는 API-081/082로 분리 운영, decisions #21).
