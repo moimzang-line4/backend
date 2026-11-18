@@ -14,6 +14,7 @@ import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingCategoryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingSummaryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
@@ -758,6 +759,31 @@ class MeetingServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting(e -> ((CustomException) e).getErrorCode())
                 .isEqualTo(MeetingErrorCode.MEETING_404_GROUP_TERM_NOT_FOUND);
+    }
+
+    @Test
+    void updateCategory_이름을_한_줄로_정리해서_바꾼다() {
+        MeetingCategory category = MeetingCategory.create(mock(GroupTerm.class), "정기회의");
+        ReflectionTestUtils.setField(category, "id", 5L);
+        given(meetingCategoryRepository.findById(5L)).willReturn(Optional.of(category));
+
+        MeetingCategoryResponse response = meetingService.updateCategory(
+                5L, MeetingCategoryUpdateRequest.builder().name(" 운영진\n회의 ").build());
+
+        assertThat(category.getName()).isEqualTo("운영진 회의");
+        assertThat(response.getCategoryId()).isEqualTo(5L);
+        assertThat(response.getName()).isEqualTo("운영진 회의");
+    }
+
+    @Test
+    void updateCategory_카테고리가_없으면_MEETING_404_CATEGORY_NOT_FOUND를_던진다() {
+        given(meetingCategoryRepository.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> meetingService.updateCategory(
+                99L, MeetingCategoryUpdateRequest.builder().name("뒤풀이").build()))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
     }
 
     @Test

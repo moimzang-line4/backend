@@ -65,6 +65,7 @@ ERD(`docs/erd.md`)와 PRD(`docs/prd.md`)를 바탕으로 확정한 REST API 82�
 | API-032 | DELETE | /api/rounds/{roundId}/attendees/{attendeeId} | 차수에서 참가자 제외 | round_attendee | 불필요 |
 | API-084 | POST | /api/rounds/{roundId}/attendees/import | 명단방 불러오기 | schedule_attendee, round_attendee | 불필요 |
 | API-085 | PATCH | /api/categories/{categoryId} | 일정 카테고리 수정 | schedule_category | 불필요 |
+| API-086 | PATCH | /api/meeting-categories/{categoryId} | 회의 카테고리 수정 | meeting_category | 불필요 |
 | API-033 | GET | /api/rounds/{roundId}/receipt | 영수증 조회 | schedule_round | 불필요 |
 | API-034 | PUT | /api/rounds/{roundId}/receipt | 영수증 등록 | schedule_round | 불필요 |
 | API-035 | DELETE | /api/rounds/{roundId}/receipt | 영수증 삭제 | schedule_round, settlement_target, round_attendee | 불필요 |
@@ -267,7 +268,7 @@ Figma 와이어프레임(`4호선톤_모임장`) 분석 기준. 화면명은 분
 | MEETING_400_INVALID_CURSOR | 400 | cursor 형식이 올바르지 않습니다. | API-052, API-083 |
 | MEETING_409_ALREADY_ENDED | 409 | 이미 종료된 회의입니다. | API-054, API-056, API-057, API-058, API-059 |
 | MEETING_502_SUMMARY_FAILED | 502 | AI 요약에 실패했습니다. 다시 시도해 주세요. | API-060 |
-| MEETING_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 회의 카테고리입니다. | API-051 |
+| MEETING_404_CATEGORY_NOT_FOUND | 404 | 존재하지 않는 회의 카테고리입니다. | API-051, API-086 |
 | MEETING_404_GROUP_TERM_NOT_FOUND | 404 | 존재하지 않는 기수입니다. | API-051, API-052, API-081, API-082, API-083 |
 | MEETING_404_SCHEDULE_NOT_FOUND | 404 | 존재하지 않는 일정입니다. | API-051 |
 | MEETING_404_NOT_FOUND | 404 | 존재하지 않는 회의입니다. | API-053, API-054, API-055, API-056, API-059 |
@@ -492,6 +493,11 @@ SCHEDULE_404_NOT_FOUND, SCHEDULE_404_CATEGORY_NOT_FOUND
 #### API-082 · GET /api/terms/{termId}/meeting-categories · 회의 카테고리 목록 조회
 인증: 불필요. 회의 만들기·수정의 카테고리 선택 바텀시트에서 쓰는 목록.
 **Response data**: categories[].categoryId/name. **에러**: MEETING_404_GROUP_TERM_NOT_FOUND
+
+#### API-086 · PATCH /api/meeting-categories/{categoryId} · 회의 카테고리 수정
+인증: 불필요. 회의 만들기 화면 카테고리 선택의 연필 버튼. **Request**: name. **Response**: categoryId, name.
+이름만 바꾸고, 생성(API-081)과 같이 줄바꿈·연속 공백을 한 줄로 편다. 이 카테고리를 쓰는 회의에는 바뀐 이름이 그대로 보인다.
+**에러**: COMMON_400, MEETING_404_CATEGORY_NOT_FOUND
 
 #### API-083 · GET /api/terms/{termId}/agendas/linkable · 연결 가능한 안건 목록 조회
 인증: 불필요. 일정 상세 → "안건 연결하기" 모달의 후보 목록. 선택한 안건을 실제로 연결하는 건 API-013.

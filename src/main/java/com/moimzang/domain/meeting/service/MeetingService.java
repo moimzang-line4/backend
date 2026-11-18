@@ -5,6 +5,7 @@ import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingCategoryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingSummaryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
@@ -374,6 +375,22 @@ public class MeetingService {
 
         log.info("[회의 카테고리 생성] 생성을 완료했습니다. categoryId = {}", saved.getId());
         return meetingMapper.toCategoryResponse(saved);
+    }
+
+    // 회의 카테고리 이름을 수정한다. 생성과 같은 규칙으로 줄바꿈·연속 공백을 한 줄로 편다
+    @Transactional
+    public MeetingCategoryResponse updateCategory(Long categoryId, MeetingCategoryUpdateRequest request) {
+        log.info("[회의 카테고리 수정] 수정을 시작합니다. categoryId = {}, name = {}", categoryId, request.getName());
+
+        MeetingCategory category = meetingCategoryRepository.findById(categoryId)
+                .orElseThrow(() -> {
+                    log.warn("[회의 카테고리 수정] 존재하지 않는 카테고리입니다. categoryId = {}", categoryId);
+                    return new CustomException(MeetingErrorCode.MEETING_404_CATEGORY_NOT_FOUND);
+                });
+        category.updateName(SingleLineText.normalize(request.getName()));
+
+        log.info("[회의 카테고리 수정] 수정을 완료했습니다. categoryId = {}", categoryId);
+        return meetingMapper.toCategoryResponse(category);
     }
 
     // 회의에 안건을 추가한다 — 기존 안건 목록 끝(마지막 orderNo+1)에 붙인다. 종료된 회의는 거부한다

@@ -3,6 +3,7 @@ package com.moimzang.domain.meeting.controller;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingCategoryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingSummaryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
@@ -128,6 +129,18 @@ public interface MeetingApi {
     })
     ResponseEntity<BaseResponse<MeetingCategoryResponse>> createCategory(
             @Parameter(description = "기수 ID", example = "1") Long termId, @Valid MeetingCategoryCreateRequest request);
+
+    @Operation(summary = "회의 카테고리 수정", description = "회의 만들기 화면 카테고리 선택의 연필 버튼. 이름만 바꾼다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "수정 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(검증 실패)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "MEETING_404_CATEGORY_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<MeetingCategoryResponse>> updateCategory(
+            @Parameter(description = "회의 카테고리 ID", example = "1") Long categoryId,
+            @Valid MeetingCategoryUpdateRequest request);
 
     @Operation(summary = "안건 추가", description = "기존 안건 목록 끝에 새 안건을 추가한다(orderNo=마지막+1, status=PENDING).")
     @ApiResponses({

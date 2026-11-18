@@ -3,6 +3,7 @@ package com.moimzang.domain.meeting.controller;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingAgendaUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCategoryCreateRequest;
+import com.moimzang.domain.meeting.dto.request.MeetingCategoryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingCreateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingSummaryUpdateRequest;
 import com.moimzang.domain.meeting.dto.request.MeetingUpdateRequest;
@@ -110,6 +111,17 @@ public class MeetingController implements MeetingApi {
             @Valid @RequestBody MeetingCategoryCreateRequest request
     ) {
         MeetingCategoryResponse response = meetingService.createCategory(termId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 회의 카테고리 이름을 수정한다
+    @Override
+    @PatchMapping("/api/meeting-categories/{categoryId}")
+    public ResponseEntity<BaseResponse<MeetingCategoryResponse>> updateCategory(
+            @PathVariable Long categoryId,
+            @Valid @RequestBody MeetingCategoryUpdateRequest request
+    ) {
+        MeetingCategoryResponse response = meetingService.updateCategory(categoryId, request);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 
