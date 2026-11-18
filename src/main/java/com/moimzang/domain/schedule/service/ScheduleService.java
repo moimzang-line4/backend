@@ -5,6 +5,7 @@ import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.group.entity.GroupTerm;
 import com.moimzang.domain.group.repository.GroupTermRepository;
 import com.moimzang.domain.schedule.dto.request.ScheduleCategoryCreateRequest;
+import com.moimzang.domain.schedule.dto.request.ScheduleCategoryUpdateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleUpdateRequest;
 import com.moimzang.domain.schedule.dto.response.ScheduleCategoryListResponse;
@@ -208,6 +209,28 @@ public class ScheduleService {
         ScheduleCategory category = scheduleCategoryRepository.save(ScheduleCategory.create(groupTerm, name));
 
         log.info("[일정 카테고리 추가] 추가를 완료했습니다. categoryId = {}", category.getId());
+        return scheduleMapper.toCategoryResponse(category);
+    }
+
+    // 일정 카테고리 이름을 수정한다. 같은 기수에 같은 이름이 있으면 선택 목록에서 구분할 수 없어 막는다
+    @Transactional
+    public ScheduleCategoryResponse updateCategory(Long categoryId, ScheduleCategoryUpdateRequest request) {
+        log.info("[일정 카테고리 수정] 수정을 시작합니다. categoryId = {}, name = {}", categoryId, request.getName());
+
+        ScheduleCategory category = scheduleCategoryRepository.findById(categoryId)
+                .orElseThrow(() -> {
+                    log.warn("[일정 카테고리 수정] 존재하지 않는 카테고리입니다. categoryId = {}", categoryId);
+                    return new CustomException(ScheduleErrorCode.SCHEDULE_404_CATEGORY_NOT_FOUND);
+                });
+        String name = request.getName().strip();
+        if (scheduleCategoryRepository.existsByGroupTermIdAndNameAndIdNot(
+                category.getGroupTerm().getId(), name, categoryId)) {
+            log.warn("[일정 카테고리 수정] 이미 있는 카테고리입니다. categoryId = {}, name = {}", categoryId, name);
+            throw new CustomException(ScheduleErrorCode.SCHEDULE_409_CATEGORY_DUPLICATED);
+        }
+        category.updateName(name);
+
+        log.info("[일정 카테고리 수정] 수정을 완료했습니다. categoryId = {}", categoryId);
         return scheduleMapper.toCategoryResponse(category);
     }
 

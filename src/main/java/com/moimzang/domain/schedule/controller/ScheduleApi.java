@@ -2,6 +2,7 @@ package com.moimzang.domain.schedule.controller;
 
 import com.moimzang.domain.schedule.dto.request.AgendaLinkCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCategoryCreateRequest;
+import com.moimzang.domain.schedule.dto.request.ScheduleCategoryUpdateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleCreateRequest;
 import com.moimzang.domain.schedule.dto.request.ScheduleUpdateRequest;
 import com.moimzang.domain.schedule.dto.response.AgendaLinkCreateResponse;
@@ -100,6 +101,20 @@ public interface ScheduleApi {
     })
     ResponseEntity<BaseResponse<ScheduleUpdateResponse>> updateSchedule(
             @Parameter(description = "일정 ID", example = "10") Long scheduleId, @Valid ScheduleUpdateRequest request);
+
+    @Operation(summary = "일정 카테고리 수정", description = "일정 등록 화면 카테고리 선택의 연필 버튼. 이름만 바꾸고, 같은 기수에 같은 이름은 쓸 수 없다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "수정 성공"),
+        @ApiResponse(responseCode = "400", description = "COMMON_400(이름 누락·공백·길이 초과)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "404", description = "SCHEDULE_404_CATEGORY_NOT_FOUND",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+        @ApiResponse(responseCode = "409", description = "SCHEDULE_409_CATEGORY_DUPLICATED",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<ScheduleCategoryResponse>> updateCategory(
+            @Parameter(description = "일정 카테고리 ID", example = "1") Long categoryId,
+            @Valid ScheduleCategoryUpdateRequest request);
 
     @Operation(summary = "일정 카테고리 추가", description = "일정 등록 화면의 '새 카테고리 추가'. 같은 기수에 같은 이름은 추가할 수 없다.")
     @ApiResponses({
