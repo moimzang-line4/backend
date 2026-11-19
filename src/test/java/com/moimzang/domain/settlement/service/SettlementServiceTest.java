@@ -21,6 +21,7 @@ import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.budget.repository.LedgerEntryRepository;
+import com.moimzang.domain.budget.service.LedgerSyncService;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.domain.settlement.dto.request.AccountSetRequest;
@@ -90,6 +91,9 @@ class SettlementServiceTest {
     private LedgerEntryRepository ledgerEntryRepository;
 
     @Mock
+    private LedgerSyncService ledgerSyncService;
+
+    @Mock
     private FileStorage fileStorage;
 
     @Mock
@@ -113,8 +117,9 @@ class SettlementServiceTest {
     void setUp() {
         settlementService = new SettlementService(
                 settlementTargetRepository, scheduleRoundRepository, roundAttendeeRepository, scheduleAttendeeRepository,
-                scheduleRepository, ledgerEntryRepository, settlementMapper, receiptAmountValidator, billedAmountCalculator,
-                fileStorage, receiptOcrClient, receiptImageValidator, receiptImageKeyGenerator, receiptOcrResultNormalizer);
+                scheduleRepository, ledgerEntryRepository, ledgerSyncService, settlementMapper, receiptAmountValidator,
+                billedAmountCalculator, fileStorage, receiptOcrClient, receiptImageValidator, receiptImageKeyGenerator,
+                receiptOcrResultNormalizer);
     }
 
     private ScheduleRound roundWithId(Long id) {
@@ -366,6 +371,20 @@ class SettlementServiceTest {
     }
 
     @Test
+    void registerReceipt_등록_후_그_일정의_장부_자동기록을_재계산한다() {
+        ScheduleRound round = roundWithId(1L, 10L);
+        ReceiptRegisterRequest request = defaultRequest().build();
+
+        given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
+        given(settlementTargetRepository.existsByScheduleRoundIdAndPaymentStatus(1L, PaymentStatus.PAID)).willReturn(false);
+        given(settlementTargetRepository.findByScheduleRoundId(1L)).willReturn(List.of());
+
+        settlementService.registerReceipt(1L, request);
+
+        verify(ledgerSyncService).syncSchedule(10L);
+    }
+
+    @Test
     void registerReceipt_이미_영수증이_등록된_차수여도_409를_던지지_않고_수정을_허용한다() {
         ScheduleRound round = roundWithId(1L);
         ReflectionTestUtils.setField(round, "totalAmount", 10000);
@@ -528,19 +547,21 @@ class SettlementServiceTest {
     }
 
     @Test
-    void deleteReceipt_정상_삭제하면_settlementTarget_roundAttendee_ledger_scheduleRound_순서로_처리한다() {
-        ScheduleRound round = roundWithId(1L);
+    void deleteReceipt_정상_삭제하면_settlementTarget_roundAttendee_ledger_scheduleRound_sync_순서로_처리한다() {
+        ScheduleRound round = roundWithId(1L, 10L);
 
         given(scheduleRoundRepository.findById(1L)).willReturn(Optional.of(round));
         given(settlementTargetRepository.existsByScheduleRoundIdAndPaymentStatus(1L, PaymentStatus.PAID)).willReturn(false);
 
         settlementService.deleteReceipt(1L);
 
-        InOrder inOrder = inOrder(settlementTargetRepository, roundAttendeeRepository, ledgerEntryRepository, scheduleRoundRepository);
+        InOrder inOrder = inOrder(settlementTargetRepository, roundAttendeeRepository, ledgerEntryRepository,
+                scheduleRoundRepository, ledgerSyncService);
         inOrder.verify(settlementTargetRepository).deleteByScheduleRoundId(1L);
         inOrder.verify(roundAttendeeRepository).deleteByScheduleRoundId(1L);
         inOrder.verify(ledgerEntryRepository).clearScheduleRoundReference(1L);
         inOrder.verify(scheduleRoundRepository).delete(round);
+        inOrder.verify(ledgerSyncService).syncSchedule(10L);
     }
 
     @Test
@@ -559,6 +580,7 @@ class SettlementServiceTest {
         verify(roundAttendeeRepository, never()).deleteByScheduleRoundId(any());
         verify(ledgerEntryRepository, never()).clearScheduleRoundReference(any());
         verify(scheduleRoundRepository, never()).delete(any());
+        verify(ledgerSyncService, never()).syncSchedule(any());
     }
 
     @Test
@@ -865,6 +887,7 @@ class SettlementServiceTest {
         assertThat(response.getName()).isEqualTo("김모임");
         assertThat(response.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(response.getPaidAt()).isNotNull();
+        verify(ledgerSyncService).syncSchedule(100L);
     }
 
     @Test

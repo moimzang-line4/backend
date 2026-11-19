@@ -7,6 +7,7 @@ import com.moimzang.domain.attendance.repository.RoundAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleAttendeeRepository;
 import com.moimzang.domain.attendance.repository.ScheduleRoundRepository;
 import com.moimzang.domain.budget.repository.LedgerEntryRepository;
+import com.moimzang.domain.budget.service.LedgerSyncService;
 import com.moimzang.domain.schedule.entity.Schedule;
 import com.moimzang.domain.schedule.repository.ScheduleRepository;
 import com.moimzang.domain.settlement.dto.request.AccountSetRequest;
@@ -83,6 +84,7 @@ public class SettlementService {
     private final ScheduleAttendeeRepository scheduleAttendeeRepository;
     private final ScheduleRepository scheduleRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final LedgerSyncService ledgerSyncService;
     private final SettlementMapper settlementMapper;
     private final ReceiptAmountValidator receiptAmountValidator;
     private final BilledAmountCalculator billedAmountCalculator;
@@ -109,7 +111,9 @@ public class SettlementService {
     }
 
     // 영수증을 등록·수정한다(upsert, decisions #41). 입금 완료자가 있으면 423으로 거부하고,
-    // 금액이 바뀌면 그 차수에 이미 저장된 정산 명단의 1인 청구액도 재계산한다
+    // 금액이 바뀌면 그 차수에 이미 저장된 정산 명단의 1인 청구액도 재계산한다. 마지막에 그 일정의
+    // 장부 자동기록(영수증 지출·동아리 지원금)을 즉시 재계산한다 — 정산 명단과 무관하게 영수증만
+    // 등록하면 지출이 바로 반영돼야 하기 때문이다
     @Transactional
     public ReceiptRegisterResponse registerReceipt(Long roundId, ReceiptRegisterRequest request) {
         log.info("[영수증 등록] 등록을 시작합니다. roundId = {}, totalAmount = {}, clubSubsidyAmount = {}",
@@ -143,6 +147,8 @@ public class SettlementService {
         if (amountChanged) {
             recalculateBilledAmounts(roundId, request.getTotalAmount(), request.getClubSubsidyAmount());
         }
+
+        ledgerSyncService.syncSchedule(round.getSchedule().getId());
 
         log.info("[영수증 등록] 등록을 완료했습니다. roundId = {}, amountChanged = {}", roundId, amountChanged);
         return settlementMapper.toReceiptRegisterResponse(round);
@@ -201,7 +207,9 @@ public class SettlementService {
     }
 
     // 영수증을 삭제한다(사실상 그 차수 자체를 cascade 삭제). 입금 완료자가 있으면 423으로 거부하고,
-    // settlement_target·round_attendee는 함께 지우지만 ledger_entry는 참조만 NULL로 돌려 보존한다
+    // settlement_target·round_attendee는 함께 지우지만 ledger_entry는 참조만 NULL로 돌려 보존한다.
+    // 마지막에 그 일정의 장부 자동기록을 재계산해, 삭제된 차수의 몫만큼 지출이 줄어든 걸 즉시
+    // 반영한다(남은 차수가 없으면 자동기록 자체가 삭제된다)
     @Transactional
     public void deleteReceipt(Long roundId) {
         log.info("[영수증 삭제] 삭제를 시작합니다. roundId = {}", roundId);
@@ -211,6 +219,7 @@ public class SettlementService {
                     log.warn("[영수증 삭제] 존재하지 않는 차수입니다. roundId = {}", roundId);
                     return new CustomException(CommonErrorCode.NOT_FOUND);
                 });
+        Long scheduleId = round.getSchedule().getId();
 
         boolean isLocked = settlementTargetRepository.existsByScheduleRoundIdAndPaymentStatus(roundId, PaymentStatus.PAID);
         if (isLocked) {
@@ -222,6 +231,7 @@ public class SettlementService {
         roundAttendeeRepository.deleteByScheduleRoundId(roundId);
         ledgerEntryRepository.clearScheduleRoundReference(roundId);
         scheduleRoundRepository.delete(round);
+        ledgerSyncService.syncSchedule(scheduleId);
 
         log.info("[영수증 삭제] 삭제를 완료했습니다. roundId = {}", roundId);
     }
@@ -387,9 +397,10 @@ public class SettlementService {
                 .build();
     }
 
-    // 그 사람의 일정 내 모든 차수 settlement_target을 함께 갱신한다(장부 반영은 API-074 담당).
-    // 이미 같은 상태인 차수는 멱등하게 건드리지 않아 그 차수의 기존 paidAt이 유지된다
-    // (RoundAttendee.updateCheckedIn과 같은 기준)
+    // 그 사람의 일정 내 모든 차수 settlement_target을 함께 갱신한다. 이미 같은 상태인 차수는
+    // 멱등하게 건드리지 않아 그 차수의 기존 paidAt이 유지된다(RoundAttendee.updateCheckedIn과 같은
+    // 기준). 마지막에 그 일정의 장부 자동기록을 재계산해, 이 변경으로 전원 완료가 새로 만족되거나
+    // 깨졌으면 부원 납부 수입 줄이 즉시 생성·삭제된다
     @Transactional
     public PaymentStatusResponse updatePaymentStatus(Long scheduleId, Long attendeeId, PaymentConfirmRequest request) {
         log.info("[입금 확인·되돌리기] 처리를 시작합니다. scheduleId = {}, attendeeId = {}, paid = {}",
@@ -411,6 +422,8 @@ public class SettlementService {
         LocalDateTime paidAt = paid
                 ? targets.stream().map(SettlementTarget::getPaidAt).filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null)
                 : null;
+
+        ledgerSyncService.syncSchedule(scheduleId);
 
         log.info("[입금 확인·되돌리기] 처리를 완료했습니다. scheduleId = {}, attendeeId = {}, paymentStatus = {}",
                 scheduleId, attendeeId, paymentStatus);

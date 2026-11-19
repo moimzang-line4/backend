@@ -110,17 +110,16 @@ class LedgerExportReceiptCollectorTest {
     }
 
     @Test
-    void collect_같은_일정의_지출_3종이_같은_블록을_가리킨다() throws IOException {
+    void collect_같은_일정의_지출_2종이_같은_블록을_가리킨다() throws IOException {
         Schedule schedule = schedule(1L);
-        LedgerEntry receiptExpense = autoEntry(LedgerAutoCategory.RECEIPT_EXPENSE, schedule, "가을 공연 영수증 지출", 30000);
+        LedgerEntry receiptExpense = autoEntry(LedgerAutoCategory.RECEIPT_EXPENSE, schedule, "가을 공연 영수증 지출", 40000);
         LedgerEntry subsidyExpense = autoEntry(LedgerAutoCategory.CLUB_SUBSIDY_EXPENSE, schedule, "가을 공연 동아리 지원금", 10000);
-        LedgerEntry roundingExpense = autoEntry(LedgerAutoCategory.ROUNDING_SUBSIDY_EXPENSE, schedule, "가을 공연 추가 지원금", 100);
         String imageUrl = BASE_URL_PREFIX + "receipts/2026/11/a.png";
         given(scheduleRoundRepository.findOrderedRounds(1L)).willReturn(List.of(roundWithReceipt(1, 40000, imageUrl)));
         given(fileStorage.toUrl("")).willReturn(BASE_URL_PREFIX);
         given(fileStorage.open("receipts/2026/11/a.png")).willReturn(new ByteArrayInputStream(pngBytes()));
 
-        ReceiptLinkingResult result = collector.collect(List.of(receiptExpense, subsidyExpense, roundingExpense));
+        ReceiptLinkingResult result = collector.collect(List.of(receiptExpense, subsidyExpense));
 
         assertThat(result.blocks()).hasSize(1);
         ReceiptBlock block = result.blocks().get(0);
@@ -128,8 +127,7 @@ class LedgerExportReceiptCollectorTest {
         // 장부 시트 데이터는 6행(0-based)부터 시작하고, 이 그룹의 첫 행은 인덱스 0 → 6
         assertThat(block.backLinkLedgerRowIndex()).isEqualTo(6);
         assertThat(result.entryIndexToHeaderRow()).containsEntry(0, block.headerRowIndex())
-                .containsEntry(1, block.headerRowIndex())
-                .containsEntry(2, block.headerRowIndex());
+                .containsEntry(1, block.headerRowIndex());
     }
 
     @Test
