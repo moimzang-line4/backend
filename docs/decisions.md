@@ -1455,3 +1455,46 @@ Figma에 `활동사진파트` 섹션이 새로 생겨 문서함에 리스트⇄�
   1명 삭제)는 `clearMemberReference`로 `schedule_attendee.member`만 null로 끊고
   `round_attendee`·`settlement_target`은 그대로 둬 영향이 더 작다.
 
+## 86. 장부 자동기록 트리거를 "정산 내역 새로고침"에서 영수증 등록·입금 확인 직후로 바꾼다 — decisions #63·#70을 일부 대체한다
+장부에 지출이 "정산 완료 시에만" 보이는 것처럼 느껴진다는 PM 피드백으로, 자동기록이 쌓이는
+시점과 종류를 구현 전에 다시 확인했다(사용자 결정, 2026-11-19). decisions #63이 정한 "일정
+단위 합산" 자체(`schedule_id`+`auto_category` 앵커)는 바꾸지 않는다 — 차수 단위로 롤백하지
+않는다.
+
+- **트리거**: 기존에는 API-074(정산 내역 새로고침)를 호출해야만 생성됐다. 이제
+  `LedgerSyncService`에 일정 하나만 즉시 재계산하는 `syncSchedule(scheduleId)`를 추가하고,
+  영수증 등록·수정(API-034, upsert)·삭제(API-035)·입금 확인·되돌리기(API-040) 끝에서 그
+  일정을 바로 호출한다. API-074(`sync(termId)`)는 수동 전체 재계산용으로 남기되, 같은 계산
+  로직(`syncSchedule`)을 재사용해 중복 코드를 만들지 않는다.
+- **카테고리 축소(3종 → 2종) 지출 + 1종 수입**: `ROUNDING_SUBSIDY_EXPENSE`를 없애고
+  `RECEIPT_EXPENSE`의 의미를 "지원금을 뺀 나머지 전부(100원 버림 차액 포함)"로 넓힌다.
+  - `RECEIPT_EXPENSE` = 그 일정에서 영수증이 등록된 모든 차수의 Σ(`total_amount` −
+    `club_subsidy_amount`)
+  - `CLUB_SUBSIDY_EXPENSE` = Σ`club_subsidy_amount`
+  - `PAYMENT_INCOME`은 바뀌지 않는다(decisions #59~62·#70과 같은 기준: 그 일정 전체
+    `settlement_target`이 1명 이상이고 전원 PAID일 때만 Σ`billed_amount`)
+- **지출 2종은 정산 명단과 무관하게 계산된다**: decisions #70의 "정산 명단이 없는 차수는
+  통째로 미반영한다"는 지출에는 더 이상 적용하지 않는다 — 영수증만 등록하면(API-038 정산
+  명단 저장 전이어도) 바로 반영된다. 이 규칙은 `PAYMENT_INCOME` 계산에만 남는다(수입은 여전히
+  `settlement_target` 기준이라 명단이 없으면 계산할 근거가 없다).
+- **지원금이 0원이면 그 줄은 생성하지 않는다**: 기존 "금액이 0원 이하면 미생성, 있던 줄은
+  삭제" 원칙(decisions #70)을 그대로 적용한다.
+- **수입은 전원 완료 시점에 생성하고, 되돌리면 삭제한다**: 일정 전체 기준 유지(차수 단위로
+  바꾸지 않는다).
+- **영수증 수정·삭제 시**: 금액이 바뀌면 재계산해 값이 실제로 다를 때만 갱신하고
+  (decisions #70과 같은 `hasChanged` 비교), 삭제(차수 자체가 없어짐)로 지출 금액이 줄거나
+  0원이 되면 해당 줄도 같은 재계산 경로에서 삭제된다. 트리거는 매번 호출하고, "다르면만
+  update"는 `LedgerSyncService` 내부 로직이 담당해 둘을 분리한다.
+- **대상 일정 선정(`sync(termId)`) 확장**: 기존에는 정산 대상이 있는 일정과 기존 자동기록이
+  남은 일정만 모았다. 지출 2종이 정산 명단 없이도 생기므로, 영수증이 등록된 차수가 있는
+  일정(`ScheduleRoundRepository.findScheduleIdsWithReceiptByGroupTerm`, 신규)도 대상에
+  추가했다.
+- **V9 마이그레이션**: 기존 `ROUNDING_SUBSIDY_EXPENSE` 자동기록 행을 삭제한다
+  (`V9__ledger_entry_drop_rounding_subsidy.sql`). 남아 있는 `RECEIPT_EXPENSE`·
+  `CLUB_SUBSIDY_EXPENSE`·`PAYMENT_INCOME` 행은 데이터를 직접 고치지 않고, 다음 영수증
+  등록·입금 확인 트리거 또는 수동 "정산 내역 새로고침" 호출 시점에 새 계산식으로 자동
+  보정되게 둔다.
+- **번호 확인**: 작업 지시에 적힌 "decisions는 #82부터, 마이그레이션은 V9부터"는 이미
+  `#85`·`V8`까지 존재해 지시 시점 기준 정보가 낡아 있었다 — 실제로는 이 항목이 **#86**이고
+  마이그레이션은 **V9**부터다.
+
