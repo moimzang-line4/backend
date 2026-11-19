@@ -31,4 +31,12 @@ public interface ScheduleRoundRepository extends JpaRepository<ScheduleRound, Lo
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("delete from ScheduleRound r where r.schedule.id = :scheduleId")
     void deleteAllByScheduleId(@Param("scheduleId") Long scheduleId);
+
+    // 정산 내역 새로고침(API-074) 대상 일정 선정용 — 영수증 지출/지원금 자동기록은 정산 명단과
+    // 무관하게 영수증만으로 생기므로, 정산 대상이 아직 하나도 없는 일정도 놓치지 않아야 한다
+    @Query("""
+            select distinct r.schedule.id from ScheduleRound r
+            where r.schedule.groupTerm.id = :groupTermId and r.totalAmount is not null
+            """)
+    List<Long> findScheduleIdsWithReceiptByGroupTerm(@Param("groupTermId") Long groupTermId);
 }

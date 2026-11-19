@@ -36,12 +36,11 @@ public class LedgerExportReceiptCollector {
     // 다음 블록 헤더까지의 여백 — 영수증 1장짜리 블록의 전체 간격(3→29 = 26행)과 맞춘다
     private static final int BLOCK_GAP_ROWS = 5;
 
-    // F열 링크 대상은 지출 3종뿐이다(decisions 확정) — PAYMENT_INCOME과 직접 입력은 영수증과
+    // F열 링크 대상은 지출 2종뿐이다(decisions 확정) — PAYMENT_INCOME과 직접 입력은 영수증과
     // 연결하지 않는다
     private static final Set<LedgerAutoCategory> RECEIPT_LINKED_CATEGORIES = Set.of(
             LedgerAutoCategory.RECEIPT_EXPENSE,
-            LedgerAutoCategory.CLUB_SUBSIDY_EXPENSE,
-            LedgerAutoCategory.ROUNDING_SUBSIDY_EXPENSE);
+            LedgerAutoCategory.CLUB_SUBSIDY_EXPENSE);
 
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("png", "jpg", "jpeg");
 
