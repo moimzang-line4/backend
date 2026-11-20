@@ -4,6 +4,7 @@ import com.moimzang.domain.group.dto.request.GroupCreateRequest;
 import com.moimzang.domain.group.dto.request.GroupUpdateRequest;
 import com.moimzang.domain.group.dto.response.GroupCreateResponse;
 import com.moimzang.domain.group.dto.response.GroupDetailResponse;
+import com.moimzang.domain.group.dto.response.GroupSummaryListResponse;
 import com.moimzang.domain.group.dto.response.GroupUpdateResponse;
 import com.moimzang.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,4 +48,16 @@ public interface GroupApi {
     })
     ResponseEntity<BaseResponse<GroupUpdateResponse>> updateGroup(
             @Parameter(description = "그룹 ID", example = "1") Long groupId, @Valid GroupUpdateRequest request);
+
+    @Operation(summary = "그룹 일괄 조회",
+               description = "홈 화면에서 로컬에 저장된 groupId 목록으로 여러 그룹 정보를 한 번에 조회한다. 존재하지 않는(삭제된) "
+                       + "id는 에러 없이 제외하고, 응답 순서는 요청한 ids 순서를 그대로 유지하며 중복 id는 한 번만 포함한다.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(responseCode = "400",
+                     description = "COMMON_400(ids 누락·빈 값·숫자가 아닌 값 포함·중복 제거 후 50개 초과)",
+                     content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+    })
+    ResponseEntity<BaseResponse<GroupSummaryListResponse>> getGroupsByIds(
+            @Parameter(description = "조회할 그룹 ID 목록(콤마로 구분, 최대 50개)", example = "1,2,3") String ids);
 }

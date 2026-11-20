@@ -1,6 +1,7 @@
 package com.moimzang.domain.group.mapper;
 
 import com.moimzang.domain.group.dto.response.GroupDetailResponse;
+import com.moimzang.domain.group.dto.response.GroupSummaryResponse;
 import com.moimzang.domain.group.dto.response.GroupTermResponse;
 import com.moimzang.domain.group.entity.ClubGroup;
 import com.moimzang.domain.group.entity.GroupTerm;
@@ -23,4 +24,12 @@ public interface GroupMapper {
     @Mapping(target = "groupId", source = "group.id")
     @Mapping(target = "name", source = "group.name")
     GroupDetailResponse toDetailResponse(ClubGroup group, List<GroupTerm> terms);
+
+    // 그룹 일괄 조회(API-087) 1건을 변환한다. 현재 기수는 Service가 미리 골라 넘기고,
+    // 기수가 없는 그룹이면 둘 다 null이다
+    @Mapping(target = "groupId", source = "group.id")
+    @Mapping(target = "name", source = "group.name")
+    @Mapping(target = "currentTermId", source = "currentTermId")
+    @Mapping(target = "currentTermName", source = "currentTermName")
+    GroupSummaryResponse toSummaryResponse(ClubGroup group, Long currentTermId, String currentTermName);
 }
