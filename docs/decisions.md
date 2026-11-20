@@ -1498,3 +1498,40 @@ Figma에 `활동사진파트` 섹션이 새로 생겨 문서함에 리스트⇄�
   `#85`·`V8`까지 존재해 지시 시점 기준 정보가 낡아 있었다 — 실제로는 이 항목이 **#86**이고
   마이그레이션은 **V9**부터다.
 
+## 87. 그룹 일괄 조회(`GET /api/groups?ids=`)를 api-spec.md에 없는 API로 추가한다
+홈 화면에서 다른 동아리로 전환할 방법이 없어, 프론트가 localStorage에 저장해 둔 groupId
+목록으로 그룹 정보를 한 번에 조회하는 API가 필요했다(사용자 결정, 2026-11-20).
+`docs/api-spec.md`에는 없는 API라 수정하지 않고 여기에 기록한다 — **PR에서 api-spec.md
+반영 여부를 확인해야 한다**.
+
+- **번호**: 라우트(`GET /api/groups`, path variable 없음)는 기존 `POST /api/groups`·
+  `GET/PATCH /api/groups/{groupId}`와 충돌하지 않는다. `docs/api-spec.md`에 이미 쓰인 최대
+  번호가 API-086이라 **API-087**로 붙인다.
+- **응답 필드**: `groupId`, `name`, `currentTermId`, `currentTermName`. "현재 기수"는
+  `GroupUpdateResponse`와 같은 기준(그 그룹에서 id가 가장 큰 기수)이다. 기수가 하나도 없는
+  그룹은 `currentTermId`·`currentTermName` 둘 다 `null`이다(이미지 등 다른 필드는 이번
+  범위에서 제외 — `club_group`에 이미지 컬럼 자체가 없고, 추가하려면 별도 마이그레이션이
+  필요해 이번 작업 범위 밖으로 뺐다).
+- **쿼리 1회씩**: `club_group`은 `ClubGroupRepository.findAllById`(기존 메서드 재사용)로,
+  `group_term`은 새로 추가한 `GroupTermRepository.findAllByGroupIdIn`으로 각각 한 번씩만
+  조회한다. 그룹별 "가장 최신 기수"를 고르는 작업은 `ROW_NUMBER()` 같은 쿼리를 새로 짜지
+  않고 Service에서 `Map<groupId, GroupTerm>`으로 모으며 id가 더 큰 쪽으로 교체하는 방식으로
+  처리한다(사용자 결정 — 쿼리를 단순하게 유지). 기존 `group` 도메인 메서드(`findById`,
+  `findAllByGroupIdOrderByIdAsc`, `findFirstByGroupIdOrderByIdDesc` 등)는 수정하지 않고
+  전부 추가만 했다.
+- **ids 파싱**: `@RequestParam String ids`로 받아 Service(`GroupService.parseGroupIds`)가
+  콤마로 나눠 각 토큰을 `strip()` 후 `Long.parseLong`한다. 빈 문자열·공백만 있는 토큰·숫자가
+  아닌 토큰이 하나라도 있으면 `CommonErrorCode.BAD_REQUEST`(COMMON_400)다. `ids` 파라미터
+  자체가 없는 요청은 Spring이 `MissingServletRequestParameterException`을 던지고, 이미
+  `GlobalExceptionHandler`가 COMMON_400으로 매핑해 둔 것을 그대로 쓴다(새 예외 처리 추가
+  없음).
+- **중복·순서·상한**: 중복 id는 `LinkedHashSet`으로 처음 등장한 순서만 남기고 한 번만
+  포함한다. 상한(50개) 검사는 **중복 제거 후** 개수로 한다 — 같은 id를 여러 번 보내 상한을
+  우회로 피해 가는 것과는 별개로, 실제로 조회할 그룹 수 기준으로 제한하는 게 이 상한의
+  의도이기 때문이다. 존재하지 않는(삭제된) id는 에러 없이 조용히 제외하고, 응답 순서는 요청
+  `ids` 순서를 그대로 유지한다(`GroupErrorCode.GROUP_404_NOT_FOUND`는 쓰지 않는다 — 부분
+  조회가 정상 동작이지 에러가 아니기 때문).
+- **응답 래퍼**: 다른 목록 응답(`SettlementTargetListResponse`, `LedgerSummaryResponse` 등)과
+  같은 관례로, `data`를 배열로 바로 내려주지 않고 `GroupSummaryListResponse.groups`로
+  한 번 감쌌다.
+
