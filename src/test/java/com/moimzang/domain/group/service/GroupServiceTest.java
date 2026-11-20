@@ -11,6 +11,8 @@ import com.moimzang.domain.group.dto.request.GroupCreateRequest;
 import com.moimzang.domain.group.dto.request.GroupUpdateRequest;
 import com.moimzang.domain.group.dto.response.GroupCreateResponse;
 import com.moimzang.domain.group.dto.response.GroupDetailResponse;
+import com.moimzang.domain.group.dto.response.GroupSummaryListResponse;
+import com.moimzang.domain.group.dto.response.GroupSummaryResponse;
 import com.moimzang.domain.group.dto.response.GroupUpdateResponse;
 import com.moimzang.domain.group.entity.ClubGroup;
 import com.moimzang.domain.group.entity.GroupTerm;
@@ -18,9 +20,13 @@ import com.moimzang.domain.group.exception.GroupErrorCode;
 import com.moimzang.domain.group.mapper.GroupMapper;
 import com.moimzang.domain.group.repository.ClubGroupRepository;
 import com.moimzang.domain.group.repository.GroupTermRepository;
+import com.moimzang.global.exception.CommonErrorCode;
 import com.moimzang.global.exception.CustomException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -148,6 +154,120 @@ class GroupServiceTest {
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode")
                 .isEqualTo(GroupErrorCode.GROUP_404_NOT_FOUND);
+    }
+
+    @Test
+    void getGroupsByIds_요청한_ids_순서를_유지하고_없는_id는_제외한다() {
+        ClubGroup group1 = group(1L, "음샘");
+        ClubGroup group2 = group(2L, "밴드부");
+        given(clubGroupRepository.findAllById(List.of(2L, 1L, 99L))).willReturn(List.of(group1, group2));
+        given(groupTermRepository.findAllByGroupIdIn(List.of(2L, 1L)))
+                .willReturn(List.of(term(10L, group1, "26기"), term(20L, group2, "1기")));
+
+        GroupSummaryListResponse response = groupService.getGroupsByIds("2,1,99");
+
+        assertThat(response.getGroups()).extracting(GroupSummaryResponse::getGroupId).containsExactly(2L, 1L);
+    }
+
+    @Test
+    void getGroupsByIds_중복_id는_한_번만_포함한다() {
+        ClubGroup group1 = group(1L, "음샘");
+        ClubGroup group2 = group(2L, "밴드부");
+        given(clubGroupRepository.findAllById(List.of(1L, 2L))).willReturn(List.of(group1, group2));
+        given(groupTermRepository.findAllByGroupIdIn(List.of(1L, 2L)))
+                .willReturn(List.of(term(10L, group1, "26기"), term(20L, group2, "1기")));
+
+        GroupSummaryListResponse response = groupService.getGroupsByIds("1,1,2,2");
+
+        assertThat(response.getGroups()).extracting(GroupSummaryResponse::getGroupId).containsExactly(1L, 2L);
+    }
+
+    @Test
+    void getGroupsByIds_기수가_없는_그룹은_currentTerm이_null이다() {
+        ClubGroup group = group(1L, "음샘");
+        given(clubGroupRepository.findAllById(List.of(1L))).willReturn(List.of(group));
+        given(groupTermRepository.findAllByGroupIdIn(List.of(1L))).willReturn(List.of());
+
+        GroupSummaryListResponse response = groupService.getGroupsByIds("1");
+
+        GroupSummaryResponse summary = response.getGroups().get(0);
+        assertThat(summary.getGroupId()).isEqualTo(1L);
+        assertThat(summary.getName()).isEqualTo("음샘");
+        assertThat(summary.getCurrentTermId()).isNull();
+        assertThat(summary.getCurrentTermName()).isNull();
+    }
+
+    @Test
+    void getGroupsByIds_기수가_여러_개면_id가_가장_큰_기수를_현재_기수로_고른다() {
+        ClubGroup group = group(1L, "음샘");
+        given(clubGroupRepository.findAllById(List.of(1L))).willReturn(List.of(group));
+        given(groupTermRepository.findAllByGroupIdIn(List.of(1L)))
+                .willReturn(List.of(term(10L, group, "26기"), term(12L, group, "28기"), term(11L, group, "27기")));
+
+        GroupSummaryListResponse response = groupService.getGroupsByIds("1");
+
+        GroupSummaryResponse summary = response.getGroups().get(0);
+        assertThat(summary.getCurrentTermId()).isEqualTo(12L);
+        assertThat(summary.getCurrentTermName()).isEqualTo("28기");
+    }
+
+    @Test
+    void getGroupsByIds_ids가_빈_문자열이면_COMMON_400() {
+        assertThatThrownBy(() -> groupService.getGroupsByIds(""))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void getGroupsByIds_ids가_null이면_COMMON_400() {
+        assertThatThrownBy(() -> groupService.getGroupsByIds(null))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void getGroupsByIds_공백만_있는_토큰이_있으면_COMMON_400() {
+        assertThatThrownBy(() -> groupService.getGroupsByIds("1, ,2"))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void getGroupsByIds_숫자가_아닌_값이_있으면_COMMON_400() {
+        assertThatThrownBy(() -> groupService.getGroupsByIds("1,abc,2"))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void getGroupsByIds_중복_제거_후_50개_초과면_COMMON_400() {
+        String ids = IntStream.rangeClosed(1, 51).mapToObj(String::valueOf).collect(Collectors.joining(","));
+
+        assertThatThrownBy(() -> groupService.getGroupsByIds(ids))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode")
+                .isEqualTo(CommonErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void getGroupsByIds_중복을_제거하면_50개_이하면_통과한다() {
+        List<String> tokens = new ArrayList<>();
+        IntStream.rangeClosed(1, 50).forEach(i -> tokens.add(String.valueOf(i)));
+        tokens.add("1");
+        tokens.add("2");
+        String ids = String.join(",", tokens);
+        List<Long> distinctIds = IntStream.rangeClosed(1, 50).mapToObj(i -> (long) i).toList();
+
+        given(clubGroupRepository.findAllById(distinctIds)).willReturn(List.of());
+        given(groupTermRepository.findAllByGroupIdIn(List.of())).willReturn(List.of());
+
+        GroupSummaryListResponse response = groupService.getGroupsByIds(ids);
+
+        assertThat(response.getGroups()).isEmpty();
     }
 
     private ClubGroup group(Long id, String name) {

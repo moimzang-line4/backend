@@ -4,6 +4,7 @@ import com.moimzang.domain.group.dto.request.GroupCreateRequest;
 import com.moimzang.domain.group.dto.request.GroupUpdateRequest;
 import com.moimzang.domain.group.dto.response.GroupCreateResponse;
 import com.moimzang.domain.group.dto.response.GroupDetailResponse;
+import com.moimzang.domain.group.dto.response.GroupSummaryListResponse;
 import com.moimzang.domain.group.dto.response.GroupUpdateResponse;
 import com.moimzang.domain.group.service.GroupService;
 import com.moimzang.global.response.BaseResponse;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -49,6 +51,14 @@ public class GroupController implements GroupApi {
             @Valid @RequestBody GroupUpdateRequest request
     ) {
         GroupUpdateResponse response = groupService.updateGroup(groupId, request);
+        return ResponseEntity.ok(BaseResponse.success(response));
+    }
+
+    // 로컬에 저장된 groupId 목록으로 여러 그룹을 한 번에 조회한다
+    @Override
+    @GetMapping("/api/groups")
+    public ResponseEntity<BaseResponse<GroupSummaryListResponse>> getGroupsByIds(@RequestParam String ids) {
+        GroupSummaryListResponse response = groupService.getGroupsByIds(ids);
         return ResponseEntity.ok(BaseResponse.success(response));
     }
 }
