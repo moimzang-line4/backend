@@ -1,6 +1,148 @@
 # 모임장 (moimzang) — Backend
 
-동아리/학회 운영진이 일정·부원 명단·출석·정산·회의·자료를 관리하는 서비스의 백엔드.
+> 대학 동아리 운영의 모든 과정을 하나로 — 일정·부원 명단·출석·정산·회의·자료를 한곳에서 관리하는 서비스
+
+<br>
+
+## 서비스 소개
+
+**모임장**은 동아리/학회 운영진이 여러 곳에 흩어진 운영 자료와 반복되는 확인 작업을 한곳에서
+끝낼 수 있도록 돕는 운영 관리 서비스입니다.
+
+일정을 등록하면 운영 공간이 함께 열려 활동 준비부터 출석·정산까지 이어서 처리하고, 참석한
+차수대로 영수증을 등록하면 정산 명단과 장부가 자동으로 연동됩니다. 회의는 미리 정한 안건대로
+진행하고 AI가 요약해 저장하며, 운영 중 쌓인 기록은 AI 비서에게 자연어로 물어 바로 찾을 수
+있습니다.
+
+<br>
+
+## 프레젠테이션
+
+<table>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/assets/slides/slide-23-마무리.png" alt="마무리 (팀원소개/클로징)" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-01-표지.png" alt="표지" /></td>
+    <td><img src="docs/assets/slides/slide-02-문제요약.png" alt="문제 요약" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-03-설문인사이트.png" alt="설문 인사이트" /></td>
+    <td><img src="docs/assets/slides/slide-04-설문상세결과.png" alt="설문 상세 결과" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-05-핵심인사이트.png" alt="핵심 인사이트" /></td>
+    <td><img src="docs/assets/slides/slide-06-심층인터뷰.png" alt="심층 인터뷰" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-07-솔루션.png" alt="솔루션" /></td>
+    <td><img src="docs/assets/slides/slide-08-서비스흐름.png" alt="서비스 흐름" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-09-서비스소개.png" alt="서비스 소개" /></td>
+    <td><img src="docs/assets/slides/slide-10-정보구조.png" alt="정보 구조" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-11-온보딩.png" alt="온보딩" /></td>
+    <td><img src="docs/assets/slides/slide-12-홈워크스페이스.png" alt="홈 · 운영 공간" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-13-활동회의연동.png" alt="활동 · 회의 연동" /></td>
+    <td><img src="docs/assets/slides/slide-14-부원명단연동.png" alt="부원 명단 연동" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-15-출석반영.png" alt="출석 반영" /></td>
+    <td><img src="docs/assets/slides/slide-16-정산영수증인식.png" alt="정산 · 영수증 인식" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-17-장부엑셀다운로드.png" alt="장부 엑셀 다운로드" /></td>
+    <td><img src="docs/assets/slides/slide-18-회의AI요약.png" alt="회의 · AI 요약" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-19-AI어시스턴트.png" alt="AI 어시스턴트" /></td>
+    <td><img src="docs/assets/slides/slide-20-운영진인계.png" alt="운영진 인계" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/slides/slide-21-자료일괄다운로드.png" alt="자료 일괄 다운로드" /></td>
+    <td><img src="docs/assets/slides/slide-22-비즈니스모델.png" alt="비즈니스 모델" /></td>
+  </tr>
+</table>
+
+<br>
+
+## 핵심 기능
+
+| 기능 | 설명 |
+|------|------|
+| **일정 · 운영 공간** | 일정을 등록하면 운영 공간이 함께 열리고, 일정 상세에서 바로 회의록 작성과 안건 연결까지 이어갈 수 있음 |
+| **부원 명단 · 출석** | 등록 링크 하나로 부원 명단을 모으고, 한 번 등록한 명단을 차수마다 다시 불러와 출석을 반영 |
+| **정산 · 장부 연동** | 영수증을 등록(AI 인식 지원)하면 참석 차수대로 청구액이 계산되고, 입금 확인과 동시에 장부에 자동 반영 |
+| **회의 · AI 요약** | 안건별로 순차 진행하는 회의를 지원하고, 종료 시 AI가 회의 내용을 요약해 회의록으로 저장 |
+| **문서함 · 장부** | 기수별 자료를 분류해 올리고 ZIP으로 한 번에 내려받으며, 장부는 서비스 입출금 내역과 함께 엑셀로 다운로드 |
+| **AI 운영 비서** | "미입금자 알려줘" 같은 자연어 질문에 쌓인 운영 기록으로 답하고, 결과 카드에서 바로 입금 확인 등 액션 수행 |
+
+<br>
+
+## 기술 스택
+### Backend
+
+| 분류 | 기술 |
+|------|------|
+| Language | Java 21 |
+| Framework | Spring Boot 4.1.1 |
+| Build | Gradle |
+| ORM | Spring Data JPA / Hibernate + QueryDSL |
+| API Docs | SpringDoc OpenAPI (Swagger UI) |
+| Mapper | MapStruct |
+| AI | OpenAI API (영수증 인식 · AI 채팅/운영 비서) |
+
+<br>
+
+## Database / Storage
+
+| 분류 | 기술 |
+|------|------|
+| Database | MySQL 8 |
+| Migration | Flyway |
+| File Storage | AWS S3 (ap-northeast-2) / Local Storage |
+
+<br>
+
+## Infra / DevOps
+
+| 분류 | 기술 |
+|------|------|
+| Container | Docker |
+| Orchestration | Docker Compose |
+| Reverse Proxy | Nginx + Let's Encrypt |
+| CI/CD | GitHub Actions |
+| Cloud | AWS EC2 / RDS |
+| Image Registry | Amazon ECR |
+
+**CI/CD 파이프라인**
+
+- **CI** — PR(`develop`, `main`) 시 Testcontainers로 MySQL을 띄워 Gradle 테스트 자동 실행
+- **CD** — `develop` 브랜치 push 시 테스트 → `bootJar` → Docker 이미지 빌드 → ECR push →
+  EC2 SSH 접속 후 `docker compose pull && up -d`, `/health` 확인까지 자동 배포
+  (상세 흐름은 [docs/deploy.md](./docs/deploy.md) 참고)
+
+<br>
+
+## 시스템 아키텍처
+
+![System Architecture](docs/assets/system-architecture.png)
+
+<br>
+
+## ERD
+
+![ERD](docs/assets/erd.png)
+
+데이터 모델 정본은 [docs/erd.md](./docs/erd.md) 참고.
+
+<br>
+
+---
 
 ##  문서 안내
 
@@ -14,9 +156,6 @@
 | [docs/api-spec.md](./docs/api-spec.md) | API 명세서 — 82개 엔드포인트의 ID·요청/응답·에러코드·화면 매핑 |
 | [docs/decisions.md](./docs/decisions.md) | 설계 결정 로그 — ERD·API 설계 중 합의한 결정과 그 근거를 시간순으로 기록 |
 | [docs/team-ownership.md](./docs/team-ownership.md) | 도메인 담당 배정과 작업 경계 규칙, 담당별 진행 상황·남은 작업 |
-
-## 기술 스택
-Spring Boot(Java 21) · MySQL 8 · JPA(Hibernate) · QueryDSL · Flyway · MapStruct · springdoc-openapi
 
 ## 시작하기
 1. `git clone https://github.com/moimzang-line4/backend.git`
